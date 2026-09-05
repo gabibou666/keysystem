@@ -4,6 +4,7 @@ const crypto = require('../services/crypto');
 const lootlabs = require('../services/lootlabs');
 const pool = require('../db');
 const path = require('path');
+const { requireDiscordUser } = require('./discord');
 
 const router = express.Router();
 
@@ -27,7 +28,8 @@ function clientIp(req) {
 // ---------- POST /api/key/start ----------
 // Body: { duration: 12 | 24 }
 // Soit nouvelle cle, soit renouvellement de la cle fournie.
-router.post('/key/start', startLimiter, async (req, res) => {
+// GATE: connexion Discord requise (ajout au serveur via OAuth)
+router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => {
   try {
     const duration = parseInt(req.body?.duration, 10);
     if (!lootlabs.DURATIONS[duration]) {

@@ -5,6 +5,7 @@ const path = require('path');
 
 const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
+const discordRoutes = require('./routes/discord');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -53,6 +54,7 @@ app.use(express.static(webDir, { extensions: ['html'] }));
 // API
 app.use('/api', apiRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/discord', discordRoutes.router);
 
 // OAuth Discord: redirect configure dans Discord = /admin/auth/callback
 app.use('/admin', adminRoutes);
