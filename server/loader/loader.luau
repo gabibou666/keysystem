@@ -1,6 +1,6 @@
 --!nocheck
 -- KeySystem Loader - UI WindUI (style Windows 11) + fallback GUI leger
--- Service de cles personnalise branche sur ton backend
+-- Verification par TON backend via KeyValidator (pas de double bouton "Get key": URL seul)
 -- Compatible: Synapse Z, Wave, Xeno, Delta, Codex, Fluxus, Hydrogen, Solara, Ronin, MacSploit, Real...
 
 local SITE = (...)
@@ -71,7 +71,6 @@ local function performCheck(key)
     if data.success and data.script then
         local fn, loadErr = loadstring(data.script)
         if not fn then
-            -- remonte pour la telemetrie + message precis
             pcall(function()
                 request({
                     Url = SITE .. "/api/v1/report",
@@ -132,7 +131,7 @@ local function copyGetKeyLink()
     end
 end
 
--- Clé sauvegardee si writefile dispo
+-- Cle sauvegardee si writefile dispo
 local function loadSavedKey()
     local saved
     pcall(function() saved = readfile("keysystem_key.txt") end)
@@ -157,33 +156,8 @@ end
 
 if WindUI then
     -- ================= PATH WINDUI =================
-    WindUI.Services.keysystem = {
-        Name = "Key System",
-        Icon = "key",
-        Args = { "SiteURL" },
-
-        New = function(SiteURL)
-            local function validateKey(key)
-                local ok, msg = performCheck(key)
-                if ok then
-                    -- sauvegarde + notification + ferme la fenetre (le script est deja charge)
-                    if key and #key >= 10 then saveKey(key:gsub("%s+", "")) end
-                    notify("Key valid!", msg, 6)
-                end
-                return ok, msg
-            end
-
-            local function copyLink()
-                copyGetKeyLink()
-            end
-
-            return {
-                Verify = validateKey,
-                Copy = copyLink,
-            }
-        end,
-    }
-
+    -- KeyValidator = le backend verifie la cle (une seule source de verite)
+    -- URL seul (PAS de KeySystem.API): un seul bouton "Get key", pas de panneau "Select Service" qui se superpose.
     local Window = WindUI:CreateWindow({
         Title = "Key System",
         Icon = "key-round",
@@ -192,17 +166,17 @@ if WindUI then
         Size = UDim2.fromOffset(580, 460),
         Theme = "Dark",
         KeySystem = {
-            -- jamais matche: la validation passe UNIQUEMENT par le backend
-            Key = { "backend-verified-only" },
-            Note = "Get your key on the website (button below), paste it here, then click Verify.",
+            Key = { "backend-verified-only" }, -- jamais matche: KeyValidator passe TOUJOURS par ton backend
+            Note = "Get your key on the website (Get key button), paste it here, then click Submit.",
             URL = SITE .. "/getkey",
             SaveKey = true,
-            API = {
-                {
-                    Type = "keysystem",
-                    SiteURL = SITE,
-                },
-            },
+            KeyValidator = function(key)
+                local ok, msg = performCheck(key)
+                if ok and key and #key >= 10 then
+                    saveKey(key:gsub("%s+", ""))
+                end
+                return ok, msg
+            end,
         },
     })
 
