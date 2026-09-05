@@ -1,29 +1,40 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Obtenir une clé</title>
+<title>Get a key</title>
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <nav>
   <a class="logo" href="/" style="text-decoration:none;color:inherit"><div class="logo-badge">🔑</div> KeySystem</a>
   <div class="links">
-    <a href="/">Accueil</a>
+    <a href="/">Home</a>
     <a href="/changelog">Changelog</a>
   </div>
 </nav>
 
 <main>
   <section class="hero" style="padding-bottom: 30px;">
-    <h1>Obtenir une clé</h1>
-    <p>Choisis ta durée — les checkpoints sont des pubs de notre sponsor LootLabs.</p>
+    <h1>Get a key</h1>
+    <p>Choose your duration — checkpoints are ads from our sponsor LootLabs. Max 2 ads every 12 hours.</p>
+  </section>
+
+  <!-- Current key -->
+  <section class="keypanel" id="currentKeyCard" style="margin-top: 0;">
+    <h2>Your current key</h2>
+    <p class="sub">Saved in this browser.</p>
+    <div class="keybox">
+      <textarea id="currentKey" rows="2" readonly placeholder="No key yet — get one below."></textarea>
+      <button class="btn small" onclick="copyCurrentKey()">Copy</button>
+    </div>
+    <div id="currentKeyStatus" class="status"></div>
   </section>
 
   <section class="keypanel" id="choiceCard">
-    <h2>Durée</h2>
-    <p class="sub">Plus la durée est longue, plus il y a de checkpoints.</p>
+    <h2>Duration</h2>
+    <p class="sub">The longer the duration, the more checkpoints.</p>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px;">
       <div class="card" style="cursor:pointer; text-align:center; padding: 30px 20px;" onclick="start(12)">
         <div style="font-size: 32px; font-weight: 700; background: linear-gradient(135deg,#fff,#60cdff); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">12h</div>
@@ -38,26 +49,41 @@
   </section>
 
   <section class="keypanel hidden" id="result">
-    <h2 id="resultTitle">⏳ En attente…</h2>
-    <p class="sub" id="resultSub">Complète les tâches dans l'autre onglet — cette page vérifie automatiquement.</p>
+    <h2 id="resultTitle">⏳ Waiting…</h2>
+    <p class="sub" id="resultSub">Complete the tasks in the other tab — this page checks automatically.</p>
     <div id="newKey" class="codebox hidden" style="color: var(--accent);"></div>
     <div id="resultActions" class="hidden" style="margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
-      <button class="btn small" onclick="copyKey()">📋 Copier la clé</button>
-      <a class="btn small secondary" href="/">← Retour à l'accueil</a>
+      <button class="btn small" onclick="copyKey()">📋 Copy key</button>
+      <a class="btn small secondary" href="/">← Back home</a>
     </div>
     <div class="steps" id="waitSteps" style="margin-top: 22px; padding: 18px; border-radius: var(--radius); background: #1b1b1bcc; border: 1px solid var(--stroke);">
       <p style="color: var(--muted); font-size: 14px; line-height: 1.8;">
-        <b style="color: var(--text)">Pendant que la page pub s'ouvre :</b><br>
-        1. Complète les tâches affichées jusqu'au bout<br>
-        2. Cette page vérifie automatiquement ta complétion<br>
-        3. Ta clé apparaîtra ici dès que c'est validé
+        <b style="color: var(--text)">While the ad page opens:</b><br>
+        1. Complete the tasks shown all the way through<br>
+        2. This page verifies your completion automatically<br>
+        3. Your key will pop up as soon as it's validated
       </p>
     </div>
   </section>
 </main>
 
+<!-- Key modal (petit carre fin des pubs) -->
+<div class="modal-overlay" id="keyModal">
+  <div class="modal">
+    <div class="modal-icon">🔓</div>
+    <h2 id="modalTitle">Key obtained!</h2>
+    <p class="modal-sub" id="modalSub">Copy it into the loader — it's also saved in your browser.</p>
+    <div class="keycode" id="modalKey">...</div>
+    <p class="expires" id="modalExpires"></p>
+    <div class="modal-actions">
+      <button class="btn small" onclick="copyModalKey()">📋 Copy key</button>
+      <button class="btn small secondary" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <footer>
-  Propulsé par LootLabs · <a href="/">Accueil</a>
+  Powered by LootLabs · <a href="/">Home</a>
 </footer>
 
 <script>
@@ -65,6 +91,62 @@ const KEY_STORAGE = 'keysystem_key';
 const PUID_STORAGE = 'keysystem_pending_puid';
 let pollTimer = null;
 
+// ===== Current key card =====
+async function loadCurrentKey() {
+  const key = localStorage.getItem(KEY_STORAGE);
+  if (!key) return;
+  document.getElementById('currentKey').value = key;
+  try {
+    const r = await fetch('/api/key/info?key=' + encodeURIComponent(key));
+    const d = await r.json();
+    const st = document.getElementById('currentKeyStatus');
+    if (!d.success) {
+      st.textContent = d.error === 'Revoked' ? 'Key revoked — get a new one below.' : 'Unknown key — get a new one below.';
+      st.className = 'status err';
+    } else if (d.expired) {
+      st.textContent = 'Key expired — renew it below (same key, 1 ad).';
+      st.className = 'status err';
+    } else {
+      const left = new Date(d.expiresAt) - Date.now();
+      const h = Math.floor(left / 3600000);
+      const m = Math.floor((left % 3600000) / 60000);
+      st.textContent = '✅ Valid — ' + h + 'h ' + m + 'm remaining';
+      st.className = 'status ok';
+    }
+  } catch {
+    document.getElementById('currentKeyStatus').textContent = 'Could not verify your key right now.';
+  }
+}
+
+function copyCurrentKey() {
+  const v = document.getElementById('currentKey').value;
+  if (v) { navigator.clipboard.writeText(v); setKeyCardStatus('Key copied!', 'ok'); }
+}
+function setKeyCardStatus(t, cls) {
+  const s = document.getElementById('currentKeyStatus');
+  s.textContent = t; s.className = 'status ' + (cls || '');
+}
+
+// ===== Modal =====
+function showModal(key, renewed, expiresAt) {
+  document.getElementById('modalTitle').textContent = renewed ? '✅ Key renewed!' : '🔓 Key obtained!';
+  document.getElementById('modalKey').textContent = key;
+  if (expiresAt) {
+    document.getElementById('modalExpires').textContent = 'Valid until ' + new Date(expiresAt).toLocaleString('en-US');
+  }
+  document.getElementById('keyModal').classList.add('open');
+}
+function closeModal() { document.getElementById('keyModal').classList.remove('open'); }
+function copyModalKey() {
+  const v = document.getElementById('modalKey').textContent;
+  if (v) navigator.clipboard.writeText(v);
+}
+// close modal on overlay click
+document.getElementById('keyModal').addEventListener('click', (e) => {
+  if (e.target.id === 'keyModal') closeModal();
+});
+
+// ===== Getkey flow =====
 async function start(duration) {
   const status = document.getElementById('startStatus');
   status.textContent = '';
@@ -84,17 +166,21 @@ async function start(duration) {
     const d = await r.json();
     if (!d.success) {
       document.getElementById('choiceCard').style.opacity = '1';
-      status.textContent = '❌ ' + (d.error || 'Erreur inconnue');
+      if (d.reason === 'ad_limit') {
+        status.textContent = '⛔ ' + (d.error || 'Ad limit reached — 2 ads max every 12 hours.');
+      } else {
+        status.textContent = '❌ ' + (d.error || 'Unknown error');
+      }
       status.className = 'status err';
       return;
     }
     localStorage.setItem(PUID_STORAGE, d.puid);
     window.open(d.lootUrl, '_blank');
-    showWaiting('⏳ En attente de complétion…', 'Complète les ' + d.tasksRequired + ' checkpoint(s) dans l\'autre onglet.');
+    showWaiting('⏳ Waiting for completion…', 'Complete the ' + d.tasksRequired + ' checkpoint(s) in the other tab.');
     startPolling(d.puid);
   } catch (e) {
     document.getElementById('choiceCard').style.opacity = '1';
-    status.textContent = 'Erreur réseau — réessaie.';
+    status.textContent = 'Network error — try again.';
     status.className = 'status err';
   }
 }
@@ -122,13 +208,16 @@ async function poll(puid) {
       pollTimer = null;
       localStorage.setItem(KEY_STORAGE, d.key);
       localStorage.removeItem(PUID_STORAGE);
-      document.getElementById('resultTitle').textContent = d.renewed ? '✅ Clé renouvelée !' : '🎉 Clé obtenue !';
-      document.getElementById('resultSub').textContent = 'Copie-la dans le loader — elle est aussi sauvegardée dans ton navigateur.';
+      document.getElementById('resultTitle').textContent = d.renewed ? '✅ Key renewed!' : '🎉 Key obtained!';
+      document.getElementById('resultSub').textContent = 'Paste it into the loader — it\'s also saved in your browser.';
       const el = document.getElementById('newKey');
       el.classList.remove('hidden');
       el.textContent = d.key;
       document.getElementById('resultActions').classList.remove('hidden');
       document.getElementById('waitSteps').classList.add('hidden');
+      // petit carre qui affiche la cle
+      showModal(d.key, d.renewed, d.expiresAt);
+      loadCurrentKey();
     }
   } catch {}
 }
@@ -138,7 +227,7 @@ function copyKey() {
   if (v) navigator.clipboard.writeText(v);
 }
 
-// Callback LootLabs atterrit ici: /getkey/callback (le puid vient du localStorage)
+// LootLabs callback lands here: /getkey/callback (puid comes from localStorage)
 if (location.pathname.endsWith('/callback')) {
   history.replaceState({}, '', '/getkey');
 }
@@ -147,9 +236,11 @@ resumePendingSession();
 function resumePendingSession() {
   const puid = localStorage.getItem(PUID_STORAGE);
   if (!puid) return;
-  showWaiting('⏳ Vérification de ta session…', 'Ta clé apparaîtra ici dès la complétion validée.');
+  showWaiting('⏳ Verifying your session…', 'Your key will pop up as soon as it\'s validated.');
   startPolling(puid);
 }
+
+loadCurrentKey();
 </script>
 </body>
 </html>

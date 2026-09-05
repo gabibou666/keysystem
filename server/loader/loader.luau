@@ -12,8 +12,8 @@ end
 local request = request or http_request or (syn and syn.request) or (http and http.request) or (fluxus and fluxus.request)
 if not request then
     game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = "Non supporté",
-        Text = "Ton executor n'a pas de fonction HTTP.",
+        Title = "Not supported",
+        Text = "Your executor does not have an HTTP function.",
         Duration = 6
     })
     return
@@ -56,7 +56,7 @@ WindUI.Services.keysystem = {
         -- Verification de cle contre le backend (liaison UserId + expiration + ban)
         local function validateKey(key)
             if not key or #key < 10 then
-                return false, "Clé invalide."
+                return false, "Invalid key."
             end
             local data = httpJson(SiteURL .. "/api/v1/check", "POST", {
                 key = key,
@@ -71,7 +71,7 @@ WindUI.Services.keysystem = {
                 if fn then
                     local okRun, runErr = pcall(fn)
                     if not okRun then
-                        -- remonte l'erreur runtime pour la telemetrie
+                        -- report runtime error to telemetry
                         pcall(function()
                             request({
                                 Url = SiteURL .. "/api/v1/report",
@@ -86,24 +86,24 @@ WindUI.Services.keysystem = {
                             })
                         end)
                     end
-                    return true, "Clé valide ! Script chargé (v" .. tostring(data.version) .. ")."
+                    return true, "Key valid! Script loaded (v" .. tostring(data.version) .. ")."
                 else
-                    return false, "Erreur de chargement: " .. tostring(loadErr)
+                    return false, "Load error: " .. tostring(loadErr)
                 end
             elseif data.reason == "expired" then
-                return false, "Clé expirée — retourne sur le site pour la renouveler."
+                return false, "Key expired — go back to the website to renew it."
             elseif data.reason == "banned" then
-                return false, "Ton compte Roblox est banni de ce script."
+                return false, "Your Roblox account is banned from this script."
             elseif data.reason == "bound_to_other_user" then
-                return false, "Cette clé est liée à un autre compte Roblox."
+                return false, "This key is bound to another Roblox account."
             elseif data.reason == "revoked" then
-                return false, "Clé révoquée par l'administrateur."
+                return false, "Key revoked by the administrator."
             elseif data.reason == "no_script" then
-                return false, "Aucun script publié pour ce jeu pour le moment."
+                return false, "No script published for this game yet."
             elseif data.reason == "invalid_key" then
-                return false, "Clé invalide — vérifie le format."
+                return false, "Invalid key — check the format."
             else
-                return false, "Erreur: " .. tostring(data.reason or "inconnue")
+                return false, "Error: " .. tostring(data.reason or "unknown")
             end
         end
 
@@ -130,7 +130,7 @@ local Window = WindUI:CreateWindow({
     Theme = "Dark",
     KeySystem = {
         Key = { "" }, -- les cles valides sont verifiees par le backend, pas ici
-        Note = "Obtiens ta clé sur le site (bouton ci-dessous), colle-la ici, puis clique Verify.",
+        Note = "Get your key on the website (button below), paste it here, then click Verify.",
         URL = SITE .. "/getkey",
         SaveKey = true,
         API = {

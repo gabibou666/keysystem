@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,78 +10,78 @@
 <nav>
   <div class="logo"><div class="logo-badge">🔑</div> KeySystem</div>
   <div class="links">
-    <a href="/getkey">Obtenir une clé</a>
+    <a href="/getkey">Get a key</a>
     <a href="/changelog">Changelog</a>
   </div>
 </nav>
 
 <main>
   <section class="hero">
-    <h1>La porte d'entrée de ton script</h1>
-    <p>Une clé, une pub, et ton script se charge — sur n'importe quel executor, dans le bon jeu, automatiquement.</p>
+    <h1>The gateway to your script</h1>
+    <p>One key, one ad, and your script loads — on any executor, in the right game, automatically.</p>
     <div class="actions">
-      <a class="btn" href="/getkey">🔑 Obtenir ma clé</a>
-      <a class="btn secondary" href="#loader">Voir le loader</a>
+      <a class="btn" href="/getkey">🔑 Get my key</a>
+      <a class="btn secondary" href="#loader">View loader</a>
     </div>
   </section>
 
   <section class="stats">
-    <div class="stat"><div class="num" id="execCount">…</div><div class="lbl">exécutions</div></div>
-    <div class="stat"><div class="num" id="userCount">…</div><div class="lbl">utilisateurs</div></div>
-    <div class="stat"><div class="num" id="uptime">24/7</div><div class="lbl">disponibilité</div></div>
+    <div class="stat"><div class="num" id="execCount">…</div><div class="lbl">executions</div></div>
+    <div class="stat"><div class="num" id="userCount">…</div><div class="lbl">users</div></div>
+    <div class="stat"><div class="num" id="uptime">24/7</div><div class="lbl">uptime</div></div>
   </section>
 
   <section class="keypanel" id="keyCard">
-    <h2>Ta clé</h2>
-    <p class="sub">Sauvegardée dans ton navigateur — copie-la dans le loader.</p>
+    <h2>Your key</h2>
+    <p class="sub">Saved in your browser — paste it into the loader.</p>
     <div class="keybox">
-      <textarea id="keybox" rows="2" readonly placeholder="Aucune clé dans ce navigateur — clique sur « Obtenir ma clé »."></textarea>
-      <button class="btn small" onclick="copyKey()">Copier</button>
+      <textarea id="keybox" rows="2" readonly placeholder="No key in this browser yet — click “Get my key”."></textarea>
+      <button class="btn small" onclick="copyKey()">Copy</button>
     </div>
     <div id="countdownWrap" class="countdown-wrap hidden">
-      <div class="countdown"><span id="countdown">--:--:--</span><span class="lbl">temps restant</span></div>
-      <button class="btn small" onclick="location.href='/getkey'">🔄 Renouveler (1 pub)</button>
+      <div class="countdown"><span id="countdown">--:--:--</span><span class="lbl">time remaining</span></div>
+      <button class="btn small" onclick="location.href='/getkey'">🔄 Renew (1 ad)</button>
     </div>
     <div id="status" class="status"></div>
   </section>
 
   <section class="grid" style="margin-top: 34px;">
     <div class="card">
-      <h3><span class="icon">🧩</span> Tous les executors</h3>
-      <p>Synapse Z, Wave, Xeno, Delta, Codex, Fluxus, Solara, Ronin, MacSploit… Le loader s'adapte automatiquement aux fonctions disponibles de ton executor.</p>
+      <h3><span class="icon">🧩</span> All executors</h3>
+      <p>Synapse Z, Wave, Xeno, Delta, Codex, Fluxus, Solara, Ronin, MacSploit… The loader automatically adapts to your executor's available functions.</p>
     </div>
     <div class="card">
-      <h3><span class="icon">🎮</span> Multi-jeux</h3>
-      <p>Le même loader détecte le jeu en cours et charge automatiquement le bon script publié pour ce PlaceId.</p>
+      <h3><span class="icon">🎮</span> Multi-game</h3>
+      <p>The same loader detects the current game and automatically loads the right script published for that PlaceId.</p>
     </div>
     <div class="card">
-      <h3><span class="icon">🛡️</span> Anti-partage</h3>
-      <p>Chaque clé se lie au premier compte Roblox qui l'utilise. Clé partagée = refusée. Exécutions et erreurs trackées en direct.</p>
+      <h3><span class="icon">🛡️</span> Anti-sharing</h3>
+      <p>Each key binds to the first Roblox account that uses it. Shared key = rejected. Executions and errors tracked live.</p>
     </div>
   </section>
 
   <section class="keypanel" id="loader">
     <h2>Loader</h2>
-    <p class="sub">Une seule ligne dans ton executor :</p>
-    <div class="codebox" id="loaderCode">-- charge ci-dessous --</div>
+    <p class="sub">One single line in your executor:</p>
+    <div class="codebox" id="loaderCode">-- loads below --</div>
     <div style="margin-top: 14px;">
-      <button class="btn small" onclick="copyLoader()">📋 Copier le loader</button>
+      <button class="btn small" onclick="copyLoader()">📋 Copy loader</button>
     </div>
     <p class="sub" style="margin-top: 18px; margin-bottom: 0;">
-      1. Copie la ligne → 2. Colle-la dans ton executor → 3. Entre ta clé → le script se charge.
+      1. Copy the line → 2. Paste it into your executor → 3. Enter your key → the script loads.
     </p>
   </section>
 </main>
 
 <footer>
-  Propulsé par LootLabs · <a href="/changelog">Changelog</a> · <a href="/admin/">Admin</a>
+  Powered by LootLabs · <a href="/changelog">Changelog</a> · <a href="/admin/">Admin</a>
 </footer>
 
 <script>
 const KEY_STORAGE = 'keysystem_key';
 const PUID_STORAGE = 'keysystem_pending_puid';
 
-// Reprend une session getkey en cours (postback arrive pendant que l'utilisateur est sur l'accueil)
+// Resume an ongoing getkey session (postback arrives while the user is on the homepage)
 (function resumePending() {
   const puid = localStorage.getItem(PUID_STORAGE);
   if (!puid) return;
@@ -94,7 +94,7 @@ const PUID_STORAGE = 'keysystem_pending_puid';
         localStorage.setItem(KEY_STORAGE, d.key);
         localStorage.removeItem(PUID_STORAGE);
         loadKeyInfo();
-        setStatus('🎉 Ta clé est prête ! Copie-la ci-dessus.', 'ok');
+        setStatus('🎉 Your key is ready! Copy it above.', 'ok');
       }
     } catch {}
   }, 3000);
@@ -110,8 +110,8 @@ async function loadStats() {
   try {
     const r = await fetch('/api/stats/public');
     const d = await r.json();
-    document.getElementById('execCount').textContent = (d.executions || 0).toLocaleString('fr-FR');
-    document.getElementById('userCount').textContent = (d.users || 0).toLocaleString('fr-FR');
+    document.getElementById('execCount').textContent = (d.executions || 0).toLocaleString('en-US');
+    document.getElementById('userCount').textContent = (d.users || 0).toLocaleString('en-US');
   } catch {}
 }
 
@@ -123,12 +123,12 @@ async function loadKeyInfo() {
     const r = await fetch('/api/key/info?key=' + encodeURIComponent(key));
     const d = await r.json();
     if (!d.success) {
-      setStatus(d.error === 'Revoquee' ? 'Clé révoquée — obtiens-en une nouvelle.' : 'Clé inconnue — obtiens-en une nouvelle.', 'err');
+      setStatus(d.error === 'Revoked' ? 'Key revoked — get a new one.' : 'Unknown key — get a new one.', 'err');
       document.getElementById('countdownWrap').classList.remove('hidden');
       return;
     }
     if (d.expired) {
-      setStatus('Clé expirée — regarde une pub pour la réutiliser.', 'err');
+      setStatus('Key expired — watch one ad to renew it.', 'err');
       document.getElementById('countdownWrap').classList.remove('hidden');
       return;
     }
@@ -137,9 +137,9 @@ async function loadKeyInfo() {
     const target = new Date(d.expiresAt).getTime();
     setInterval(() => tickCountdown(target), 1000);
     tickCountdown(target);
-    setStatus('Clé valide ✓', 'ok');
+    setStatus('Key valid ✓', 'ok');
   } catch {
-    setStatus('Impossible de vérifier la clé pour le moment.', 'err');
+    setStatus('Could not verify your key right now.', 'err');
   }
 }
 
@@ -147,7 +147,7 @@ function tickCountdown(target) {
   const diff = target - Date.now();
   const el = document.getElementById('countdown');
   if (diff <= 0) {
-    el.textContent = 'expirée';
+    el.textContent = 'expired';
     document.getElementById('countdownWrap').classList.remove('hidden');
     return;
   }
@@ -159,12 +159,12 @@ function tickCountdown(target) {
 
 function copyKey() {
   const v = document.getElementById('keybox').value;
-  if (v) { navigator.clipboard.writeText(v); setStatus('Clé copiée !', 'ok'); }
+  if (v) { navigator.clipboard.writeText(v); setStatus('Key copied!', 'ok'); }
 }
 
 function copyLoader() {
   navigator.clipboard.writeText(document.getElementById('loaderCode').textContent);
-  setStatus('Loader copié !', 'ok');
+  setStatus('Loader copied!', 'ok');
 }
 
 document.getElementById('loaderCode').textContent =

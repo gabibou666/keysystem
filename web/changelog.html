@@ -1,56 +1,55 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Changelog</title>
-<style>
-:root { --bg:#121218; --card:#1b1b23; --accent:#5865f2; --text:#eef0f4; --muted:#969ba6; }
-* { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',system-ui,sans-serif; }
-body { background:var(--bg); color:var(--text); min-height:100vh; }
-nav { width:100%; display:flex; justify-content:space-between; align-items:center; padding:18px 32px; }
-nav .logo { font-weight:700; font-size:20px; color:var(--text); text-decoration:none; }
-nav a { color:var(--muted); text-decoration:none; margin-left:24px; font-size:15px; }
-nav a:hover { color:var(--text); }
-.wrap { max-width:680px; margin:40px auto; padding:0 16px; }
-h1 { margin-bottom:24px; }
-.ver { background:var(--card); border-radius:14px; padding:22px 26px; margin-bottom:16px; }
-.ver .top { display:flex; justify-content:space-between; align-items:baseline; }
-.ver .v { font-size:19px; font-weight:700; color:var(--accent); }
-.ver .d { color:var(--muted); font-size:13px; }
-.ver .note { margin-top:10px; line-height:1.6; font-size:15px; }
-.empty { color:var(--muted); }
-</style>
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">🔑 KeySystem</a>
-  <div>
-    <a href="/">Accueil</a>
-    <a href="/getkey">Obtenir une clé</a>
+  <a class="logo" href="/" style="text-decoration:none;color:inherit"><div class="logo-badge">🔑</div> KeySystem</a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/getkey">Get a key</a>
   </div>
 </nav>
-<div class="wrap">
-  <h1>Changelog</h1>
-  <div id="list"><p class="empty">Chargement...</p></div>
-</div>
+
+<main>
+  <section class="hero" style="padding-bottom: 30px;">
+    <h1>Changelog</h1>
+    <p>What changed in each published version of the script.</p>
+  </section>
+
+  <section style="max-width: 680px; margin: 0 auto; padding: 0 24px 40px;">
+    <div id="list"><p style="color: var(--muted);">Loading…</p></div>
+  </section>
+</main>
+
+<footer>
+  Powered by LootLabs · <a href="/">Home</a>
+</footer>
+
 <script>
 fetch('/api/admin/changelog')
   .then(r => r.json())
   .then(d => {
     const list = document.getElementById('list');
     if (!d.versions || !d.versions.length) {
-      list.innerHTML = '<p class="empty">Aucune version publiée pour le moment.</p>';
+      list.innerHTML = '<p style="color: var(--muted);">No published versions yet.</p>';
       return;
     }
     list.innerHTML = d.versions.map(v => `
-      <div class="ver">
-        <div class="top"><span class="v">v${v.version}</span><span class="d">${new Date(v.created_at).toLocaleDateString('fr-FR')}</span></div>
-        <div class="note">${(v.note || '').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</div>
+      <div class="card" style="margin-bottom: 14px;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+          <span style="font-size: 19px; font-weight: 700; color: var(--accent);">v${v.version}</span>
+          <span style="color: var(--muted); font-size: 13px;">${new Date(v.created_at).toLocaleDateString('en-US')}</span>
+        </div>
+        <p style="margin-top: 10px; line-height: 1.6;">${(v.note || '').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>
       </div>
     `).join('');
   })
-  .catch(() => document.getElementById('list').innerHTML = '<p class="empty">Erreur de chargement.</p>');
+  .catch(() => document.getElementById('list').innerHTML = '<p style="color: var(--muted);">Failed to load.</p>');
 </script>
 </body>
 </html>

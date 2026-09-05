@@ -11,7 +11,7 @@ const startLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
   standardHeaders: true,
-  message: { success: false, error: 'Trop de demandes, reessaie dans une minute.' },
+  message: { success: false, error: 'Too many requests, try again in a minute.' },
 });
 const checkLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -31,19 +31,34 @@ router.post('/key/start', startLimiter, async (req, res) => {
   try {
     const duration = parseInt(req.body?.duration, 10);
     if (!lootlabs.DURATIONS[duration]) {
-      return res.status(400).json({ success: false, error: 'Duree invalide (12 ou 24).' });
+      return res.status(400).json({ success: false, error: 'Invalid duration (12 or 24).' });
     }
 
     let keyId = null;
     // Renouvellement: une cle valide peut etre prolongee
     if (req.body?.key) {
       const parsed = crypto.verifyKeyFormat(req.body.key);
-      if (!parsed) return res.status(400).json({ success: false, error: 'Cle invalide.' });
+      if (!parsed) return res.status(400).json({ success: false, error: 'Invalid key.' });
       const { rows } = await pool.query('SELECT id, revoked FROM keys WHERE kid = $1', [parsed.kid]);
       if (!rows[0] || rows[0].revoked) {
-        return res.status(400).json({ success: false, error: 'Cle inconnue ou revoquee.' });
+        return res.status(400).json({ success: false, error: 'Unknown or revoked key.' });
       }
       keyId = rows[0].id;
+    }
+
+    // Ad limit: max 2 ad sessions per IP within 12 hours
+    const ip = clientIp(req);
+    const recent = await pool.query(
+      `SELECT COUNT(*)::int AS c FROM ll_sessions
+       WHERE ip = $1 AND created_at > now() - interval '12 hours'`,
+      [ip]
+    );
+    if (recent.rows[0].c >= 2) {
+      return res.status(429).json({
+        success: false,
+        reason: 'ad_limit',
+        error: 'Ad limit reached (2 ads max every 12 hours). Come back later.',
+      });
     }
 
     const puid = crypto.randomToken(16);
@@ -58,21 +73,21 @@ router.post('/key/start', startLimiter, async (req, res) => {
       return res.status(502).json({
         success: false,
         error:
-          'Impossible de creer le lien: ' +
+          'Could not create the link: ' +
           (e.lootlabsMessage || e.message) +
-          ' (verifie tes Creator Details dans le panel LootLabs)',
+          ' (check your Creator Details in the LootLabs panel)',
       });
     }
 
     await pool.query(
       `INSERT INTO ll_sessions (puid, key_id, tasks_required, ip) VALUES ($1, $2, $3, $4)`,
-      [puid, keyId, tasksRequired, clientIp(req)]
+      [puid, keyId, tasksRequired, ip]
     );
 
     res.json({ success: true, lootUrl, puid, tasksRequired });
   } catch (e) {
     console.error('[key/start]', e);
-    res.status(500).json({ success: false, error: 'Erreur serveur.' });
+    res.status(500).json({ success: false, error: 'Server error.' });
   }
 });
 
@@ -130,11 +145,11 @@ router.get('/key/status', async (req, res) => {
   try {
     const { puid } = req.query;
     if (!puid || typeof puid !== 'string' || puid.length > 64) {
-      return res.status(400).json({ success: false, error: 'puid requis' });
+      return res.status(400).json({ success: false, error: 'puid required' });
     }
     const { rows } = await pool.query('SELECT * FROM ll_sessions WHERE puid = $1', [puid]);
     const session = rows[0];
-    if (!session) return res.status(404).json({ success: false, error: 'Session inconnue' });
+    if (!session) return res.status(404).json({ success: false, error: 'Unknown session' });
 
     if (session.status !== 'completed') {
       return res.json({ success: true, status: 'pending', tasksDone: session.tasks_done, tasksRequired: session.tasks_required });
@@ -181,7 +196,7 @@ router.get('/key/status', async (req, res) => {
     });
   } catch (e) {
     console.error('[key/status]', e);
-    res.status(500).json({ success: false, error: 'Erreur serveur' });
+    res.status(500).json({ success: false, error: 'Server error.' });
   }
 });
 
@@ -192,15 +207,15 @@ const infoLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: t
 router.get('/key/info', infoLimiter, async (req, res) => {
   try {
     const parsed = crypto.verifyKeyFormat(req.query.key || '');
-    if (!parsed) return res.json({ success: false, error: 'Format invalide' });
+    if (!parsed) return res.json({ success: false, error: 'Invalid format' });
 
     const { rows } = await pool.query(
       'SELECT kid, expires_at, revoked, bound_user_id FROM keys WHERE kid = $1',
       [parsed.kid]
     );
     const key = rows[0];
-    if (!key) return res.json({ success: false, error: 'Cle inconnue' });
-    if (key.revoked) return res.json({ success: false, error: 'Revoquee', revoked: true });
+    if (!key) return res.json({ success: false, error: 'Unknown key' });
+    if (key.revoked) return res.json({ success: false, error: 'Revoked', revoked: true });
 
     const expired = new Date(key.expires_at).getTime() < Date.now();
     res.json({
@@ -212,7 +227,7 @@ router.get('/key/info', infoLimiter, async (req, res) => {
     });
   } catch (e) {
     console.error('[key/info]', e);
-    res.status(500).json({ success: false, error: 'Erreur serveur' });
+    res.status(500).json({ success: false, error: 'Server error.' });
   }
 });
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -50,50 +50,50 @@ select { margin-right:8px; }
 <nav>
   <div class="logo">🔑 Admin</div>
   <button class="tab active" data-tab="stats" onclick="showTab('stats')">Stats</button>
-  <button class="tab" data-tab="keys" onclick="showTab('keys')">Clés</button>
+  <button class="tab" data-tab="keys" onclick="showTab('keys')">Keys</button>
   <button class="tab" data-tab="bans" onclick="showTab('bans')">Bans</button>
   <button class="tab" data-tab="script" onclick="showTab('script')">Script</button>
-  <button class="tab" data-tab="patches" onclick="showTab('patches')">Patchs IA</button>
-  <button onclick="logout()" id="logoutBtn" class="hidden">Déconnexion</button>
+  <button class="tab" data-tab="patches" onclick="showTab('patches')">AI Patches</button>
+  <button onclick="logout()" id="logoutBtn" class="hidden">Log out</button>
 </nav>
 <main id="main" class="hidden">
 
 <!-- STATS -->
 <section id="tab-stats">
   <div class="grid">
-    <div class="stat"><div class="num" id="s-exec">–</div><div class="lbl">exécutions</div></div>
-    <div class="stat"><div class="num" id="s-users">–</div><div class="lbl">utilisateurs uniques</div></div>
-    <div class="stat"><div class="num" id="s-errs">–</div><div class="lbl">erreurs (7j)</div></div>
+    <div class="stat"><div class="num" id="s-exec">–</div><div class="lbl">executions</div></div>
+    <div class="stat"><div class="num" id="s-users">–</div><div class="lbl">unique users</div></div>
+    <div class="stat"><div class="num" id="s-errs">–</div><div class="lbl">errors (7d)</div></div>
   </div>
   <div class="panel">
-    <h3>Exécutions par jour (30j)</h3>
+    <h3>Executions per day (30d)</h3>
     <div id="perday"></div>
   </div>
   <div class="panel">
-    <h3>Répartition par executor</h3>
+    <h3>By executor</h3>
     <div id="byexec"></div>
   </div>
 </section>
 
-<!-- CLES -->
+<!-- KEYS -->
 <section id="tab-keys" class="hidden">
   <div class="panel">
-    <h3>Clés (50 dernières)</h3>
-    <table id="keysTable"><thead><tr><th>Clé</th><th>UserId</th><th>Expire</th><th>Exécutions</th><th>Statut</th><th></th></tr></thead><tbody></tbody></table>
+    <h3>Keys (last 50)</h3>
+    <table id="keysTable"><thead><tr><th>Key</th><th>UserId</th><th>Expires</th><th>Executions</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
   </div>
 </section>
 
 <!-- BANS -->
 <section id="tab-bans" class="hidden">
   <div class="panel">
-    <h3>Bannir un UserId Roblox</h3>
-    <input id="banUserId" placeholder="UserId Roblox (ex: 1234567890)" style="width:280px">
-    <input id="banReason" placeholder="Raison (optionnel)" style="width:280px">
-    <button class="btn" onclick="banUser()">Bannir</button>
+    <h3>Ban a Roblox UserId</h3>
+    <input id="banUserId" placeholder="Roblox UserId (e.g. 1234567890)" style="width:280px">
+    <input id="banReason" placeholder="Reason (optional)" style="width:280px">
+    <button class="btn" onclick="banUser()">Ban</button>
   </div>
   <div class="panel">
-    <h3>Bans actifs</h3>
-    <table id="bansTable"><thead><tr><th>UserId</th><th>Raison</th><th>Date</th><th></th></tr></thead><tbody></tbody></table>
+    <h3>Active bans</h3>
+    <table id="bansTable"><thead><tr><th>UserId</th><th>Reason</th><th>Date</th><th></th></tr></thead><tbody></tbody></table>
   </div>
 </section>
 
@@ -101,35 +101,35 @@ select { margin-right:8px; }
 <section id="tab-script" class="hidden">
   <div class="panel">
     <h3>Versions</h3>
-    <table id="versionsTable"><thead><tr><th>Version</th><th>Note</th><th>Date</th><th>Builds</th><th>Publiée</th><th>Actions</th></tr></thead><tbody></tbody></table>
+    <table id="versionsTable"><thead><tr><th>Version</th><th>Note</th><th>Date</th><th>Builds</th><th>Published</th><th>Actions</th></tr></thead><tbody></tbody></table>
   </div>
   <div class="panel">
-    <h3>Éditer / créer une version</h3>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:10px">Sauvegarder = brouillon. Rien ne part en prod tant que tu ne cliques pas Publier. Laisse le PlaceId vide pour un script "tous les jeux".</p>
+    <h3>Edit / create a version</h3>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:10px">Saving = draft. Nothing goes live until you click Publish. Leave PlaceId empty for an "all games" script.</p>
     <div style="display:flex;gap:10px;margin-bottom:10px">
-      <input id="scriptPlaceId" placeholder="PlaceId du jeu (ex: 2753915549) — vide = tous les jeux" style="flex:1">
+      <input id="scriptPlaceId" placeholder="Game PlaceId (e.g. 2753915549) — empty = all games" style="flex:1">
     </div>
-    <textarea id="scriptSource" class="code" placeholder="Colle ton script Luau ici..."></textarea>
-    <input id="scriptNote" placeholder="Note de changelog (ex: fix aimbot + nouveau tab)" style="width:100%;margin-top:10px">
-    <button class="btn" onclick="saveScript()">💾 Sauvegarder (brouillon) + pipeline auto</button>
+    <textarea id="scriptSource" class="code" placeholder="Paste your Luau script here..."></textarea>
+    <input id="scriptNote" placeholder="Changelog note (e.g. fix aimbot + new tab)" style="width:100%;margin-top:10px">
+    <button class="btn" onclick="saveScript()">💾 Save (draft) + auto pipeline</button>
     <div class="msg" id="scriptMsg"></div>
   </div>
 </section>
 
-<!-- PATCHS IA -->
+<!-- AI PATCHES -->
 <section id="tab-patches" class="hidden">
   <div class="panel">
-    <h3>Patchs IA en attente de review</h3>
-    <p style="color:var(--muted);font-size:13px">Chaque patch est minimal (remplacement unique). Approuve ou rejette individuellement. La publication est bloquée tant qu'un patch est en attente.</p>
-    <div id="patchesList"><p style="color:var(--muted)">Aucun patch en attente 🎉</p></div>
+    <h3>AI patches pending review</h3>
+    <p style="color:var(--muted);font-size:13px">Each patch is minimal (unique replacement). Approve or reject individually. Publishing is blocked while a patch is pending.</p>
+    <div id="patchesList"><p style="color:var(--muted)">No pending patches 🎉</p></div>
   </div>
 </section>
 
 </main>
 <div class="login" id="login">
-  <h1 style="margin-bottom:12px">Dashboard Admin</h1>
-  <p style="color:var(--muted);margin-bottom:26px">Connexion via Discord (allowlist).</p>
-  <a class="btn" href="/api/admin/auth/login" style="text-decoration:none">Se connecter avec Discord</a>
+  <h1 style="margin-bottom:12px">Admin Dashboard</h1>
+  <p style="color:var(--muted);margin-bottom:26px">Sign in with Discord (allowlist).</p>
+  <a class="btn" href="/api/admin/auth/login" style="text-decoration:none">Sign in with Discord</a>
 </div>
 
 <script>
@@ -177,39 +177,39 @@ function esc(s) { return String(s ?? '').replace(/</g, '&lt;'); }
 async function loadStats() {
   try {
     const d = await api('/stats');
-    document.getElementById('s-exec').textContent = d.executions.toLocaleString('fr-FR');
-    document.getElementById('s-users').textContent = d.uniqueUsers.toLocaleString('fr-FR');
+    document.getElementById('s-exec').textContent = d.executions.toLocaleString('en-US');
+    document.getElementById('s-users').textContent = d.uniqueUsers.toLocaleString('en-US');
     document.getElementById('s-errs').textContent = d.errors7d;
     const max = Math.max(1, ...d.perDay.map(x => x.c));
     document.getElementById('perday').innerHTML = d.perDay.map(x =>
       `<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="width:86px;color:var(--muted);font-size:12px">${x.d}</span><div class="bar" style="flex:1"><div style="width:${(x.c/max*100).toFixed(1)}%"></div></div><span style="width:34px;text-align:right;font-size:13px">${x.c}</span></div>`
-    ).join('') || '<p style="color:var(--muted)">Pas encore de données.</p>';
+    ).join('') || '<p style="color:var(--muted)">No data yet.</p>';
     document.getElementById('byexec').innerHTML = d.byExecutor.map(x =>
-      `<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="width:130px;color:var(--muted);font-size:13px">${esc(x.executor || 'inconnu')}</span><div class="bar" style="flex:1"><div style="width:${(x.c / (d.byExecutor[0].c) * 100).toFixed(1)}%"></div></div><span style="width:44px;text-align:right;font-size:13px">${x.c}</span></div>`
-    ).join('') || '<p style="color:var(--muted)">Pas encore de données.</p>';
+      `<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="width:130px;color:var(--muted);font-size:13px">${esc(x.executor || 'unknown')}</span><div class="bar" style="flex:1"><div style="width:${(x.c / (d.byExecutor[0].c) * 100).toFixed(1)}%"></div></div><span style="width:44px;text-align:right;font-size:13px">${x.c}</span></div>`
+    ).join('') || '<p style="color:var(--muted)">No data yet.</p>';
   } catch {}
 }
 
-// ---- CLES ----
+// ---- KEYS ----
 async function loadKeys() {
   try {
     const d = await api('/keys');
     document.querySelector('#keysTable tbody').innerHTML = d.keys.map(k => {
       const expired = new Date(k.expires_at) < new Date();
-      const st = k.revoked ? '<span style="color:var(--red)">révoquée</span>'
-        : expired ? '<span style="color:var(--muted)">expirée</span>'
-        : '<span style="color:var(--green)">valide</span>';
+      const st = k.revoked ? '<span style="color:var(--red)">revoked</span>'
+        : expired ? '<span style="color:var(--muted)">expired</span>'
+        : '<span style="color:var(--green)">valid</span>';
       return `<tr>
         <td class="mono">${k.kid.slice(0,10)}…</td>
         <td>${k.bound_user_id ?? '–'}</td>
-        <td class="mono">${new Date(k.expires_at).toLocaleString('fr-FR')}</td>
+        <td class="mono">${new Date(k.expires_at).toLocaleString('en-US')}</td>
         <td>${k.execs}</td>
         <td>${st}</td>
         <td>${k.revoked
-          ? `<button class="btn small ghost" onclick="unrevokeKey(${k.id})">Réactiver</button>`
-          : `<button class="btn small red" onclick="revokeKey(${k.id})">Révoquer</button>`}</td>
+          ? `<button class="btn small ghost" onclick="unrevokeKey(${k.id})">Restore</button>`
+          : `<button class="btn small red" onclick="revokeKey(${k.id})">Revoke</button>`}</td>
       </tr>`;
-    }).join('') || '<tr><td colspan="6" style="color:var(--muted)">Aucune clé.</td></tr>';
+    }).join('') || '<tr><td colspan="6" style="color:var(--muted)">No keys.</td></tr>';
   } catch {}
 }
 async function revokeKey(id) { await api(`/keys/${id}/revoke`, { method: 'POST' }); loadKeys(); }
@@ -220,14 +220,14 @@ async function loadBans() {
   try {
     const d = await api('/bans');
     document.querySelector('#bansTable tbody').innerHTML = d.bans.map(b =>
-      `<tr><td class="mono">${b.user_id}</td><td>${esc(b.reason) || '–'}</td><td>${new Date(b.created_at).toLocaleString('fr-FR')}</td>
-       <td><button class="btn small green" onclick="unban(${b.user_id})">Débannir</button></td></tr>`
-    ).join('') || '<tr><td colspan="4" style="color:var(--muted)">Aucun ban.</td></tr>';
+      `<tr><td class="mono">${b.user_id}</td><td>${esc(b.reason) || '–'}</td><td>${new Date(b.created_at).toLocaleString('en-US')}</td>
+       <td><button class="btn small green" onclick="unban(${b.user_id})">Unban</button></td></tr>`
+    ).join('') || '<tr><td colspan="4" style="color:var(--muted)">No bans.</td></tr>';
   } catch {}
 }
 async function banUser() {
   const userId = parseInt(document.getElementById('banUserId').value);
-  if (!Number.isFinite(userId)) return alert('UserId invalide');
+  if (!Number.isFinite(userId)) return alert('Invalid UserId');
   await api('/bans', { method: 'POST', body: JSON.stringify({ userId, reason: document.getElementById('banReason').value }) });
   document.getElementById('banUserId').value = '';
   loadBans();
@@ -242,15 +242,15 @@ async function loadVersions() {
       `<tr>
         <td><b>v${v.version}</b></td>
         <td>${v.place_id ? '<span class="mono" style="color:var(--accent)">🎮 ' + v.place_id + '</span><br>' : ''}<span style="color:var(--muted);font-size:12px">${esc(v.note)}</span></td>
-        <td>${new Date(v.created_at).toLocaleString('fr-FR')}</td>
+        <td>${new Date(v.created_at).toLocaleString('en-US')}</td>
         <td>${v.builds}</td>
-        <td>${v.published ? '<span style="color:var(--green)">oui</span>' : '<span style="color:var(--muted)">non</span>'}</td>
+        <td>${v.published ? '<span style="color:var(--green)">yes</span>' : '<span style="color:var(--muted)">no</span>'}</td>
         <td>
-          <button class="btn small ghost" onclick="loadOriginal(${v.version})">Ouvrir dans l'éditeur</button>
-          <button class="btn small green" onclick="publishVersion(${v.version})">Publier</button>
+          <button class="btn small ghost" onclick="loadOriginal(${v.version})">Open in editor</button>
+          <button class="btn small green" onclick="publishVersion(${v.version})">Publish</button>
         </td>
       </tr>`
-    ).join('') || '<tr><td colspan="6" style="color:var(--muted)">Aucune version.</td></tr>';
+    ).join('') || '<tr><td colspan="6" style="color:var(--muted)">No versions.</td></tr>';
   } catch {}
 }
 async function loadOriginal(version) {
@@ -260,7 +260,7 @@ async function loadOriginal(version) {
     const vData = await api('/script/versions');
     const ver = (vData.versions || []).find(x => x.version === version);
     document.getElementById('scriptPlaceId').value = ver && ver.place_id ? ver.place_id : '';
-    document.getElementById('scriptMsg').textContent = `Version v${version} chargée dans l'éditeur — modifie et sauvegarde pour créer v${version + 1}.`;
+    document.getElementById('scriptMsg').textContent = `Version v${version} loaded in the editor — edit and save to create v${version + 1}.`;
   } else {
     document.getElementById('scriptMsg').textContent = d.error;
   }
@@ -272,47 +272,47 @@ async function saveScript() {
   const placeId = placeIdRaw ? parseInt(placeIdRaw) : null;
   const msg = document.getElementById('scriptMsg');
   if (placeId !== null && !Number.isFinite(placeId)) {
-    msg.textContent = '❌ PlaceId invalide (nombre attendu)';
+    msg.textContent = '❌ Invalid PlaceId (number expected)';
     return;
   }
-  msg.textContent = '⏳ Pipeline en cours (analyse, shims, IA, obfuscation)...';
+  msg.textContent = '⏳ Pipeline running (analysis, shims, AI, obfuscation)...';
   try {
     const d = await api('/script/save', { method: 'POST', body: JSON.stringify({ source, note, placeId }) });
     if (d.success) {
-      msg.innerHTML = `✅ Brouillon v${d.version} créé — ${d.buildType === 'ai' ? d.patches + ' patch(s) IA à review' : 'shims seuls, auto-approuvé'}. Rien en prod tant que tu ne publies pas.`;
+      msg.innerHTML = `✅ Draft v${d.version} created — ${d.buildType === 'ai' ? d.patches + ' AI patch(es) to review' : 'shims only, auto-approved'}. Nothing goes live until you publish.`;
       document.getElementById('scriptNote').value = '';
       loadVersions();
       if (d.compatReport && d.compatReport.issues.length) {
-        msg.innerHTML += `<br><span style="color:var(--muted)">Compat: ${d.compatReport.issues.length} API(s) détectée(s) — gérées par le prelude.</span>`;
+        msg.innerHTML += `<br><span style="color:var(--muted)">Compat: ${d.compatReport.issues.length} API(s) detected — handled by the prelude.</span>`;
       }
     } else {
       msg.textContent = '❌ ' + d.error;
     }
   } catch (e) {
-    msg.textContent = '❌ Erreur réseau';
+    msg.textContent = '❌ Network error';
   }
 }
 async function publishVersion(version) {
   const d = await api('/script/publish', { method: 'POST', body: JSON.stringify({ version }) });
-  alert(d.success ? `v${version} publiée — tous les utilisateurs auront la nouvelle version à leur prochaine exécution.` : d.error);
+  alert(d.success ? `v${version} published — all users get the new version on their next execution.` : d.error);
   loadVersions();
 }
 
-// ---- PATCHS ----
+// ---- AI PATCHES ----
 async function loadPatches() {
   try {
     const d = await api('/patches/pending');
     const el = document.getElementById('patchesList');
     if (!d.patches || !d.patches.length) {
-      el.innerHTML = '<p style="color:var(--muted)">Aucun patch en attente 🎉</p>';
+      el.innerHTML = '<p style="color:var(--muted)">No pending patches 🎉</p>';
       return;
     }
     el.innerHTML = d.patches.map(p =>
       `<div class="patch">
         <b>v${p.version}</b> — <span style="color:var(--muted)">${esc(p.reason)}</span>
         <pre>FIND:\n${esc(p.find)}\n\nREPLACE:\n${esc(p.replace)}</pre>
-        <button class="btn small green" onclick="approvePatch(${p.id})">Approuver</button>
-        <button class="btn small red" onclick="rejectPatch(${p.id})">Rejeter</button>
+        <button class="btn small green" onclick="approvePatch(${p.id})">Approve</button>
+        <button class="btn small red" onclick="rejectPatch(${p.id})">Reject</button>
       </div>`
     ).join('');
   } catch {}
