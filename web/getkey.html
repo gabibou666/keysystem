@@ -4,81 +4,72 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Obtenir une clé</title>
-<style>
-:root { --bg:#121218; --card:#1b1b23; --accent:#5865f2; --green:#2ea053; --red:#f16464; --text:#eef0f4; --muted:#969ba6; }
-* { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',system-ui,sans-serif; }
-body { background:var(--bg); color:var(--text); min-height:100vh; display:flex; flex-direction:column; align-items:center; }
-nav { width:100%; display:flex; justify-content:space-between; align-items:center; padding:18px 32px; }
-nav .logo { font-weight:700; font-size:20px; color:var(--text); text-decoration:none; }
-nav a { color:var(--muted); text-decoration:none; margin-left:24px; font-size:15px; }
-nav a:hover { color:var(--text); }
-.card { background:var(--card); border-radius:14px; padding:32px; margin:60px 16px 0; max-width:560px; width:100%; text-align:center; }
-h1 { font-size:28px; margin-bottom:10px; }
-p.sub { color:var(--muted); margin-bottom:26px; }
-.choice { display:flex; gap:14px; justify-content:center; margin-bottom:10px; }
-.dur { flex:1; background:#232330; border:2px solid transparent; border-radius:12px; padding:22px 10px; cursor:pointer; transition:border-color .15s; }
-.dur:hover { border-color:var(--accent); }
-.dur .h { font-size:24px; font-weight:700; }
-.dur .t { color:var(--muted); font-size:13px; margin-top:6px; }
-.btn { display:inline-block; background:var(--accent); color:#fff; border:none; border-radius:10px; padding:14px 32px; font-size:16px; font-weight:600; cursor:pointer; margin-top:14px; text-decoration:none; }
-.btn:hover { filter:brightness(1.1); }
-.btn:disabled { opacity:.5; cursor:not-allowed; }
-#result { margin-top:22px; display:none; }
-#newKey { width:100%; background:#232330; border:1px solid #2e2e3d; border-radius:10px; color:var(--accent); padding:14px; font-size:14px; font-family:Consolas,monospace; word-break:break-all; user-select:all; }
-.steps { text-align:left; color:var(--muted); font-size:14px; margin-top:26px; line-height:1.8; }
-.spin { display:inline-block; width:18px; height:18px; border:2px solid var(--muted); border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; vertical-align:-4px; margin-right:8px; }
-@keyframes spin { to { transform:rotate(360deg); } }
-</style>
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <nav>
-  <a class="logo" href="/">🔑 KeySystem</a>
-  <div>
+  <a class="logo" href="/" style="text-decoration:none;color:inherit"><div class="logo-badge">🔑</div> KeySystem</a>
+  <div class="links">
     <a href="/">Accueil</a>
     <a href="/changelog">Changelog</a>
   </div>
 </nav>
 
-<div class="card" id="choiceCard">
-  <h1>Obtenir une clé</h1>
-  <p class="sub">Choisis ta durée — les checkpoints sont des pubs de notre sponsor.</p>
-  <div class="choice">
-    <div class="dur" onclick="start(12)">
-      <div class="h">12h</div>
-      <div class="t">1 checkpoint</div>
-    </div>
-    <div class="dur" onclick="start(24)">
-      <div class="h">24h</div>
-      <div class="t">2 checkpoints</div>
-    </div>
-  </div>
-  <div id="startStatus" style="color:var(--muted);font-size:14px;min-height:22px;margin-top:12px"></div>
-</div>
+<main>
+  <section class="hero" style="padding-bottom: 30px;">
+    <h1>Obtenir une clé</h1>
+    <p>Choisis ta durée — les checkpoints sont des pubs de notre sponsor LootLabs.</p>
+  </section>
 
-<div class="card" id="result">
-  <h1 id="resultTitle">🎉 Clé obtenue !</h1>
-  <p class="sub" id="resultSub">Copie-la dans le loader.</p>
-  <div id="newKey"></div>
-  <button class="btn" onclick="copyKey()">Copier la clé</button>
-  <a class="btn" href="/" style="background:transparent;border:1px solid #3a3a4d;color:var(--text)">Retour à l'accueil</a>
-  <div class="steps" id="waitSteps">
-    <b>Pendant que la page pub s'ouvre :</b><br>
-    1. Complète les tâches affichées jusqu'au bout.<br>
-    2. Cette page vérifie automatiquement ta complétion.<br>
-    3. Ta clé apparaîtra ici dès que c'est validé.
-  </div>
-</div>
+  <section class="keypanel" id="choiceCard">
+    <h2>Durée</h2>
+    <p class="sub">Plus la durée est longue, plus il y a de checkpoints.</p>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+      <div class="card" style="cursor:pointer; text-align:center; padding: 30px 20px;" onclick="start(12)">
+        <div style="font-size: 32px; font-weight: 700; background: linear-gradient(135deg,#fff,#60cdff); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">12h</div>
+        <p style="margin-top: 8px;">🟢 1 checkpoint</p>
+      </div>
+      <div class="card" style="cursor:pointer; text-align:center; padding: 30px 20px;" onclick="start(24)">
+        <div style="font-size: 32px; font-weight: 700; background: linear-gradient(135deg,#fff,#60cdff); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">24h</div>
+        <p style="margin-top: 8px;">🟡🟡 2 checkpoints</p>
+      </div>
+    </div>
+    <div id="startStatus" class="status" style="text-align:center; margin-top: 16px;"></div>
+  </section>
+
+  <section class="keypanel hidden" id="result">
+    <h2 id="resultTitle">⏳ En attente…</h2>
+    <p class="sub" id="resultSub">Complète les tâches dans l'autre onglet — cette page vérifie automatiquement.</p>
+    <div id="newKey" class="codebox hidden" style="color: var(--accent);"></div>
+    <div id="resultActions" class="hidden" style="margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
+      <button class="btn small" onclick="copyKey()">📋 Copier la clé</button>
+      <a class="btn small secondary" href="/">← Retour à l'accueil</a>
+    </div>
+    <div class="steps" id="waitSteps" style="margin-top: 22px; padding: 18px; border-radius: var(--radius); background: #1b1b1bcc; border: 1px solid var(--stroke);">
+      <p style="color: var(--muted); font-size: 14px; line-height: 1.8;">
+        <b style="color: var(--text)">Pendant que la page pub s'ouvre :</b><br>
+        1. Complète les tâches affichées jusqu'au bout<br>
+        2. Cette page vérifie automatiquement ta complétion<br>
+        3. Ta clé apparaîtra ici dès que c'est validé
+      </p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Propulsé par LootLabs · <a href="/">Accueil</a>
+</footer>
 
 <script>
 const KEY_STORAGE = 'keysystem_key';
 const PUID_STORAGE = 'keysystem_pending_puid';
 let pollTimer = null;
-let chosenDuration = 12;
 
 async function start(duration) {
-  chosenDuration = duration;
   const status = document.getElementById('startStatus');
-  status.innerHTML = '<span class="spin"></span>Création du lien...';
+  status.textContent = '';
+  status.className = 'status';
+  document.getElementById('choiceCard').style.opacity = '0.5';
 
   let body = { duration };
   const existing = localStorage.getItem(KEY_STORAGE);
@@ -92,26 +83,29 @@ async function start(duration) {
     });
     const d = await r.json();
     if (!d.success) {
-      status.innerHTML = '❌ ' + (d.error || 'Erreur inconnue');
-      status.style.color = 'var(--red)';
+      document.getElementById('choiceCard').style.opacity = '1';
+      status.textContent = '❌ ' + (d.error || 'Erreur inconnue');
+      status.className = 'status err';
       return;
     }
-    // Sauvegarde la session: reprise possible meme apres fermeture/refresh
     localStorage.setItem(PUID_STORAGE, d.puid);
-    // Ouvre le gate dans un nouvel onglet, affiche l'attente + polling
     window.open(d.lootUrl, '_blank');
-    status.innerHTML = '<span class="spin"></span>Page pub ouverte dans un nouvel onglet — complète les ' +
-      d.tasksRequired + ' checkpoint(s), ta clé apparaîtra ici.';
-    document.getElementById('choiceCard').style.display = 'none';
-    document.getElementById('result').style.display = 'block';
-    document.getElementById('resultTitle').textContent = '⏳ En attente de complétion...';
-    document.getElementById('resultSub').textContent = 'Complète les tâches dans l\'autre onglet.';
-    document.getElementById('newKey').style.display = 'none';
+    showWaiting('⏳ En attente de complétion…', 'Complète les ' + d.tasksRequired + ' checkpoint(s) dans l\'autre onglet.');
     startPolling(d.puid);
   } catch (e) {
+    document.getElementById('choiceCard').style.opacity = '1';
     status.textContent = 'Erreur réseau — réessaie.';
-    status.style.color = 'var(--red)';
+    status.className = 'status err';
   }
+}
+
+function showWaiting(title, sub) {
+  document.getElementById('choiceCard').classList.add('hidden');
+  document.getElementById('result').classList.remove('hidden');
+  document.getElementById('resultTitle').textContent = title;
+  document.getElementById('resultSub').textContent = sub;
+  document.getElementById('newKey').classList.add('hidden');
+  document.getElementById('resultActions').classList.add('hidden');
 }
 
 function startPolling(puid) {
@@ -129,25 +123,14 @@ async function poll(puid) {
       localStorage.setItem(KEY_STORAGE, d.key);
       localStorage.removeItem(PUID_STORAGE);
       document.getElementById('resultTitle').textContent = d.renewed ? '✅ Clé renouvelée !' : '🎉 Clé obtenue !';
-      document.getElementById('resultSub').textContent = 'Copie-la dans le loader.';
+      document.getElementById('resultSub').textContent = 'Copie-la dans le loader — elle est aussi sauvegardée dans ton navigateur.';
       const el = document.getElementById('newKey');
-      el.style.display = 'block';
+      el.classList.remove('hidden');
       el.textContent = d.key;
-      document.getElementById('waitSteps').style.display = 'none';
+      document.getElementById('resultActions').classList.remove('hidden');
+      document.getElementById('waitSteps').classList.add('hidden');
     }
   } catch {}
-}
-
-function resumePendingSession() {
-  const puid = localStorage.getItem(PUID_STORAGE);
-  if (!puid) return;
-  // Reprend le polling d'une session en cours (page rechargee, pub pas encore finie, ou postback arrive entre-temps)
-  document.getElementById('choiceCard').style.display = 'none';
-  document.getElementById('result').style.display = 'block';
-  document.getElementById('resultTitle').textContent = '⏳ Vérification de ta session...';
-  document.getElementById('resultSub').textContent = 'Ta clé apparaîtra ici dès la complétion validée.';
-  document.getElementById('newKey').style.display = 'none';
-  startPolling(puid);
 }
 
 function copyKey() {
@@ -155,11 +138,18 @@ function copyKey() {
   if (v) navigator.clipboard.writeText(v);
 }
 
-// Callback LootLabs atterrit ici: /getkey/callback (le puid vient du localStorage, pas de l'URL)
+// Callback LootLabs atterrit ici: /getkey/callback (le puid vient du localStorage)
 if (location.pathname.endsWith('/callback')) {
   history.replaceState({}, '', '/getkey');
 }
 resumePendingSession();
+
+function resumePendingSession() {
+  const puid = localStorage.getItem(PUID_STORAGE);
+  if (!puid) return;
+  showWaiting('⏳ Vérification de ta session…', 'Ta clé apparaîtra ici dès la complétion validée.');
+  startPolling(puid);
+}
 </script>
 </body>
 </html>
