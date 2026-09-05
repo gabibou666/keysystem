@@ -78,10 +78,16 @@ router.post('/key/start', startLimiter, async (req, res) => {
 
 // ---------- GET /api/lootlabs/postback ----------
 // Postback LootLabs: ?click_id=<puid>&ip=<ip>&unique_id=<id>
+// Tolérant: click_id seul suffit (ip/unique_id optionnels selon le template du panel)
 router.get('/lootlabs/postback', async (req, res) => {
   try {
-    const { click_id, unique_id, ip } = req.query;
-    if (!click_id || !unique_id) return res.status(400).send('missing params');
+    const { click_id } = req.query;
+    if (!click_id) return res.status(400).send('missing click_id');
+
+    // unique_id optionnel: fallback genere si le template du panel ne l'inclut pas
+    const unique_id =
+      req.query.unique_id || 'auto-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+    const ip = req.query.ip || null;
 
     // Dédup par unique_id
     const dup = await pool.query('SELECT id FROM postbacks WHERE unique_id = $1', [unique_id]);
