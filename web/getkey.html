@@ -71,6 +71,7 @@ p.sub { color:var(--muted); margin-bottom:26px; }
 
 <script>
 const KEY_STORAGE = 'keysystem_key';
+const PUID_STORAGE = 'keysystem_pending_puid';
 let pollTimer = null;
 let chosenDuration = 12;
 
@@ -95,11 +96,12 @@ async function start(duration) {
       status.style.color = 'var(--red)';
       return;
     }
+    // Sauvegarde la session: reprise possible meme apres fermeture/refresh
+    localStorage.setItem(PUID_STORAGE, d.puid);
     // Ouvre le gate dans un nouvel onglet, affiche l'attente + polling
     window.open(d.lootUrl, '_blank');
     status.innerHTML = '<span class="spin"></span>Page pub ouverte dans un nouvel onglet — complète les ' +
       d.tasksRequired + ' checkpoint(s), ta clé apparaîtra ici.';
-    document.getElementById('choiceCard').classList.add('hidden') || true;
     document.getElementById('choiceCard').style.display = 'none';
     document.getElementById('result').style.display = 'block';
     document.getElementById('resultTitle').textContent = '⏳ En attente de complétion...';
@@ -115,7 +117,6 @@ async function start(duration) {
 function startPolling(puid) {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(() => poll(puid), 3000);
-  setTimeout(() => { if (pollTimer) { clearInterval(pollTimer); } }, 20 * 60 * 1000);
 }
 
 async function poll(puid) {
@@ -124,7 +125,9 @@ async function poll(puid) {
     const d = await r.json();
     if (d.success && d.status === 'completed' && d.key) {
       clearInterval(pollTimer);
+      pollTimer = null;
       localStorage.setItem(KEY_STORAGE, d.key);
+      localStorage.removeItem(PUID_STORAGE);
       document.getElementById('resultTitle').textContent = d.renewed ? '✅ Clé renouvelée !' : '🎉 Clé obtenue !';
       document.getElementById('resultSub').textContent = 'Copie-la dans le loader.';
       const el = document.getElementById('newKey');
@@ -135,23 +138,28 @@ async function poll(puid) {
   } catch {}
 }
 
+function resumePendingSession() {
+  const puid = localStorage.getItem(PUID_STORAGE);
+  if (!puid) return;
+  // Reprend le polling d'une session en cours (page rechargee, pub pas encore finie, ou postback arrive entre-temps)
+  document.getElementById('choiceCard').style.display = 'none';
+  document.getElementById('result').style.display = 'block';
+  document.getElementById('resultTitle').textContent = '⏳ Vérification de ta session...';
+  document.getElementById('resultSub').textContent = 'Ta clé apparaîtra ici dès la complétion validée.';
+  document.getElementById('newKey').style.display = 'none';
+  startPolling(puid);
+}
+
 function copyKey() {
   const v = document.getElementById('newKey').textContent;
   if (v) navigator.clipboard.writeText(v);
 }
 
-// Callback LootLabs atterrit ici: /getkey/callback?puid=... => on repoll ce puid
+// Callback LootLabs atterrit ici: /getkey/callback (le puid vient du localStorage, pas de l'URL)
 if (location.pathname.endsWith('/callback')) {
-  const puid = new URLSearchParams(location.search).get('puid');
-  if (puid) {
-    history.replaceState({}, '', '/getkey');
-    document.getElementById('choiceCard').style.display = 'none';
-    document.getElementById('result').style.display = 'block';
-    document.getElementById('resultTitle').textContent = '⏳ Vérification de la complétion...';
-    document.getElementById('newKey').style.display = 'none';
-    startPolling(puid);
-  }
+  history.replaceState({}, '', '/getkey');
 }
+resumePendingSession();
 </script>
 </body>
 </html>

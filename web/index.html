@@ -75,10 +75,31 @@ footer { margin-top:auto; padding:24px; color:var(--muted); font-size:13px; }
 
 <script>
 const KEY_STORAGE = 'keysystem_key';
+const PUID_STORAGE = 'keysystem_pending_puid';
 
 function getSiteUrl() {
   return location.origin;
 }
+
+// Reprend une session getkey en cours (postback arrive pendant que l'utilisateur est sur l'accueil)
+(function resumePending() {
+  const puid = localStorage.getItem(PUID_STORAGE);
+  if (!puid) return;
+  const iv = setInterval(async () => {
+    try {
+      const r = await fetch('/api/key/status?puid=' + encodeURIComponent(puid));
+      const d = await r.json();
+      if (d.success && d.status === 'completed' && d.key) {
+        clearInterval(iv);
+        localStorage.setItem(KEY_STORAGE, d.key);
+        localStorage.removeItem(PUID_STORAGE);
+        loadKeyInfo();
+        document.getElementById('status').textContent = '🎉 Ta clé est prête ! Copie-la ci-dessus.';
+        document.getElementById('status').style.color = 'var(--green)';
+      }
+    } catch {}
+  }, 3000);
+})();
 
 async function loadStats() {
   try {
