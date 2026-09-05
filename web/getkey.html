@@ -91,7 +91,7 @@ async function start(duration) {
     });
     const d = await r.json();
     if (!d.success) {
-      status.textContent = d.error || 'Erreur inconnue';
+      status.innerHTML = '❌ ' + (d.error || 'Erreur inconnue');
       status.style.color = 'var(--red)';
       return;
     }

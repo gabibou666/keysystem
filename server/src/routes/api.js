@@ -57,7 +57,10 @@ router.post('/key/start', startLimiter, async (req, res) => {
       console.error('[key/start] LootLabs:', e.message);
       return res.status(502).json({
         success: false,
-        error: 'Impossible de creer le lien LootLabs (verifie LOOTLABS_API_KEY dans .env).',
+        error:
+          'Impossible de creer le lien: ' +
+          (e.lootlabsMessage || e.message) +
+          ' (verifie tes Creator Details dans le panel LootLabs)',
       });
     }
 

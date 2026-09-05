@@ -14,10 +14,7 @@ function httpPostJson(url, body, headers = {}) {
     signal: AbortSignal.timeout(15000),
   }).then(async (res) => {
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(`LootLabs API ${res.status}: ${JSON.stringify(data).slice(0, 200)}`);
-    }
-    return data;
+    return { status: res.status, data };
   });
 }
 
@@ -28,7 +25,7 @@ async function createMonetizedLink({ durationHours, puid }) {
 
   const callbackUrl = `${process.env.PUBLIC_URL}/getkey/callback`;
 
-  const res = await httpPostJson(
+  const { status, data } = await httpPostJson(
     LOOTLABS_ENDPOINT,
     {
       title: 'Script Access Key',
@@ -40,8 +37,24 @@ async function createMonetizedLink({ durationHours, puid }) {
     { Authorization: `Bearer ${process.env.LOOTLABS_API_KEY}` }
   );
 
+  // Validation stricte de la reponse LootLabs
+  // Format reel observe: {"type":"created","message":[{"short":"...","loot_url":"https://..."}]}
+  // Doc officielle: message = objet. On gere les deux.
+  const raw = data && data.message;
+  const msg = Array.isArray(raw) ? raw[0] : raw;
+  const lootUrlRaw = msg && typeof msg.loot_url === 'string' ? msg.loot_url : null;
+  if (!lootUrlRaw || !lootUrlRaw.startsWith('http')) {
+    const realError =
+      (typeof raw === 'string' && raw) ||
+      (msg && typeof msg.message === 'string' && msg.message) ||
+      `reponse inattendue (HTTP ${status})`;
+    const err = new Error(`LootLabs: ${realError}`);
+    err.lootlabsMessage = realError;
+    throw err;
+  }
+
   // Ajoute le puid pour le postback anti-bypass
-  const lootUrl = `${res.message.loot_url}&puid=${puid}`;
+  const lootUrl = `${lootUrlRaw}&puid=${puid}`;
   return { lootUrl, tasksRequired: config.tasks };
 }
 
