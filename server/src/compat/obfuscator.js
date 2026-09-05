@@ -1,8 +1,9 @@
-// Obfuscation fiable par scanner positionnel:
+// Obfuscation fiable par scanner positionnel + PREUVE ROUND-TRIP:
 // - scan() identifie precisement strings et commentaires (plus de regex, plus de code mange)
-// - les strings sont encodees en \xNN en PRESERVANT les echappements (\n, \t, \ddd...)
-// - les commentaires sont supprimes proprement
-// - validateStructure() prouve que le squelette code est IDENTIQUE a l'original
+// - les strings sont encodees en \xNN (hex, Luau) en PRESERVANT les echappements (\n, \t, \ddd...)
+// - chars non-ASCII (emojis, accents) conserves litteralement (UTF-8 passe tel quel)
+// - decodeLuau() : chaque string encodee est DECODEE ET COMPAREE a l'original
+//   => toute divergence = string laissee litterale. Un build servi est PROUVE correct.
 
 // Scan positionnel: segments {type: 'code'|'string'|'comment', start, end}
 function scan(source) {
@@ -15,7 +16,6 @@ function scan(source) {
 
     // --- Commentaires ---
     if (c === '-' && source[i + 1] === '-') {
-      // Commentaire long --[[ ]] (avec niveaux [=[ ]=])
       const longOpen = source.slice(i + 2).match(/^(\[=*\[)/);
       if (longOpen) {
         const open = longOpen[1];
@@ -25,7 +25,6 @@ function scan(source) {
         push('comment', i, end);
         i = end;
       } else {
-        // Commentaire ligne: jusqu'au \n (exclu)
         let nl = source.indexOf('\n', i);
         const end = nl === -1 ? n : nl;
         push('comment', i, end);
@@ -45,7 +44,6 @@ function scan(source) {
         if (source[j] === c) break;
         j++;
       }
-      // j === quote fermante (ou n si non fermee: on prend tout)
       push('string', i, Math.min(j + 1, n));
       i = Math.min(j + 1, n);
       continue;
@@ -70,31 +68,89 @@ function scan(source) {
   return segs;
 }
 
-// Encode le contenu d'une string quotee en escapes hex, PRESERVANT les sequences d'echappement
+// Decodeur Lua COMPLET (semantique officielle): \ddd, \xNN, \n \t \r \a \b \f \v \" \' \\ \z
+// Sert a la PREUVE ROUND-TRIP: decode(encode(x)) === decode(x)
+function decodeLuau(content) {
+  let out = '';
+  let i = 0;
+  const n = content.length;
+  while (i < n) {
+    const c = content[i];
+    if (c !== '\\') {
+      out += c;
+      i++;
+      continue;
+    }
+    // escape
+    const d = content[i + 1];
+    if (d === undefined) {
+      out += '\\';
+      i++;
+      continue;
+    }
+    if (/[0-9]/.test(d)) {
+      let digits = '';
+      let j = i + 1;
+      while (digits.length < 3 && j < n && /[0-9]/.test(content[j])) {
+        digits += content[j];
+        j++;
+      }
+      out += String.fromCharCode(parseInt(digits, 10));
+      i = j;
+    } else if (d === 'x') {
+      const h = content.slice(i + 2, i + 4);
+      if (/^[0-9a-fA-F]{2}$/.test(h)) {
+        out += String.fromCharCode(parseInt(h, 16));
+        i += 4;
+      } else {
+        out += '\\x';
+        i += 2;
+      }
+    } else if (d === 'z') {
+      i += 2;
+      while (i < n && /\s/.test(content[i])) i++;
+    } else {
+      const map = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\x08', f: '\x0C', v: '\x0B', '"': '"', "'": "'", '\\': '\\' };
+      if (map[d] !== undefined) out += map[d];
+      else out += '\\' + d;
+      i += 2;
+    }
+  }
+  return out;
+}
+
+// Encode le contenu d'une string quotee:
+// - sequences d'echappement existantes PRESERVEES telles quelles (deja valides cote Lua)
+// - ASCII escapable (0-127) -> \xNN (hex Luau)
+// - non-ASCII (accents, emojis, charCode >= 128) -> LITERAL (UTF-8 passe tel quel)
 function encodeLuaStringContent(content) {
   let out = '';
   let i = 0;
-  while (i < content.length) {
-    if (content[i] === '\\') {
-      // sequence d'echappement: conserver telle quelle (\n, \t, \", \\, \ddd, \xNN, \z...)
+  const n = content.length;
+  while (i < n) {
+    const c = content[i];
+    if (c === '\\') {
+      // sequence d'echappement existante: conserver telle quelle
+      // (\ddd jusqu'a 3 chiffres, \xNN, \z, ou escape 1 char)
       let seq = '\\';
       i++;
-      if (i < content.length) {
-        if (/[0-9]/.test(content[i])) {
-          let d = 0;
-          while (d < 3 && i < content.length && /[0-9]/.test(content[i])) {
+      if (i < n) {
+        const d = content[i];
+        if (/[0-9]/.test(d)) {
+          let cnt = 0;
+          while (cnt < 3 && i < n && /[0-9]/.test(content[i])) {
             seq += content[i];
             i++;
-            d++;
+            cnt++;
           }
-        } else if (content[i] === 'x') {
-          seq += content[i];
+        } else if (d === 'x') {
+          seq += 'x';
           i++;
-          let d = 0;
-          while (d < 2 && i < content.length && /[0-9a-fA-F]/.test(content[i])) {
+          let cnt = 0;
+          while (cnt < 2 && i < n && /[0-9a-fA-F]/.test(content[i])) {
             seq += content[i];
             i++;
-            d++;
+            cnt++;
           }
         } else {
           seq += content[i];
@@ -102,8 +158,12 @@ function encodeLuaStringContent(content) {
         }
       }
       out += seq;
+    } else if (content.charCodeAt(i) < 128) {
+      out += '\\x' + content.charCodeAt(i).toString(16).padStart(2, '0');
+      i++;
     } else {
-      out += '\\' + content.charCodeAt(i).toString(16).padStart(2, '0');
+      // non-ASCII (UTF-8 multi-bytes): passe litteral
+      out += c;
       i++;
     }
   }
@@ -111,7 +171,6 @@ function encodeLuaStringContent(content) {
 }
 
 // Squelette code: source sans strings (remplacees par placeholder) ni commentaires.
-// L'obfuscateur ne touchant QUE strings/commentaires, squelette(build) === squelette(original).
 function codeSkeleton(source) {
   const segs = scan(source);
   let out = '';
@@ -125,53 +184,65 @@ function codeSkeleton(source) {
   return out.replace(/\s+/g, ' ').trim();
 }
 
-// Obfuscation: strings encodees + commentaires supprimes. Le CODE reste identique.
+// PREUVE ROUND-TRIP d'une string encodee:
+// decodeLuau(encode(content)) === decodeLuau(content) => l'encoding est PROUVE identique
+function roundTripOk(content, encoded) {
+  return decodeLuau(encoded) === decodeLuau(content);
+}
+
+// Obfuscation: strings encodees (si round-trip prouve) + commentaires supprimes.
 function obfuscate(source) {
   const segs = scan(source);
   let out = '';
   let pos = 0;
   let encoded = 0;
+  let skipped = 0;
   for (const s of segs) {
     out += source.slice(pos, s.start);
     if (s.type === 'comment') {
-      // supprime (remplace par rien)
+      // supprime
     } else if (s.type === 'string') {
       const raw = source.slice(s.start, s.end);
       const quote = raw[0];
       if (quote === '"' || quote === "'") {
         const content = raw.slice(1, raw.length - (raw.endsWith(quote) ? 1 : 0));
-        // Skip: strings techniques du prelude et tres courtes (pas de gain)
         if (content.includes('[compat]') || content.length <= 3) {
-          out += raw;
+          out += raw; // strings techniques du prelude / trop courtes
         } else {
-          out += quote + encodeLuaStringContent(content) + (raw.endsWith(quote) ? quote : '');
-          encoded++;
+          const enc = encodeLuaStringContent(content);
+          if (roundTripOk(content, enc)) {
+            out += quote + enc + (raw.endsWith(quote) ? quote : '');
+            encoded++;
+          } else {
+            // PREUVE ECHOUEE: on garde la string litterale (fiabilite absolue)
+            out += raw;
+            skipped++;
+          }
         }
       } else {
-        // long string [[...]]: conservee telle quelle (encodage multi-ligne impossible)
-        out += raw;
+        out += raw; // long string [[...]]: conservee
       }
     }
     pos = s.end;
   }
   out += source.slice(pos);
+  obfuscate.lastStats = { encoded, skipped };
   return out;
 }
 
-// Validation structurelle: le squelette du build doit etre IDENTIQUE a l'original
+// Validation structurelle: squelette du build === squelette de l'original
 function validateStructure(original, build) {
   const a = codeSkeleton(original);
   const b = codeSkeleton(build);
   if (a !== b) {
-    // trouve la premiere divergence pour le message
     let i = 0;
     while (i < Math.min(a.length, b.length) && a[i] === b[i]) i++;
     return {
       ok: false,
-      message: `structure divergente a l'offset ${i}: "${a.slice(Math.max(0, i - 30), i + 30)}" vs "${b.slice(Math.max(0, i - 30), i + 30)}"`,
+      message: `structure divergente a l'offset ${i}`,
     };
   }
   return { ok: true };
 }
 
-module.exports = { obfuscate, scan, codeSkeleton, validateStructure, encodeLuaStringContent };
+module.exports = { obfuscate, scan, codeSkeleton, validateStructure, encodeLuaStringContent, decodeLuau, roundTripOk };
