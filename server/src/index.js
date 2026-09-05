@@ -53,6 +53,9 @@ app.use(express.static(webDir, { extensions: ['html'] }));
 app.use('/api', apiRoutes);
 app.use('/api/admin', adminRoutes);
 
+// OAuth Discord: redirect configure dans Discord = /admin/auth/callback
+app.use('/admin', adminRoutes);
+
 // /admin -> dashboard
 app.get('/admin/', (req, res) => {
   res.sendFile(path.join(webDir, 'admin.html'));
