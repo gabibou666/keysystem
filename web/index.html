@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Key System</title>
+<style>
+:root { --bg:#121218; --card:#1b1b23; --accent:#5865f2; --green:#2ea053; --red:#e5c1cd; --text:#eef0f4; --muted:#969ba6; }
+* { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',system-ui,sans-serif; }
+body { background:var(--bg); color:var(--text); min-height:100vh; display:flex; flex-direction:column; align-items:center; }
+nav { width:100%; display:flex; justify-content:space-between; align-items:center; padding:18px 32px; }
+nav .logo { font-weight:700; font-size:20px; }
+nav a { color:var(--muted); text-decoration:none; margin-left:24px; font-size:15px; }
+nav a:hover { color:var(--text); }
+.hero { text-align:center; padding:60px 20px 30px; max-width:760px; }
+.hero h1 { font-size:42px; margin-bottom:12px; }
+.hero p { color:var(--muted); font-size:18px; }
+.stats { display:flex; gap:16px; justify-content:center; margin:36px 0 8px; }
+.stat { background:var(--card); border-radius:14px; padding:20px 36px; min-width:160px; }
+.stat .num { font-size:30px; font-weight:700; color:var(--accent); }
+.stat .lbl { color:var(--muted); font-size:13px; margin-top:4px; }
+.card { background:var(--card); border-radius:14px; padding:28px; margin:26px 10px; max-width:640px; width:100%; }
+.card h3 { margin-bottom:14px; font-size:18px; }
+#keybox { width:100%; background:#232330; border:1px solid #2e2e3d; border-radius:10px; color:var(--text); padding:14px; font-size:15px; font-family:Consolas,monospace; resize:none; }
+.btn { display:inline-block; background:var(--accent); color:#fff; border:none; border-radius:10px; padding:14px 28px; font-size:16px; font-weight:600; cursor:pointer; margin-top:14px; text-decoration:none; }
+.btn:hover { filter:brightness(1.1); }
+.btn.ghost { background:transparent; border:1px solid #3a3a4d; color:var(--text); }
+.countdown { font-size:34px; font-weight:700; color:var(--green); font-family:Consolas,monospace; }
+#status { margin-top:10px; font-size:14px; color:var(--muted); min-height:20px; }
+.loadercode { background:#0d0d12; border-radius:10px; padding:16px; font-family:Consolas,monospace; font-size:13px; color:#9ecbff; word-break:break-all; user-select:all; }
+footer { margin-top:auto; padding:24px; color:var(--muted); font-size:13px; }
+.hidden { display:none; }
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🔑 KeySystem</div>
+  <div>
+    <a href="/getkey">Obtenir une clé</a>
+    <a href="/changelog">Changelog</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <h1>Bienvenue 👋</h1>
+  <p>Obtiens ta clé, colle-la dans le loader, profite du script.</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="num" id="execCount">…</div><div class="lbl">exécutions</div></div>
+  <div class="stat"><div class="num" id="userCount">…</div><div class="lbl">utilisateurs</div></div>
+</div>
+
+<div class="card" id="keyCard">
+  <h3>Ta clé</h3>
+  <textarea id="keybox" rows="2" readonly placeholder="Aucune clé dans ce navigateur — clique sur Obtenir une clé."></textarea>
+  <div id="countdownWrap" class="hidden"><p style="margin-top:14px;color:var(--muted)">Temps restant</p><div class="countdown" id="countdown">--:--:--</div></div>
+  <div id="status"></div>
+  <button class="btn" onclick="copyKey()">Copier</button>
+  <a class="btn ghost" href="/getkey" id="renewBtn" style="display:none">Renouveler (regarde une pub)</a>
+</div>
+
+<div class="card">
+  <h3>Comment utiliser</h3>
+  <p style="color:var(--muted);font-size:14px;line-height:1.7">
+    1. Exécute ce loader dans ton executor :<br>
+    2. Colle ta clé dans la fenêtre qui s'ouvre.<br>
+    3. Clique sur <b>Vérifier</b> — le script se charge.
+  </p>
+  <div class="loadercode" id="loaderCode" style="margin-top:14px">-- charge ci-dessous --</div>
+  <button class="btn" onclick="copyLoader()">Copier le loader</button>
+</div>
+
+<footer>En utilisant ce site, tu acceptes de passer par notre sponsor LootLabs.</footer>
+
+<script>
+const KEY_STORAGE = 'keysystem_key';
+
+function getSiteUrl() {
+  return location.origin;
+}
+
+async function loadStats() {
+  try {
+    const r = await fetch('/api/stats/public');
+    const d = await r.json();
+    document.getElementById('execCount').textContent = (d.executions || 0).toLocaleString('fr-FR');
+    document.getElementById('userCount').textContent = (d.users || 0).toLocaleString('fr-FR');
+  } catch {}
+}
+
+async function loadKeyInfo() {
+  const key = localStorage.getItem(KEY_STORAGE);
+  const renewBtn = document.getElementById('renewBtn');
+  if (!key) { renewBtn.style.display = 'none'; return; }
+  document.getElementById('keybox').value = key;
+  try {
+    const r = await fetch('/api/key/info?key=' + encodeURIComponent(key));
+    const d = await r.json();
+    const status = document.getElementById('status');
+    const wrap = document.getElementById('countdownWrap');
+    if (!d.success) {
+      status.textContent = 'Clé inconnue ou révoquée — obtiens-en une nouvelle.';
+      status.style.color = 'var(--red)';
+      renewBtn.style.display = 'inline-block';
+      renewBtn.textContent = 'Obtenir une nouvelle clé';
+      return;
+    }
+    if (d.expired) {
+      status.textContent = 'Clé expirée — regarde une pub pour la réutiliser.';
+      status.style.color = 'var(--red)';
+      renewBtn.style.display = 'inline-block';
+      return;
+    }
+    wrap.classList.remove('hidden');
+    renewBtn.style.display = 'none';
+    const target = new Date(d.expiresAt).getTime();
+    setInterval(() => tickCountdown(target), 1000);
+    tickCountdown(target);
+  } catch {
+    document.getElementById('status').textContent = 'Impossible de vérifier la clé pour le moment.';
+  }
+}
+
+function tickCountdown(target) {
+  const diff = target - Date.now();
+  if (diff <= 0) {
+    document.getElementById('countdown').textContent = 'expirée';
+    document.getElementById('renewBtn').style.display = 'inline-block';
+    return;
+  }
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  document.getElementById('countdown').textContent =
+    String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+}
+
+function copyKey() {
+  const v = document.getElementById('keybox').value;
+  if (!v) return;
+  navigator.clipboard.writeText(v);
+}
+
+function copyLoader() {
+  navigator.clipboard.writeText(document.getElementById('loaderCode').textContent);
+}
+
+function initLoaderCode() {
+  document.getElementById('loaderCode').textContent =
+    `loadstring(game:HttpGet("${getSiteUrl()}/api/v1/loader"))()`;
+}
+
+loadStats();
+loadKeyInfo();
+initLoaderCode();
+setInterval(loadStats, 30000);
+</script>
+</body>
+</html>

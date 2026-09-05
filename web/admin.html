@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin</title>
+<style>
+:root { --bg:#121218; --card:#1b1b23; --accent:#5865f2; --green:#2ea053; --red:#f16464; --text:#eef0f4; --muted:#969ba6; }
+* { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',system-ui,sans-serif; }
+body { background:var(--bg); color:var(--text); min-height:100vh; }
+nav { display:flex; align-items:center; gap:22px; padding:16px 30px; border-bottom:1px solid #232330; }
+nav .logo { font-weight:700; font-size:19px; margin-right:auto; }
+nav button, nav .tab { background:none; border:none; color:var(--muted); font-size:15px; cursor:pointer; padding:6px 10px; border-radius:8px; }
+nav .tab.active { color:var(--text); background:#232330; }
+nav button:hover { color:var(--text); }
+main { max-width:1080px; margin:26px auto; padding:0 18px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-bottom:26px; }
+.stat { background:var(--card); border-radius:14px; padding:20px; }
+.stat .num { font-size:28px; font-weight:700; color:var(--accent); }
+.stat .lbl { color:var(--muted); font-size:13px; margin-top:4px; }
+.panel { background:var(--card); border-radius:14px; padding:24px; margin-bottom:22px; }
+.panel h3 { margin-bottom:16px; }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+th, td { text-align:left; padding:9px 10px; border-bottom:1px solid #232330; color:var(--muted); }
+th { color:var(--muted); font-weight:600; }
+td.mono { font-family:Consolas,monospace; font-size:12.5px; }
+input, textarea, select { background:#232330; border:1px solid #2e2e3d; border-radius:8px; color:var(--text); padding:10px 12px; font-size:14px; }
+textarea.code { width:100%; height:340px; font-family:Consolas,monospace; font-size:13px; white-space:pre; }
+.btn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:10px 20px; font-size:14px; font-weight:600; cursor:pointer; margin-right:8px; margin-top:10px; }
+.btn:hover { filter:brightness(1.1); }
+.btn.small { padding:5px 12px; font-size:12.5px; margin:0; }
+.btn.red { background:var(--red); }
+.btn.green { background:var(--green); }
+.btn.ghost { background:transparent; border:1px solid #3a3a4d; color:var(--text); }
+.msg { margin-top:10px; font-size:14px; min-height:20px; }
+.patch { background:#232330; border-radius:10px; padding:16px; margin-bottom:12px; }
+.patch pre { background:#0d0d12; padding:10px; border-radius:8px; font-size:12px; overflow:auto; margin:8px 0; }
+.bar { height:10px; background:#232330; border-radius:6px; overflow:hidden; margin-top:6px; }
+.bar > div { height:100%; background:var(--accent); }
+.login { text-align:center; margin-top:120px; }
+.hidden { display:none; }
+select { margin-right:8px; }
+.split { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+@media (max-width:800px){ .split { grid-template-columns:1fr; } }
+.diff del { color:#f16464; background:rgba(241,100,100,.12); text-decoration:none; }
+.diff ins { color:#2ea053; background:rgba(46,160,83,.12); text-decoration:none; }
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">🔑 Admin</div>
+  <button class="tab active" data-tab="stats" onclick="showTab('stats')">Stats</button>
+  <button class="tab" data-tab="keys" onclick="showTab('keys')">Clés</button>
+  <button class="tab" data-tab="bans" onclick="showTab('bans')">Bans</button>
+  <button class="tab" data-tab="script" onclick="showTab('script')">Script</button>
+  <button class="tab" data-tab="patches" onclick="showTab('patches')">Patchs IA</button>
+  <button onclick="logout()" id="logoutBtn" class="hidden">Déconnexion</button>
+</nav>
+<main id="main" class="hidden">
+
+<!-- STATS -->
+<section id="tab-stats">
+  <div class="grid">
+    <div class="stat"><div class="num" id="s-exec">–</div><div class="lbl">exécutions</div></div>
+    <div class="stat"><div class="num" id="s-users">–</div><div class="lbl">utilisateurs uniques</div></div>
+    <div class="stat"><div class="num" id="s-errs">–</div><div class="lbl">erreurs (7j)</div></div>
+  </div>
+  <div class="panel">
+    <h3>Exécutions par jour (30j)</h3>
+    <div id="perday"></div>
+  </div>
+  <div class="panel">
+    <h3>Répartition par executor</h3>
+    <div id="byexec"></div>
+  </div>
+</section>
+
+<!-- CLES -->
+<section id="tab-keys" class="hidden">
+  <div class="panel">
+    <h3>Clés (50 dernières)</h3>
+    <table id="keysTable"><thead><tr><th>Clé</th><th>UserId</th><th>Expire</th><th>Exécutions</th><th>Statut</th><th></th></tr></thead><tbody></tbody></table>
+  </div>
+</section>
+
+<!-- BANS -->
+<section id="tab-bans" class="hidden">
+  <div class="panel">
+    <h3>Bannir un UserId Roblox</h3>
+    <input id="banUserId" placeholder="UserId Roblox (ex: 1234567890)" style="width:280px">
+    <input id="banReason" placeholder="Raison (optionnel)" style="width:280px">
+    <button class="btn" onclick="banUser()">Bannir</button>
+  </div>
+  <div class="panel">
+    <h3>Bans actifs</h3>
+    <table id="bansTable"><thead><tr><th>UserId</th><th>Raison</th><th>Date</th><th></th></tr></thead><tbody></tbody></table>
+  </div>
+</section>
+
+<!-- SCRIPT -->
+<section id="tab-script" class="hidden">
+  <div class="panel">
+    <h3>Versions</h3>
+    <table id="versionsTable"><thead><tr><th>Version</th><th>Note</th><th>Date</th><th>Builds</th><th>Publiée</th><th>Actions</th></tr></thead><tbody></tbody></table>
+  </div>
+  <div class="panel">
+    <h3>Éditer / créer une version</h3>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:10px">Sauvegarder = brouillon. Rien ne part en prod tant que tu ne cliques pas Publier.</p>
+    <textarea id="scriptSource" class="code" placeholder="Colle ton script Luau ici..."></textarea>
+    <input id="scriptNote" placeholder="Note de changelog (ex: fix aimbot + nouveau tab)" style="width:100%;margin-top:10px">
+    <button class="btn" onclick="saveScript()">💾 Sauvegarder (brouillon) + pipeline auto</button>
+    <div class="msg" id="scriptMsg"></div>
+  </div>
+</section>
+
+<!-- PATCHS IA -->
+<section id="tab-patches" class="hidden">
+  <div class="panel">
+    <h3>Patchs IA en attente de review</h3>
+    <p style="color:var(--muted);font-size:13px">Chaque patch est minimal (remplacement unique). Approuve ou rejette individuellement. La publication est bloquée tant qu'un patch est en attente.</p>
+    <div id="patchesList"><p style="color:var(--muted)">Aucun patch en attente 🎉</p></div>
+  </div>
+</section>
+
+</main>
+<div class="login" id="login">
+  <h1 style="margin-bottom:12px">Dashboard Admin</h1>
+  <p style="color:var(--muted);margin-bottom:26px">Connexion via Discord (allowlist).</p>
+  <a class="btn" href="/api/admin/auth/login" style="text-decoration:none">Se connecter avec Discord</a>
+</div>
+
+<script>
+const API = '/api/admin';
+
+async function api(path, opts = {}) {
+  const r = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+  });
+  if (r.status === 401) { showLogin(); throw new Error('unauthorized'); }
+  return r.json();
+}
+
+function showLogin() {
+  document.getElementById('login').classList.remove('hidden');
+  document.getElementById('main').classList.add('hidden');
+  document.getElementById('logoutBtn').classList.add('hidden');
+}
+function showMain() {
+  document.getElementById('login').classList.add('hidden');
+  document.getElementById('main').classList.remove('hidden');
+  document.getElementById('logoutBtn').classList.remove('hidden');
+}
+
+async function logout() {
+  await fetch(API + '/auth/logout', { method: 'POST' });
+  showLogin();
+}
+
+function showTab(name) {
+  document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+  document.getElementById('tab-' + name).classList.remove('hidden');
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  if (name === 'stats') loadStats();
+  if (name === 'keys') loadKeys();
+  if (name === 'bans') loadBans();
+  if (name === 'script') loadVersions();
+  if (name === 'patches') loadPatches();
+}
+
+function esc(s) { return String(s ?? '').replace(/</g, '&lt;'); }
+
+// ---- STATS ----
+async function loadStats() {
+  try {
+    const d = await api('/stats');
+    document.getElementById('s-exec').textContent = d.executions.toLocaleString('fr-FR');
+    document.getElementById('s-users').textContent = d.uniqueUsers.toLocaleString('fr-FR');
+    document.getElementById('s-errs').textContent = d.errors7d;
+    const max = Math.max(1, ...d.perDay.map(x => x.c));
+    document.getElementById('perday').innerHTML = d.perDay.map(x =>
+      `<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="width:86px;color:var(--muted);font-size:12px">${x.d}</span><div class="bar" style="flex:1"><div style="width:${(x.c/max*100).toFixed(1)}%"></div></div><span style="width:34px;text-align:right;font-size:13px">${x.c}</span></div>`
+    ).join('') || '<p style="color:var(--muted)">Pas encore de données.</p>';
+    document.getElementById('byexec').innerHTML = d.byExecutor.map(x =>
+      `<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="width:130px;color:var(--muted);font-size:13px">${esc(x.executor || 'inconnu')}</span><div class="bar" style="flex:1"><div style="width:${(x.c / (d.byExecutor[0].c) * 100).toFixed(1)}%"></div></div><span style="width:44px;text-align:right;font-size:13px">${x.c}</span></div>`
+    ).join('') || '<p style="color:var(--muted)">Pas encore de données.</p>';
+  } catch {}
+}
+
+// ---- CLES ----
+async function loadKeys() {
+  try {
+    const d = await api('/keys');
+    document.querySelector('#keysTable tbody').innerHTML = d.keys.map(k => {
+      const expired = new Date(k.expires_at) < new Date();
+      const st = k.revoked ? '<span style="color:var(--red)">révoquée</span>'
+        : expired ? '<span style="color:var(--muted)">expirée</span>'
+        : '<span style="color:var(--green)">valide</span>';
+      return `<tr>
+        <td class="mono">${k.kid.slice(0,10)}…</td>
+        <td>${k.bound_user_id ?? '–'}</td>
+        <td class="mono">${new Date(k.expires_at).toLocaleString('fr-FR')}</td>
+        <td>${k.execs}</td>
+        <td>${st}</td>
+        <td>${k.revoked
+          ? `<button class="btn small ghost" onclick="unrevokeKey(${k.id})">Réactiver</button>`
+          : `<button class="btn small red" onclick="revokeKey(${k.id})">Révoquer</button>`}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="6" style="color:var(--muted)">Aucune clé.</td></tr>';
+  } catch {}
+}
+async function revokeKey(id) { await api(`/keys/${id}/revoke`, { method: 'POST' }); loadKeys(); }
+async function unrevokeKey(id) { await api(`/keys/${id}/unrevoke`, { method: 'POST' }); loadKeys(); }
+
+// ---- BANS ----
+async function loadBans() {
+  try {
+    const d = await api('/bans');
+    document.querySelector('#bansTable tbody').innerHTML = d.bans.map(b =>
+      `<tr><td class="mono">${b.user_id}</td><td>${esc(b.reason) || '–'}</td><td>${new Date(b.created_at).toLocaleString('fr-FR')}</td>
+       <td><button class="btn small green" onclick="unban(${b.user_id})">Débannir</button></td></tr>`
+    ).join('') || '<tr><td colspan="4" style="color:var(--muted)">Aucun ban.</td></tr>';
+  } catch {}
+}
+async function banUser() {
+  const userId = parseInt(document.getElementById('banUserId').value);
+  if (!Number.isFinite(userId)) return alert('UserId invalide');
+  await api('/bans', { method: 'POST', body: JSON.stringify({ userId, reason: document.getElementById('banReason').value }) });
+  document.getElementById('banUserId').value = '';
+  loadBans();
+}
+async function unban(userId) { await api(`/bans/${userId}`, { method: 'DELETE' }); loadBans(); }
+
+// ---- SCRIPT ----
+async function loadVersions() {
+  try {
+    const d = await api('/script/versions');
+    document.querySelector('#versionsTable tbody').innerHTML = d.versions.map(v =>
+      `<tr>
+        <td><b>v${v.version}</b></td>
+        <td>${esc(v.note)}</td>
+        <td>${new Date(v.created_at).toLocaleString('fr-FR')}</td>
+        <td>${v.builds}</td>
+        <td>${v.published ? '<span style="color:var(--green)">oui</span>' : '<span style="color:var(--muted)">non</span>'}</td>
+        <td>
+          <button class="btn small ghost" onclick="loadOriginal(${v.version})">Ouvrir dans l'éditeur</button>
+          <button class="btn small green" onclick="publishVersion(${v.version})">Publier</button>
+        </td>
+      </tr>`
+    ).join('') || '<tr><td colspan="6" style="color:var(--muted)">Aucune version.</td></tr>';
+  } catch {}
+}
+async function loadOriginal(version) {
+  const d = await api(`/script/original/${version}`);
+  if (d.success) {
+    document.getElementById('scriptSource').value = d.source;
+    document.getElementById('scriptMsg').textContent = `Version v${version} chargée dans l'éditeur — modifie et sauvegarde pour créer v${version + 1}.`;
+  } else {
+    document.getElementById('scriptMsg').textContent = d.error;
+  }
+}
+async function saveScript() {
+  const source = document.getElementById('scriptSource').value;
+  const note = document.getElementById('scriptNote').value;
+  const msg = document.getElementById('scriptMsg');
+  msg.textContent = '⏳ Pipeline en cours (analyse, shims, IA, obfuscation)...';
+  try {
+    const d = await api('/script/save', { method: 'POST', body: JSON.stringify({ source, note }) });
+    if (d.success) {
+      msg.innerHTML = `✅ Brouillon v${d.version} créé — ${d.buildType === 'ai' ? d.patches + ' patch(s) IA à review' : 'shims seuls, auto-approuvé'}. Rien en prod tant que tu ne publies pas.`;
+      document.getElementById('scriptNote').value = '';
+      loadVersions();
+      if (d.compatReport && d.compatReport.issues.length) {
+        msg.innerHTML += `<br><span style="color:var(--muted)">Compat: ${d.compatReport.issues.length} API(s) détectée(s) — gérées par le prelude.</span>`;
+      }
+    } else {
+      msg.textContent = '❌ ' + d.error;
+    }
+  } catch (e) {
+    msg.textContent = '❌ Erreur réseau';
+  }
+}
+async function publishVersion(version) {
+  const d = await api('/script/publish', { method: 'POST', body: JSON.stringify({ version }) });
+  alert(d.success ? `v${version} publiée — tous les utilisateurs auront la nouvelle version à leur prochaine exécution.` : d.error);
+  loadVersions();
+}
+
+// ---- PATCHS ----
+async function loadPatches() {
+  try {
+    const d = await api('/patches/pending');
+    const el = document.getElementById('patchesList');
+    if (!d.patches || !d.patches.length) {
+      el.innerHTML = '<p style="color:var(--muted)">Aucun patch en attente 🎉</p>';
+      return;
+    }
+    el.innerHTML = d.patches.map(p =>
+      `<div class="patch">
+        <b>v${p.version}</b> — <span style="color:var(--muted)">${esc(p.reason)}</span>
+        <pre>FIND:\n${esc(p.find)}\n\nREPLACE:\n${esc(p.replace)}</pre>
+        <button class="btn small green" onclick="approvePatch(${p.id})">Approuver</button>
+        <button class="btn small red" onclick="rejectPatch(${p.id})">Rejeter</button>
+      </div>`
+    ).join('');
+  } catch {}
+}
+async function approvePatch(id) { await api(`/patches/${id}/approve`, { method: 'POST' }); loadPatches(); }
+async function rejectPatch(id) { await api(`/patches/${id}/reject`, { method: 'POST' }); loadPatches(); }
+
+// ---- INIT ----
+(async function init() {
+  try {
+    const me = await fetch(API + '/me').then(r => r.json());
+    if (me.loggedIn) { showMain(); showTab('stats'); }
+    else showLogin();
+  } catch { showLogin(); }
+})();
+</script>
+</body>
+</html>

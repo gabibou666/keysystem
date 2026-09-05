@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Obtenir une clé</title>
+<style>
+:root { --bg:#121218; --card:#1b1b23; --accent:#5865f2; --green:#2ea053; --red:#f16464; --text:#eef0f4; --muted:#969ba6; }
+* { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',system-ui,sans-serif; }
+body { background:var(--bg); color:var(--text); min-height:100vh; display:flex; flex-direction:column; align-items:center; }
+nav { width:100%; display:flex; justify-content:space-between; align-items:center; padding:18px 32px; }
+nav .logo { font-weight:700; font-size:20px; color:var(--text); text-decoration:none; }
+nav a { color:var(--muted); text-decoration:none; margin-left:24px; font-size:15px; }
+nav a:hover { color:var(--text); }
+.card { background:var(--card); border-radius:14px; padding:32px; margin:60px 16px 0; max-width:560px; width:100%; text-align:center; }
+h1 { font-size:28px; margin-bottom:10px; }
+p.sub { color:var(--muted); margin-bottom:26px; }
+.choice { display:flex; gap:14px; justify-content:center; margin-bottom:10px; }
+.dur { flex:1; background:#232330; border:2px solid transparent; border-radius:12px; padding:22px 10px; cursor:pointer; transition:border-color .15s; }
+.dur:hover { border-color:var(--accent); }
+.dur .h { font-size:24px; font-weight:700; }
+.dur .t { color:var(--muted); font-size:13px; margin-top:6px; }
+.btn { display:inline-block; background:var(--accent); color:#fff; border:none; border-radius:10px; padding:14px 32px; font-size:16px; font-weight:600; cursor:pointer; margin-top:14px; text-decoration:none; }
+.btn:hover { filter:brightness(1.1); }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+#result { margin-top:22px; display:none; }
+#newKey { width:100%; background:#232330; border:1px solid #2e2e3d; border-radius:10px; color:var(--accent); padding:14px; font-size:14px; font-family:Consolas,monospace; word-break:break-all; user-select:all; }
+.steps { text-align:left; color:var(--muted); font-size:14px; margin-top:26px; line-height:1.8; }
+.spin { display:inline-block; width:18px; height:18px; border:2px solid var(--muted); border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; vertical-align:-4px; margin-right:8px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">🔑 KeySystem</a>
+  <div>
+    <a href="/">Accueil</a>
+    <a href="/changelog">Changelog</a>
+  </div>
+</nav>
+
+<div class="card" id="choiceCard">
+  <h1>Obtenir une clé</h1>
+  <p class="sub">Choisis ta durée — les checkpoints sont des pubs de notre sponsor.</p>
+  <div class="choice">
+    <div class="dur" onclick="start(12)">
+      <div class="h">12h</div>
+      <div class="t">1 checkpoint</div>
+    </div>
+    <div class="dur" onclick="start(24)">
+      <div class="h">24h</div>
+      <div class="t">2 checkpoints</div>
+    </div>
+  </div>
+  <div id="startStatus" style="color:var(--muted);font-size:14px;min-height:22px;margin-top:12px"></div>
+</div>
+
+<div class="card" id="result">
+  <h1 id="resultTitle">🎉 Clé obtenue !</h1>
+  <p class="sub" id="resultSub">Copie-la dans le loader.</p>
+  <div id="newKey"></div>
+  <button class="btn" onclick="copyKey()">Copier la clé</button>
+  <a class="btn" href="/" style="background:transparent;border:1px solid #3a3a4d;color:var(--text)">Retour à l'accueil</a>
+  <div class="steps" id="waitSteps">
+    <b>Pendant que la page pub s'ouvre :</b><br>
+    1. Complète les tâches affichées jusqu'au bout.<br>
+    2. Cette page vérifie automatiquement ta complétion.<br>
+    3. Ta clé apparaîtra ici dès que c'est validé.
+  </div>
+</div>
+
+<script>
+const KEY_STORAGE = 'keysystem_key';
+let pollTimer = null;
+let chosenDuration = 12;
+
+async function start(duration) {
+  chosenDuration = duration;
+  const status = document.getElementById('startStatus');
+  status.innerHTML = '<span class="spin"></span>Création du lien...';
+
+  let body = { duration };
+  const existing = localStorage.getItem(KEY_STORAGE);
+  if (existing) body.key = existing;
+
+  try {
+    const r = await fetch('/api/key/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (!d.success) {
+      status.textContent = d.error || 'Erreur inconnue';
+      status.style.color = 'var(--red)';
+      return;
+    }
+    // Ouvre le gate dans un nouvel onglet, affiche l'attente + polling
+    window.open(d.lootUrl, '_blank');
+    status.innerHTML = '<span class="spin"></span>Page pub ouverte dans un nouvel onglet — complète les ' +
+      d.tasksRequired + ' checkpoint(s), ta clé apparaîtra ici.';
+    document.getElementById('choiceCard').classList.add('hidden') || true;
+    document.getElementById('choiceCard').style.display = 'none';
+    document.getElementById('result').style.display = 'block';
+    document.getElementById('resultTitle').textContent = '⏳ En attente de complétion...';
+    document.getElementById('resultSub').textContent = 'Complète les tâches dans l\'autre onglet.';
+    document.getElementById('newKey').style.display = 'none';
+    startPolling(d.puid);
+  } catch (e) {
+    status.textContent = 'Erreur réseau — réessaie.';
+    status.style.color = 'var(--red)';
+  }
+}
+
+function startPolling(puid) {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(() => poll(puid), 3000);
+  setTimeout(() => { if (pollTimer) { clearInterval(pollTimer); } }, 20 * 60 * 1000);
+}
+
+async function poll(puid) {
+  try {
+    const r = await fetch('/api/key/status?puid=' + encodeURIComponent(puid));
+    const d = await r.json();
+    if (d.success && d.status === 'completed' && d.key) {
+      clearInterval(pollTimer);
+      localStorage.setItem(KEY_STORAGE, d.key);
+      document.getElementById('resultTitle').textContent = d.renewed ? '✅ Clé renouvelée !' : '🎉 Clé obtenue !';
+      document.getElementById('resultSub').textContent = 'Copie-la dans le loader.';
+      const el = document.getElementById('newKey');
+      el.style.display = 'block';
+      el.textContent = d.key;
+      document.getElementById('waitSteps').style.display = 'none';
+    }
+  } catch {}
+}
+
+function copyKey() {
+  const v = document.getElementById('newKey').textContent;
+  if (v) navigator.clipboard.writeText(v);
+}
+
+// Callback LootLabs atterrit ici: /getkey/callback?puid=... => on repoll ce puid
+if (location.pathname.endsWith('/callback')) {
+  const puid = new URLSearchParams(location.search).get('puid');
+  if (puid) {
+    history.replaceState({}, '', '/getkey');
+    document.getElementById('choiceCard').style.display = 'none';
+    document.getElementById('result').style.display = 'block';
+    document.getElementById('resultTitle').textContent = '⏳ Vérification de la complétion...';
+    document.getElementById('newKey').style.display = 'none';
+    startPolling(puid);
+  }
+}
+</script>
+</body>
+</html>
