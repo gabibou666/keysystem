@@ -22,6 +22,7 @@
     <div class="actions">
       <a class="btn pulse" href="/getkey">🔑 Get my key</a>
       <a class="btn secondary" href="#games">Supported games</a>
+      <a class="btn secondary" href="#activity">Live activity</a>
       <a class="btn secondary" href="#loader">View loader</a>
     </div>
   </section>
@@ -41,6 +42,22 @@
     <div class="skeleton reveal"></div>
     <div class="skeleton reveal d1"></div>
     <div class="skeleton reveal d2"></div>
+  </section>
+
+  <!-- Live activity -->
+  <div class="activity-head" id="activity">
+    <h2 class="reveal">⚡ Live activity</h2>
+    <div class="activity-live reveal d1">
+      <span class="dot"></span>
+      <span><b id="liveNow">0</b> online now</span>
+    </div>
+  </div>
+  <section class="activity-panel reveal d2">
+    <div class="activity-list" id="activityList">
+      <div class="skeleton" style="margin:10px;"></div>
+      <div class="skeleton" style="margin:10px;"></div>
+      <div class="skeleton" style="margin:10px;"></div>
+    </div>
   </section>
 
   <section class="keypanel reveal" id="keyCard">
@@ -187,6 +204,66 @@ async function loadGames() {
   }
 }
 
+// ===== Live activity =====
+function timeAgo(dateStr) {
+  const diff = Math.max(0, Date.now() - new Date(dateStr).getTime());
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + ' min ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  const d = Math.floor(h / 24);
+  return d + 'd ago';
+}
+function isRecent(dateStr) {
+  return Date.now() - new Date(dateStr).getTime() < 15 * 60000;
+}
+function esc(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+let lastActivityKey = '';
+async function loadActivity() {
+  const list = document.getElementById('activityList');
+  try {
+    const r = await fetch('/api/activity/public');
+    const d = await r.json();
+    document.getElementById('liveNow').textContent = d.liveNow || 0;
+
+    if (!d.activity || !d.activity.length) {
+      list.innerHTML = '<div class="act-empty">No one has used the script yet — activity will appear here in real time. 👀</div>';
+      return;
+    }
+
+    // Ne re-render que si le contenu a change (evite le flicker)
+    const key = d.activity.map((a) => a.userId + ':' + a.at).join('|');
+    if (key === lastActivityKey) return;
+    lastActivityKey = key;
+
+    list.innerHTML = d.activity.map((a, i) => {
+      const live = isRecent(a.at);
+      return `
+      <div class="act-row" style="animation-delay: ${Math.min(i * 0.04, 0.4)}s">
+        <div class="a-avatar">${a.avatarUrl ? `<img src="${esc(a.avatarUrl)}" alt="" loading="lazy">` : '👤'}</div>
+        <div class="a-body">
+          <div class="a-name">${esc(a.display)} <span class="at">@${esc(a.username)}</span></div>
+          <div class="a-sub">
+            ${a.game ? `<span class="chip">🎮 ${esc(a.game)}</span>` : ''}
+            <span class="chip">⚡ ${esc(a.executor)}</span>
+            <span class="chip">v${a.version}</span>
+          </div>
+        </div>
+        ${live ? '<span class="a-live-badge">● LIVE</span>' : ''}
+        <span class="a-time">${timeAgo(a.at)}</span>
+      </div>`;
+    }).join('') + (d.totalUsers > d.activity.length
+      ? `<div class="a-more">+${(d.totalUsers - d.activity.length).toLocaleString('en-US')} more users…</div>`
+      : '');
+  } catch {
+    list.innerHTML = '<div class="act-empty">Failed to load activity.</div>';
+  }
+}
+
 async function loadKeyInfo() {
   const key = localStorage.getItem(KEY_STORAGE);
   if (!key) return;
@@ -247,7 +324,9 @@ document.getElementById('loaderCode').textContent =
 loadStats();
 loadKeyInfo();
 loadGames();
+loadActivity();
 setInterval(loadStats, 30000);
+setInterval(loadActivity, 30000);
 </script>
 </body>
 </html>
