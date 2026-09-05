@@ -57,6 +57,11 @@ app.use('/api/admin', adminRoutes);
 // OAuth Discord: redirect configure dans Discord = /admin/auth/callback
 app.use('/admin', adminRoutes);
 
+// Callback LootLabs: la page getkey.html gere le puid cote client
+app.get('/getkey/callback', (req, res) => {
+  res.sendFile(path.join(webDir, 'getkey.html'));
+});
+
 // /admin -> dashboard
 app.get('/admin/', (req, res) => {
   res.sendFile(path.join(webDir, 'admin.html'));

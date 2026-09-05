@@ -105,7 +105,10 @@ select { margin-right:8px; }
   </div>
   <div class="panel">
     <h3>Éditer / créer une version</h3>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:10px">Sauvegarder = brouillon. Rien ne part en prod tant que tu ne cliques pas Publier.</p>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:10px">Sauvegarder = brouillon. Rien ne part en prod tant que tu ne cliques pas Publier. Laisse le PlaceId vide pour un script "tous les jeux".</p>
+    <div style="display:flex;gap:10px;margin-bottom:10px">
+      <input id="scriptPlaceId" placeholder="PlaceId du jeu (ex: 2753915549) — vide = tous les jeux" style="flex:1">
+    </div>
     <textarea id="scriptSource" class="code" placeholder="Colle ton script Luau ici..."></textarea>
     <input id="scriptNote" placeholder="Note de changelog (ex: fix aimbot + nouveau tab)" style="width:100%;margin-top:10px">
     <button class="btn" onclick="saveScript()">💾 Sauvegarder (brouillon) + pipeline auto</button>
@@ -238,7 +241,7 @@ async function loadVersions() {
     document.querySelector('#versionsTable tbody').innerHTML = d.versions.map(v =>
       `<tr>
         <td><b>v${v.version}</b></td>
-        <td>${esc(v.note)}</td>
+        <td>${v.place_id ? '<span class="mono" style="color:var(--accent)">🎮 ' + v.place_id + '</span><br>' : ''}<span style="color:var(--muted);font-size:12px">${esc(v.note)}</span></td>
         <td>${new Date(v.created_at).toLocaleString('fr-FR')}</td>
         <td>${v.builds}</td>
         <td>${v.published ? '<span style="color:var(--green)">oui</span>' : '<span style="color:var(--muted)">non</span>'}</td>
@@ -254,6 +257,9 @@ async function loadOriginal(version) {
   const d = await api(`/script/original/${version}`);
   if (d.success) {
     document.getElementById('scriptSource').value = d.source;
+    const vData = await api('/script/versions');
+    const ver = (vData.versions || []).find(x => x.version === version);
+    document.getElementById('scriptPlaceId').value = ver && ver.place_id ? ver.place_id : '';
     document.getElementById('scriptMsg').textContent = `Version v${version} chargée dans l'éditeur — modifie et sauvegarde pour créer v${version + 1}.`;
   } else {
     document.getElementById('scriptMsg').textContent = d.error;
@@ -262,10 +268,16 @@ async function loadOriginal(version) {
 async function saveScript() {
   const source = document.getElementById('scriptSource').value;
   const note = document.getElementById('scriptNote').value;
+  const placeIdRaw = document.getElementById('scriptPlaceId').value.trim();
+  const placeId = placeIdRaw ? parseInt(placeIdRaw) : null;
   const msg = document.getElementById('scriptMsg');
+  if (placeId !== null && !Number.isFinite(placeId)) {
+    msg.textContent = '❌ PlaceId invalide (nombre attendu)';
+    return;
+  }
   msg.textContent = '⏳ Pipeline en cours (analyse, shims, IA, obfuscation)...';
   try {
-    const d = await api('/script/save', { method: 'POST', body: JSON.stringify({ source, note }) });
+    const d = await api('/script/save', { method: 'POST', body: JSON.stringify({ source, note, placeId }) });
     if (d.success) {
       msg.innerHTML = `✅ Brouillon v${d.version} créé — ${d.buildType === 'ai' ? d.patches + ' patch(s) IA à review' : 'shims seuls, auto-approuvé'}. Rien en prod tant que tu ne publies pas.`;
       document.getElementById('scriptNote').value = '';

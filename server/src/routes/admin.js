@@ -139,11 +139,21 @@ router.delete('/bans/:userId', requireAdmin, async (req, res) => {
 // Liste des versions (sans le contenu chiffre)
 router.get('/script/versions', requireAdmin, async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT v.id, v.version, v.note, v.original_hash, v.created_at, v.published, v.published_at,
+    `SELECT v.id, v.version, v.note, v.place_id, v.original_hash, v.created_at, v.published, v.published_at,
             (SELECT COUNT(*)::int FROM script_builds b WHERE b.version_id = v.id) AS builds
      FROM script_versions v ORDER BY v.version DESC`
   );
   res.json({ success: true, versions: rows });
+});
+
+// Liste des scripts publiés par jeu (pour le loader: quel PlaceId a un script actif)
+router.get('/script/games', requireAdmin, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT place_id, MAX(version) AS version, MAX(published_at) AS published_at
+     FROM script_builds WHERE active = true AND place_id IS NOT NULL
+     GROUP BY place_id ORDER BY place_id`
+  );
+  res.json({ success: true, games: rows });
 });
 
 // Sauvegarder une nouvelle version (brouillon) + pipeline complet
@@ -151,6 +161,7 @@ router.post('/script/save', requireAdmin, async (req, res) => {
   try {
     const source = req.body?.source;
     const note = (req.body?.note || '').slice(0, 500);
+    const placeId = parseInt(req.body?.placeId, 10) || null;
     if (typeof source !== 'string' || source.trim().length < 5) {
       return res.status(400).json({ success: false, error: 'Source vide ou trop courte' });
     }
@@ -158,7 +169,7 @@ router.post('/script/save', requireAdmin, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Script trop volumineux (500 Ko max)' });
     }
 
-    // Numero de version
+    // Numero de version (global) + numero de version par jeu
     const last = await pool.query('SELECT COALESCE(MAX(version), 0) v FROM script_versions');
     const version = last.rows[0].v + 1;
 
@@ -167,9 +178,9 @@ router.post('/script/save', requireAdmin, async (req, res) => {
     const enc = encryptAES(source);
 
     const ins = await pool.query(
-      `INSERT INTO script_versions (version, note, original_enc, original_iv, original_hash)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [version, note, enc.enc, enc.iv, hash]
+      `INSERT INTO script_versions (version, note, place_id, original_enc, original_iv, original_hash)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [version, note, placeId, enc.enc, enc.iv, hash]
     );
     const versionId = ins.rows[0].id;
 
@@ -187,8 +198,8 @@ router.post('/script/save', requireAdmin, async (req, res) => {
 
     // Build shims (+ patches valides auto)
     const buildIns = await pool.query(
-      `INSERT INTO script_builds (version_id, version, content, build_type) VALUES ($1, $2, $3, $4) RETURNING id`,
-      [versionId, version, pipelineResult.build, pipelineResult.patches.length ? 'ai' : 'shims']
+      `INSERT INTO script_builds (version_id, version, place_id, content, build_type) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [versionId, version, placeId, pipelineResult.build, pipelineResult.patches.length ? 'ai' : 'shims']
     );
     const buildId = buildIns.rows[0].id;
 
@@ -240,8 +251,9 @@ router.post('/script/publish', requireAdmin, async (req, res) => {
   const version = parseInt(req.body?.version, 10);
   if (!Number.isFinite(version)) return res.status(400).json({ success: false, error: 'version requise' });
 
-  const ver = await pool.query('SELECT id FROM script_versions WHERE version = $1', [version]);
+  const ver = await pool.query('SELECT id, place_id FROM script_versions WHERE version = $1', [version]);
   if (!ver.rows[0]) return res.status(404).json({ success: false, error: 'Version inconnue' });
+  const placeId = ver.rows[0].place_id;
 
   // Patches IA rejects appliques? Verifie qu'aucun patch pending pour ce build
   const pending = await pool.query(
@@ -257,7 +269,12 @@ router.post('/script/publish', requireAdmin, async (req, res) => {
     });
   }
 
-  await pool.query('UPDATE script_builds SET active = false WHERE active = true');
+  // Desactive uniquement les builds du MEME jeu (ou les builds "tous jeux" si place_id null)
+  if (placeId) {
+    await pool.query('UPDATE script_builds SET active = false WHERE active = true AND place_id = $1', [placeId]);
+  } else {
+    await pool.query('UPDATE script_builds SET active = false WHERE active = true AND place_id IS NULL');
+  }
   await pool.query('UPDATE script_builds SET active = true WHERE version = $1', [version]);
   await pool.query(
     'UPDATE script_versions SET published = true, published_at = now() WHERE version = $1',

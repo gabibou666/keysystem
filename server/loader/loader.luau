@@ -225,6 +225,7 @@ local function doCheck()
         key = key,
         userId = lp.UserId,
         executor = execName,
+        placeId = game.PlaceId,
     })
 
     checking = false

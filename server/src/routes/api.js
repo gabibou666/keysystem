@@ -211,10 +211,11 @@ router.get('/key/info', infoLimiter, async (req, res) => {
 });
 
 // ---------- POST /api/v1/check ----------
-// Loader: { key, userId, executor } -> { script } si OK
+// Loader: { key, userId, executor, placeId } -> { script } si OK
 router.post('/v1/check', checkLimiter, async (req, res) => {
   try {
     const { key, userId, executor } = req.body || {};
+    const placeId = parseInt(req.body?.placeId, 10) || null;
     const parsed = crypto.verifyKeyFormat(key || '');
     if (!parsed) {
       return res.json({ success: false, reason: 'invalid_key' });
@@ -231,8 +232,8 @@ router.post('/v1/check', checkLimiter, async (req, res) => {
     const ban = await pool.query('SELECT id FROM bans WHERE user_id = $1', [uid]);
     if (ban.rows[0]) return res.json({ success: false, reason: 'banned' });
 
-    // Liaison au premier UserId
-    if (dbKey.bound_user_id && dbKey.bound_user_id !== uid) {
+    // Liaison au premier UserId (NB: pg renvoie BIGINT en string -> comparaison en string)
+    if (dbKey.bound_user_id !== null && String(dbKey.bound_user_id) !== String(uid)) {
       return res.json({ success: false, reason: 'bound_to_other_user' });
     }
     if (!dbKey.bound_user_id) {
@@ -243,14 +244,31 @@ router.post('/v1/check', checkLimiter, async (req, res) => {
     const expired = new Date(dbKey.expires_at).getTime() < Date.now();
     if (expired) return res.json({ success: false, reason: 'expired' });
 
-    // Build actif requis
-    const build = await pool.query(
-      'SELECT b.id, b.version, b.content FROM script_builds b WHERE b.active = true ORDER BY b.created_at DESC LIMIT 1'
-    );
-    if (!build.rows[0]) {
+    // Build actif pour CE jeu (placeId), sinon build "tous jeux" (place_id null)
+    let buildQuery;
+    if (placeId) {
+      buildQuery = await pool.query(
+        `SELECT b.id, b.version, b.content FROM script_builds b
+         WHERE b.active = true AND b.place_id = $1
+         ORDER BY b.created_at DESC LIMIT 1`,
+        [placeId]
+      );
+      if (!buildQuery.rows[0]) {
+        buildQuery = await pool.query(
+          `SELECT b.id, b.version, b.content FROM script_builds b
+           WHERE b.active = true AND b.place_id IS NULL
+           ORDER BY b.created_at DESC LIMIT 1`
+        );
+      }
+    } else {
+      buildQuery = await pool.query(
+        'SELECT b.id, b.version, b.content FROM script_builds b WHERE b.active = true ORDER BY b.created_at DESC LIMIT 1'
+      );
+    }
+    if (!buildQuery.rows[0]) {
       return res.json({ success: false, reason: 'no_script' });
     }
-    const activeBuild = build.rows[0];
+    const activeBuild = buildQuery.rows[0];
 
     // Log execution
     await pool.query(
