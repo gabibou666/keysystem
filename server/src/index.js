@@ -20,7 +20,7 @@ app.use(
         scriptSrc: ["'self'", "'unsafe-inline'"],
         scriptSrcAttr: ["'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
-        imgSrc: ["'self'", 'data:'],
+        imgSrc: ["'self'", 'data:', 'https://tr.rbxcdn.com', 'https://t0.rbxcdn.com', 'https://t1.rbxcdn.com', 'https://t2.rbxcdn.com', 'https://t3.rbxcdn.com', 'https://t4.rbxcdn.com', 'https://t5.rbxcdn.com', 'https://t6.rbxcdn.com', 'https://t7.rbxcdn.com'],
         connectSrc: ["'self'", 'https://discord.com'],
       },
     },

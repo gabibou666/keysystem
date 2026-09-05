@@ -20,18 +20,30 @@
     <h1>The gateway to your script</h1>
     <p>One key, one ad, and your script loads — on any executor, in the right game, automatically.</p>
     <div class="actions">
-      <a class="btn" href="/getkey">🔑 Get my key</a>
+      <a class="btn pulse" href="/getkey">🔑 Get my key</a>
+      <a class="btn secondary" href="#games">Supported games</a>
       <a class="btn secondary" href="#loader">View loader</a>
     </div>
   </section>
 
   <section class="stats">
-    <div class="stat"><div class="num" id="execCount">…</div><div class="lbl">executions</div></div>
-    <div class="stat"><div class="num" id="userCount">…</div><div class="lbl">users</div></div>
-    <div class="stat"><div class="num" id="uptime">24/7</div><div class="lbl">uptime</div></div>
+    <div class="stat reveal"><div class="num" id="execCount">…</div><div class="lbl">executions</div></div>
+    <div class="stat reveal d1"><div class="num" id="userCount">…</div><div class="lbl">users</div></div>
+    <div class="stat reveal d2"><div class="num" id="uptime">24/7</div><div class="lbl">uptime</div></div>
   </section>
 
-  <section class="keypanel" id="keyCard">
+  <!-- Supported games -->
+  <div class="games-head" id="games">
+    <h2 class="reveal">🎮 Supported games</h2>
+    <p class="sub reveal d1">Updated automatically every time a script is published for a game.</p>
+  </div>
+  <section class="games-grid" id="gamesGrid">
+    <div class="skeleton reveal"></div>
+    <div class="skeleton reveal d1"></div>
+    <div class="skeleton reveal d2"></div>
+  </section>
+
+  <section class="keypanel reveal" id="keyCard">
     <h2>Your key</h2>
     <p class="sub">Saved in your browser — paste it into the loader.</p>
     <div class="keybox">
@@ -45,22 +57,22 @@
     <div id="status" class="status"></div>
   </section>
 
-  <section class="grid" style="margin-top: 34px;">
-    <div class="card">
+  <section class="grid">
+    <div class="card reveal">
       <h3><span class="icon">🧩</span> All executors</h3>
       <p>Synapse Z, Wave, Xeno, Delta, Codex, Fluxus, Solara, Ronin, MacSploit… The loader automatically adapts to your executor's available functions.</p>
     </div>
-    <div class="card">
+    <div class="card reveal d1">
       <h3><span class="icon">🎮</span> Multi-game</h3>
       <p>The same loader detects the current game and automatically loads the right script published for that PlaceId.</p>
     </div>
-    <div class="card">
+    <div class="card reveal d2">
       <h3><span class="icon">🛡️</span> Anti-sharing</h3>
       <p>Each key binds to the first Roblox account that uses it. Shared key = rejected. Executions and errors tracked live.</p>
     </div>
   </section>
 
-  <section class="keypanel" id="loader">
+  <section class="keypanel reveal" id="loader">
     <h2>Loader</h2>
     <p class="sub">One single line in your executor:</p>
     <div class="codebox" id="loaderCode">-- loads below --</div>
@@ -81,7 +93,31 @@
 const KEY_STORAGE = 'keysystem_key';
 const PUID_STORAGE = 'keysystem_pending_puid';
 
-// Resume an ongoing getkey session (postback arrives while the user is on the homepage)
+// ===== Reveal on scroll =====
+const io = new IntersectionObserver((entries) => {
+  entries.forEach((e) => {
+    if (e.isIntersecting) {
+      e.target.classList.add('in');
+      io.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.12 });
+document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+
+// ===== Animated count-up =====
+function countUp(el, target, duration = 1200) {
+  const start = performance.now();
+  const from = 0;
+  function frame(now) {
+    const p = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(from + (target - from) * eased).toLocaleString('en-US');
+    if (p < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+// ===== Resume pending getkey session =====
 (function resumePending() {
   const puid = localStorage.getItem(PUID_STORAGE);
   if (!puid) return;
@@ -110,9 +146,45 @@ async function loadStats() {
   try {
     const r = await fetch('/api/stats/public');
     const d = await r.json();
-    document.getElementById('execCount').textContent = (d.executions || 0).toLocaleString('en-US');
-    document.getElementById('userCount').textContent = (d.users || 0).toLocaleString('en-US');
+    countUp(document.getElementById('execCount'), d.executions || 0);
+    countUp(document.getElementById('userCount'), d.users || 0);
   } catch {}
+}
+
+// ===== Supported games =====
+function fmtVisits(v) {
+  if (v == null) return '';
+  if (v >= 1e9) return (v / 1e9).toFixed(1) + 'B visits';
+  if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M visits';
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K visits';
+  return v.toLocaleString('en-US') + ' visits';
+}
+
+async function loadGames() {
+  const grid = document.getElementById('gamesGrid');
+  try {
+    const r = await fetch('/api/games/public');
+    const d = await r.json();
+    if (!d.games || !d.games.length) {
+      grid.innerHTML = '<p class="games-empty">No published scripts yet — the games will appear here as soon as one is published.</p>';
+      return;
+    }
+    grid.innerHTML = d.games.map((g, i) => `
+      <div class="game-card" style="animation-delay: ${i * 0.07}s">
+        <div class="g-icon">${g.iconUrl ? `<img src="${g.iconUrl}" alt="" loading="lazy">` : '🎮'}</div>
+        <div class="g-body">
+          <div class="g-name" title="${g.name.replace(/"/g, '&quot;')}">${g.name.replace(/</g, '&lt;')}</div>
+          <div class="g-meta">
+            ${g.playing != null ? `<span><b>●</b> ${g.playing.toLocaleString('en-US')} playing</span>` : ''}
+            ${g.visits ? `<span>${fmtVisits(g.visits)}</span>` : ''}
+            <span class="g-ver">v${g.version}</span>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch {
+    grid.innerHTML = '<p class="games-empty">Failed to load games.</p>';
+  }
 }
 
 async function loadKeyInfo() {
@@ -148,6 +220,7 @@ function tickCountdown(target) {
   const el = document.getElementById('countdown');
   if (diff <= 0) {
     el.textContent = 'expired';
+    el.classList.add('urgent');
     document.getElementById('countdownWrap').classList.remove('hidden');
     return;
   }
@@ -155,6 +228,7 @@ function tickCountdown(target) {
   const m = Math.floor((diff % 3600000) / 60000);
   const s = Math.floor((diff % 60000) / 1000);
   el.textContent = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  if (diff < 3600000) el.classList.add('urgent');
 }
 
 function copyKey() {
@@ -172,6 +246,7 @@ document.getElementById('loaderCode').textContent =
 
 loadStats();
 loadKeyInfo();
+loadGames();
 setInterval(loadStats, 30000);
 </script>
 </body>

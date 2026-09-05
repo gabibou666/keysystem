@@ -5,6 +5,7 @@ const lootlabs = require('../services/lootlabs');
 const pool = require('../db');
 const path = require('path');
 const { requireDiscordUser } = require('./discord');
+const { getGameInfo } = require('../services/roblox');
 
 const router = express.Router();
 
@@ -360,6 +361,36 @@ router.get('/stats/public', async (req, res) => {
     });
   } catch {
     res.json({ success: true, executions: 0, users: 0 });
+  }
+});
+
+// ---------- GET /api/games/public ----------
+// Jeux supportes (builds actifs) avec nom + icone + stats recuperees des APIs Roblox
+router.get('/games/public', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT ON (place_id) place_id, version
+       FROM script_builds WHERE active = true AND place_id IS NOT NULL
+       ORDER BY place_id, created_at DESC`
+    );
+    const games = await Promise.all(
+      rows.map((r) =>
+        getGameInfo(r.place_id).then((info) => ({
+          placeId: parseInt(r.place_id, 10),
+          version: parseInt(r.version, 10),
+          name: info ? info.name : `Game ${r.place_id}`,
+          iconUrl: info ? info.iconUrl : null,
+          playing: info ? info.playing : null,
+          visits: info && info.visits != null ? parseInt(info.visits, 10) : null,
+        }))
+      )
+    );
+    // Trie par joueurs actuels decroissant (nulls a la fin)
+    games.sort((a, b) => (b.playing || 0) - (a.playing || 0));
+    res.json({ success: true, games });
+  } catch (e) {
+    console.error('[games/public]', e);
+    res.json({ success: true, games: [] });
   }
 });
 
