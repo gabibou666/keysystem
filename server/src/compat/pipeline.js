@@ -1,11 +1,11 @@
 const { analyzeScript } = require('./analyzer');
 const { buildPrelude } = require('./prelude');
-const { obfuscate } = require('./obfuscator');
+const { obfuscate, validateStructure } = require('./obfuscator');
 const { requestCompatibilityPatches } = require('../services/ai');
 const { sha256 } = require('../services/crypto');
 
-// Pipeline complet: analyse -> prelude -> patches IA -> validation -> obfuscation
-// Retourne { prelude, patches, build, report } - ne modifie JAMAIS le corps en place.
+// Pipeline complet: analyse -> prelude -> patches IA -> obfuscation -> VALIDATION STRUCTURELLE
+// Le build servi est PROUVE structurellement equivalent a prelude + corps patche.
 
 async function runPipeline(source, { useAI = true } = {}) {
   // 1. Analyse
@@ -45,7 +45,16 @@ async function runPipeline(source, { useAI = true } = {}) {
 
   // 6. Build final: prelude + corps (patche ou non) puis obfuscation
   const fullSource = prelude + patchedBody;
-  const build = obfuscate(fullSource);
+  let build = obfuscate(fullSource);
+
+  // 7. VALIDATION STRUCTURELLE: squelette code du build === squelette de prelude+corps
+  //    Si divergence => l'obfuscateur a casse le code => on sert le prelude + corps NON obfusque
+  //    (fiabilite d'abord: un script chargeable non obfusque > un script casse obfusque)
+  const check = validateStructure(fullSource, build);
+  if (!check.ok) {
+    console.error('[pipeline] obfuscation rejetee (' + check.message + ') - fallback prelude+source');
+    build = prelude + patchedBody;
+  }
 
   return {
     prelude,
@@ -55,6 +64,7 @@ async function runPipeline(source, { useAI = true } = {}) {
     report,
     aiRaw,
     bodyHash: sha256(patchedBody),
+    obfuscationApplied: check.ok,
   };
 }
 
@@ -64,8 +74,14 @@ function rebuildWithPatches(source, patches) {
   for (const patch of patches) {
     patchedBody = patchedBody.replace(patch.find, patch.replace);
   }
-  const build = obfuscate(buildPrelude() + patchedBody);
-  return { build, bodyHash: sha256(patchedBody) };
+  const fullSource = buildPrelude() + patchedBody;
+  let build = obfuscate(fullSource);
+  const check = validateStructure(fullSource, build);
+  if (!check.ok) {
+    console.error('[pipeline/rebuild] obfuscation rejetee - fallback prelude+source');
+    build = fullSource;
+  }
+  return { build, bodyHash: sha256(patchedBody), obfuscationApplied: check.ok };
 }
 
 module.exports = { runPipeline, rebuildWithPatches };
