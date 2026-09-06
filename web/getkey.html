@@ -263,13 +263,20 @@ async function start(duration) {
   }
 }
 
-function showWaiting(title, sub) {
+function showWaiting(title, sub, retryable = false) {
   document.getElementById('choiceCard').classList.add('hidden');
   document.getElementById('result').classList.remove('hidden');
   document.getElementById('resultTitle').textContent = title;
   document.getElementById('resultSub').textContent = sub;
   document.getElementById('newKey').classList.add('hidden');
   document.getElementById('resultActions').classList.add('hidden');
+  document.getElementById('waitSteps').classList.add('hidden');
+  if (retryable) {
+    // Message d'erreur anti-bypass: bouton pour recommencer proprement
+    const actions = document.getElementById('resultActions');
+    actions.innerHTML = '<a class="btn small secondary" href="/getkey">↻ Try again</a>';
+    actions.classList.remove('hidden');
+  }
 }
 
 function startPolling(puid) {
@@ -281,6 +288,8 @@ async function poll(puid) {
   try {
     const r = await fetch('/api/key/status?puid=' + encodeURIComponent(puid));
     const d = await r.json();
+
+    // Succes: cle delivree (statut 'completed' = session delivree une fois, puis 'claimed')
     if (d.success && d.status === 'completed' && d.key) {
       clearInterval(pollTimer);
       pollTimer = null;
@@ -296,7 +305,36 @@ async function poll(puid) {
       // petit carre qui affiche la cle
       showModal(d.key, d.renewed, d.expiresAt);
       loadCurrentKey();
+      return;
     }
+
+    // Statuts anti-bypass: messages clairs, pas de spin infini pour un utilisateur legitime
+    if (d.status === 'rejected' || d.status === 'token_expired' || d.status === 'token_invalid') {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      localStorage.removeItem(PUID_STORAGE);
+      showWaiting('⚠️ Session expired', 'The verification took too long or was rejected — start again below.', true);
+      return;
+    }
+    if (d.status === 'forbidden') {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      localStorage.removeItem(PUID_STORAGE);
+      showWaiting('🔒 Session mismatch', 'This key session doesn\'t belong to this browser — sign in again and retry.', true);
+      return;
+    }
+    if (d.status === 'already_claimed') {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      localStorage.removeItem(PUID_STORAGE);
+      showWaiting('✅ Already claimed', 'This session\'s key was already retrieved — get a new one below.', true);
+      return;
+    }
+    if (d.success && d.status === 'pending') {
+      // en attente normale: rien a afficher de plus (le statut courant reste)
+      return;
+    }
+    // erreur serveur: on continue de poller (transitoire) sans casser l'experience
   } catch {}
 }
 

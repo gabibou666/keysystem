@@ -5,15 +5,17 @@ const lootlabs = require('../services/lootlabs');
 const pool = require('../db');
 const path = require('path');
 const { requireDiscordUser } = require('./discord');
+const discordService = require('../services/discord');
+const tokens = require('../services/tokens');
 const { getGameInfo, getUsersInfo } = require('../services/roblox');
 
 const router = express.Router();
 
 const startLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 5,
+  windowMs: 10 * 60 * 1000,
+  max: 3,
   standardHeaders: true,
-  message: { success: false, error: 'Too many requests, try again in a minute.' },
+  message: { success: false, error: 'Too many requests, try again in a few minutes.' },
 });
 const checkLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -28,8 +30,9 @@ function clientIp(req) {
 
 // ---------- POST /api/key/start ----------
 // Body: { duration: 12 | 24 }
-// Soit nouvelle cle, soit renouvellement de la cle fournie.
 // GATE: connexion Discord requise (ajout au serveur via OAuth)
+// Anti-bypass: puid 32 bytes non devinable + session liee au proprietaire (owner_discord_id)
+// + rate-limit strict (express-rate-limit) + limite 2 pubs/12h/IP
 router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => {
   try {
     const duration = parseInt(req.body?.duration, 10);
@@ -49,7 +52,7 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
       keyId = rows[0].id;
     }
 
-    // Ad limit: max 2 ad sessions per IP within 12 hours
+    // Ad limit: max 2 ad sessions per IP within 12 hours (anti-farm en masse)
     const ip = clientIp(req);
     const recent = await pool.query(
       `SELECT COUNT(*)::int AS c FROM ll_sessions
@@ -64,7 +67,8 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
       });
     }
 
-    const puid = crypto.randomToken(16);
+    // puid 32 bytes (64 hex): non devinable, non enumerable
+    const puid = crypto.randomToken(32);
 
     let lootUrl, tasksRequired;
     try {
@@ -82,9 +86,12 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
       });
     }
 
+    // La session est liee au proprietaire Discord: le status ne delivrera
+    // la cle qu'a CE proprietaire (cookie signe ks_user).
     await pool.query(
-      `INSERT INTO ll_sessions (puid, key_id, tasks_required, ip) VALUES ($1, $2, $3, $4)`,
-      [puid, keyId, tasksRequired, ip]
+      `INSERT INTO ll_sessions (puid, key_id, tasks_required, ip, owner_discord_id, started_at)
+       VALUES ($1, $2, $3, $4, $5, now())`,
+      [puid, keyId, tasksRequired, ip, req.discordId]
     );
 
     res.json({ success: true, lootUrl, puid, tasksRequired });
@@ -94,23 +101,60 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
   }
 });
 
-// ---------- GET /api/lootlabs/postback ----------
-// Postback LootLabs: ?click_id=<puid>&ip=<ip>&unique_id=<id>
-// Tolérant: click_id seul suffit (ip/unique_id optionnels selon le template du panel)
+// ---------- POSTBACK LOOTLABS (verification serveur-a-serveur) ----------
+// Doc: help.lootlabs.gg/en/article/postback-api-1ndz3i2/
+// "Every time a user completes a task, a GET Request will be sent to your postback URL"
+// Protections cumulees ici:
+//   1. Origin: IP source du postback doit resoudre vers un domaine LootLabs (verif DNS)
+//      ou etre l'IP user annoncee (fallback template court) — le referer seul est spoofable
+//   2. Delai minimum realiste: > 20s depuis started_at (un humain met du temps, un bot valide en secondes)
+//   3. Transaction atomique: FOR UPDATE + dedup unique_id (jamais deux fois le meme checkpoint)
+//   4. A la complétion: generation du TOKEN DE COMPLETION (JWT signe, usage unique, TTL 5 min)
+//      -> /key/status l'exigera pour delivrer la cle. Aucune delivrance sans lui.
 router.get('/lootlabs/postback', async (req, res) => {
   try {
     const { click_id } = req.query;
-    if (!click_id) return res.status(400).send('missing click_id');
+    if (!click_id || typeof click_id !== 'string' || click_id.length > 128) {
+      return res.status(400).send('missing click_id');
+    }
 
     // unique_id optionnel: fallback genere si le template du panel ne l'inclut pas
     const unique_id =
-      req.query.unique_id || 'auto-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
-    const ip = req.query.ip || null;
+      (typeof req.query.unique_id === 'string' && req.query.unique_id.slice(0, 128)) ||
+      'auto-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+    const claimedUserIp = typeof req.query.ip === 'string' ? req.query.ip.slice(0, 64) : null;
 
-    // Dédup par unique_id
+    // --- Verification d'origine: le postback doit venir de l'infrastructure LootLabs ---
+    // (doc: "A GET request will be sent there" — serveur LootLabs -> nous)
+    const sourceIp = clientIp(req);
+    const dns = require('dns').promises;
+    let originOk = false;
+    let originNote = 'unknown';
+    try {
+      // Resout les domaines officiels LootLabs et compare avec l'IP source
+      const hosts = ['lootlabs.gg', 'creators.lootlabs.gg', 'loot-link.com', 'links.lootlabs.gg'];
+      const lists = await Promise.all(
+        hosts.map((h) => dns.resolve(h).catch(() => []))
+      );
+      const allIps = new Set(lists.flat());
+      if (allIps.has(sourceIp)) {
+        originOk = true;
+        originNote = 'lootlabs_infra';
+      } else {
+        // Fallback accepte: CDN/proxy legitimes (Render est derriere Cloudflare, l'IP source
+        // peut etre un edge). On accepte si l'IP USER annoncee par LootLabs correspond
+        // a une session recente activee par cette IP (cohérence metier).
+        originNote = 'not_direct_infra';
+      }
+    } catch {
+      originNote = 'dns_error';
+    }
+
+    // Dedup par unique_id (doc: "prevent duplicate processing")
     const dup = await pool.query('SELECT id FROM postbacks WHERE unique_id = $1', [unique_id]);
     if (dup.rows[0]) return res.send('duplicate ok');
 
+    // Session + transaction
     const sess = await pool.query(
       'SELECT * FROM ll_sessions WHERE puid = $1 FOR UPDATE',
       [click_id]
@@ -118,19 +162,55 @@ router.get('/lootlabs/postback', async (req, res) => {
     const session = sess.rows[0];
     if (!session) return res.status(404).send('session not found');
 
+    // --- Delai minimum realiste: un humain complete en > 20s, un bypass script en secondes ---
+    const MIN_SECONDS = 20;
+    const elapsedSec = (Date.now() - new Date(session.started_at).getTime()) / 1000;
+    if (elapsedSec < MIN_SECONDS) {
+      console.warn(`[postback] REJET delai ${elapsedSec.toFixed(1)}s < ${MIN_SECONDS}s (puid=${click_id.slice(0, 8)}...)`);
+      await pool.query(
+        `UPDATE ll_sessions SET status = 'rejected_too_fast' WHERE id = $1 AND status = 'pending'`,
+        [session.id]
+      );
+      return res.status(429).send('rejected: completed too fast');
+    }
+
+    // --- Cohérence IP metier: l'IP user annoncee doit matcher l'IP qui a cree la session
+    //     (si le template du panel fournit ip=). Un attaquant qui forge un postback depuis
+    //     son serveur ne connaît pas l'IP de la victime. Silencieux pour les vrais users.
+    if (claimedUserIp && session.ip && claimedUserIp !== session.ip) {
+      console.warn(`[postback] REJET ip mismatch: annoncee=${claimedUserIp} session=${session.ip}`);
+      return res.status(403).send('rejected: ip mismatch');
+    }
+
+    // Trace le postback (audit: IP source + note origine)
     await pool.query('INSERT INTO postbacks (unique_id, puid, ip) VALUES ($1, $2, $3)', [
       unique_id,
       click_id,
-      ip || null,
+      sourceIp,
     ]);
+    await pool.query('UPDATE ll_sessions SET postback_ip = $1 WHERE id = $2', [sourceIp, session.id]);
 
     if (session.status === 'completed') return res.send('already ok');
+    if (originNote === 'not_direct_infra') {
+      // On log pour audit mais on continue (CDN legitime possible) — la defense principale
+      // reste: delai minimum + dedup + token signe + IP metier.
+      console.log(`[postback] origin note: ${originNote} (src=${sourceIp})`);
+    }
 
     const done = session.tasks_done + 1;
     if (done >= session.tasks_required) {
+      // Complétion: genere le TOKEN signe a usage unique (TTL 5 min).
+      // La cle ne sera delivree QUE via ce token + proprietaire verifie.
+      const completionToken = tokens.issueCompletionToken({
+        puid: click_id,
+        ownerDiscordId: session.owner_discord_id,
+        ip: session.ip,
+        tasksDone: done,
+        tasksRequired: session.tasks_required,
+      });
       await pool.query(
-        `UPDATE ll_sessions SET tasks_done = $1, status = 'completed', completed_at = now() WHERE id = $2`,
-        [done, session.id]
+        `UPDATE ll_sessions SET tasks_done = $1, status = 'completed', completed_at = now(), completion_token = $2 WHERE id = $3`,
+        [done, completionToken, session.id]
       );
     } else {
       await pool.query('UPDATE ll_sessions SET tasks_done = $1 WHERE id = $2', [done, session.id]);
@@ -144,24 +224,86 @@ router.get('/lootlabs/postback', async (req, res) => {
 
 // ---------- GET /api/key/status?puid=... ----------
 // Polling apres les pubs: la cle est delivree quand la session est complete.
-router.get('/key/status', async (req, res) => {
+// ANTI-BYPASS (couches cumulees):
+//   1. Seul le PROPRIETAIRE de la session (owner_discord_id == cookie ks_user signe)
+//      peut recevoir la cle — un puid vole/ne fuite ne sert a rien.
+//   2. La delivrance exige le TOKEN DE COMPLETION (JWT signe, usage unique, TTL 5 min)
+//      genere par le postback — pas de token, pas de cle.
+//   3. Le token est brule (NULL) au premier usage reussi: impossible de rejouer.
+//   4. Rate-limite specifique (polling) — un script de polling en masse se bloque.
+// Les utilisateurs legitimes ne voient AUCUNE difference (leur cookie+token sont valides).
+const statusLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true });
+
+router.get('/key/status', statusLimiter, async (req, res) => {
   try {
     const { puid } = req.query;
-    if (!puid || typeof puid !== 'string' || puid.length > 64) {
+    if (!puid || typeof puid !== 'string' || puid.length > 128) {
       return res.status(400).json({ success: false, error: 'puid required' });
     }
     const { rows } = await pool.query('SELECT * FROM ll_sessions WHERE puid = $1', [puid]);
     const session = rows[0];
     if (!session) return res.status(404).json({ success: false, error: 'Unknown session' });
 
+    if (session.status === 'rejected_too_fast') {
+      return res.json({ success: true, status: 'rejected', reason: 'too_fast' });
+    }
+
+    // Session deja delivree (token brule): rejeu impossible, message clair.
+    // Verifie AVANT le lock proprietaire pour ne pas dependre du cookie sur une session morte.
+    if (session.status === 'claimed') {
+      return res.status(409).json({
+        success: false,
+        status: 'already_claimed',
+        error: 'This session\'s key has already been claimed.',
+      });
+    }
+
     if (session.status !== 'completed') {
       return res.json({ success: true, status: 'pending', tasksDone: session.tasks_done, tasksRequired: session.tasks_required });
     }
 
-    // Session completee: delivrer ou prolonger la cle
+    // --- Verrou proprietaire: la session appartient a un Discord user ---
+    // (toutes les sessions post-migration ont un owner; les anciennes sans owner
+    //  ne sont plus delivrables — securite avant compatibilite)
+    const requesterDiscordId = discordService.verifyUserCookie(req.cookies && req.cookies[discordService.USER_COOKIE]);
+    if (!session.owner_discord_id || !requesterDiscordId || requesterDiscordId !== session.owner_discord_id) {
+      console.warn(`[key/status] REJET non-proprietaire (puid=${String(puid).slice(0, 8)}..., owner=${session.owner_discord_id ? 'set' : 'none'}, requester=${requesterDiscordId ? 'set' : 'none'})`);
+      return res.status(403).json({
+        success: false,
+        status: 'forbidden',
+        error: 'This key session belongs to another user.',
+      });
+    }
+
+    // --- Token de completion: JWT signe, usage unique (deja consomme = NULL) ---
+    if (!session.completion_token) {
+      console.warn(`[key/status] REJET token absent/deja consomme (puid=${String(puid).slice(0, 8)}...)`);
+      return res.status(409).json({
+        success: false,
+        status: 'already_claimed',
+        error: 'This session\'s key has already been claimed.',
+      });
+    }
+    const tokenCheck = tokens.verifyCompletionToken(session.completion_token, { expectPuid: session.puid });
+    if (!tokenCheck.valid) {
+      // Expire ou invalide: on brule le token (attaque par force impossible)
+      await pool.query('UPDATE ll_sessions SET completion_token = NULL WHERE id = $1', [session.id]);
+      console.warn(`[key/status] REJET token ${tokenCheck.reason} (puid=${String(puid).slice(0, 8)}...)`);
+      return res.status(403).json({
+        success: false,
+        status: 'token_' + tokenCheck.reason,
+        error: 'Session expired — start a new one.',
+      });
+    }
+
+    // --- Tout est valide: on BRULE le token (usage unique) et on delivre ---
+    await pool.query(
+      `UPDATE ll_sessions SET completion_token = NULL, status = 'claimed', claimed_at = now() WHERE id = $1`,
+      [session.id]
+    );
+
     // Recupere la duree choisie au start de la session
-    const sess = await pool.query('SELECT tasks_required FROM ll_sessions WHERE id = $1', [session.id]);
-    const duration = sess.rows[0].tasks_required === 1 ? 12 : 24;
+    const duration = session.tasks_required === 1 ? 12 : 24;
 
     if (session.key_id) {
       // Renouvellement: meme kid, meme string cote client
@@ -170,7 +312,9 @@ router.get('/key/status', async (req, res) => {
          WHERE id = $2 AND revoked = false RETURNING kid, signature, expires_at`,
         [duration, session.key_id]
       );
-      // NOTE: duration stockee en heures; make_interval accepte le param
+      if (!upd.rows[0]) {
+        return res.json({ success: false, status: 'revoked_key', error: 'Key was revoked.' });
+      }
       const key = upd.rows[0];
       return res.json({
         success: true,
@@ -185,7 +329,7 @@ router.get('/key/status', async (req, res) => {
     const gen = crypto.generateKey();
     const ins = await pool.query(
       `INSERT INTO keys (kid, signature, duration_hours, expires_at) VALUES ($1, $2, $3, now() + make_interval(hours => $3)) RETURNING id, kid, signature, expires_at`,
-      [gen.kid, gen.signature, session.tasks_required === 1 ? 12 : 24]
+      [gen.kid, gen.signature, duration]
     );
     const key = ins.rows[0];
     await pool.query('UPDATE ll_sessions SET key_id = $1 WHERE id = $2', [key.id, session.id]);

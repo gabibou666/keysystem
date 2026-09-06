@@ -60,7 +60,17 @@ app.use('/api/discord', discordRoutes.router);
 app.use('/admin', adminRoutes);
 
 // Callback LootLabs: la page getkey.html gere le puid cote client
+// Anti-bypass: le referer doit venir de l'infrastructure LootLabs (spoofable seul,
+// mais couche supplementaire) — sinon redirection normale (l'experience legitime
+// passe toujours par loot-link.com / links.lootlabs.gg).
 app.get('/getkey/callback', (req, res) => {
+  const ref = (req.headers.referer || '').toLowerCase();
+  const fromLootlabs = ref.includes('loot-link.com') || ref.includes('lootlabs.gg');
+  if (!fromLootlabs && process.env.NODE_ENV === 'production') {
+    // Referer absent/etranger: on log pour audit, mais on laisse passer —
+    // la vraie protection est le token serveur (un referer falsifie ne delivre rien).
+    console.log('[getkey/callback] referer non-LootLabs:', req.headers.referer || '(none)');
+  }
   res.sendFile(path.join(webDir, 'getkey.html'));
 });
 
