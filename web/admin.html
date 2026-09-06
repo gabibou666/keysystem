@@ -70,6 +70,10 @@ select { margin-right:8px; }
     <div id="perday"></div>
   </div>
   <div class="panel">
+    <h3>Keys created per day (30d) <span id="manualBadge" style="font-size:12px;color:var(--muted);font-weight:400;"></span></h3>
+    <div id="keysperday"></div>
+  </div>
+  <div class="panel">
     <h3>By executor</h3>
     <div id="byexec"></div>
   </div>
@@ -78,8 +82,20 @@ select { margin-right:8px; }
 <!-- KEYS -->
 <section id="tab-keys" class="hidden">
   <div class="panel">
+    <h3>Create keys (manual)</h3>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:12px">Keys created here bypass ads — they work instantly in the loader. Duration is free (hours).</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <input id="ckDuration" placeholder="Duration (hours)" style="width:150px" type="number" min="1" max="8760" value="24">
+      <input id="ckCount" placeholder="Count" style="width:100px" type="number" min="1" max="50" value="1">
+      <input id="ckBound" placeholder="Bind to Roblox UserId (optional)" style="width:230px" type="number">
+      <input id="ckNote" placeholder="Note (e.g. giveaway)" style="flex:1;min-width:160px">
+      <button class="btn" onclick="createKeys()">🔑 Generate</button>
+    </div>
+    <div class="msg" id="createMsg"></div>
+  </div>
+  <div class="panel">
     <h3>Keys (last 50)</h3>
-    <table id="keysTable"><thead><tr><th>Key</th><th>UserId</th><th>Expires</th><th>Executions</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
+    <table id="keysTable"><thead><tr><th>Key</th><th>UserId</th><th>Expire</th><th>Source</th><th>Note</th><th>Execs</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
   </div>
 </section>
 
@@ -126,6 +142,31 @@ select { margin-right:8px; }
 </section>
 
 </main>
+
+<!-- Modal: created keys -->
+<div style="position:fixed;inset:0;background:#000000aa;z-index:100;display:none;place-items:center;" id="createdModal" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--card);border:1px solid #2e2e3d;border-radius:14px;padding:28px;max-width:560px;width:calc(100vw - 40px);max-height:80vh;overflow:auto;">
+    <h3 style="margin-bottom:6px;">✅ <span id="createdCount"></span> keys created</h3>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">Valid <span id="createdDuration"></span> — share them!</p>
+    <textarea id="createdKeys" rows="8" readonly style="width:100%;font-family:Consolas,monospace;font-size:12px;background:#0d0d12;border:1px solid #232330;border-radius:8px;color:#9ecbff;padding:12px;user-select:all;"></textarea>
+    <div style="display:flex;gap:10px;margin-top:14px;">
+      <button class="btn small" onclick="copyCreatedKeys()">📋 Copy all</button>
+      <button class="btn small ghost" onclick="document.getElementById('createdModal').style.display='none'">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: key detail -->
+<div style="position:fixed;inset:0;background:#000000aa;z-index:100;display:none;place-items:center;" id="detailModal" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--card);border:1px solid #2e2e3d;border-radius:14px;padding:28px;max-width:620px;width:calc(100vw - 40px);max-height:82vh;overflow:auto;">
+    <h3 style="margin-bottom:12px;">🔑 Key detail</h3>
+    <div id="detailBody"></div>
+    <div style="margin-top:14px;">
+      <button class="btn small ghost" onclick="document.getElementById('detailModal').style.display='none'">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="login" id="login">
   <h1 style="margin-bottom:12px">Admin Dashboard</h1>
   <p style="color:var(--muted);margin-bottom:26px">Sign in with Discord (allowlist).</p>
@@ -187,6 +228,15 @@ async function loadStats() {
     document.getElementById('byexec').innerHTML = d.byExecutor.map(x =>
       `<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="width:130px;color:var(--muted);font-size:13px">${esc(x.executor || 'unknown')}</span><div class="bar" style="flex:1"><div style="width:${(x.c / (d.byExecutor[0].c) * 100).toFixed(1)}%"></div></div><span style="width:44px;text-align:right;font-size:13px">${x.c}</span></div>`
     ).join('') || '<p style="color:var(--muted)">No data yet.</p>';
+
+    // Keys created per day (barres vertes pour distinguer des executions bleues)
+    if (d.manualKeysTotal !== undefined) {
+      document.getElementById('manualBadge').textContent = '· ' + d.manualKeysTotal + ' manual total';
+    }
+    const kmax = Math.max(1, ...(d.keysPerDay || []).map(x => x.c));
+    document.getElementById('keysperday').innerHTML = (d.keysPerDay || []).map(x =>
+      `<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="width:86px;color:var(--muted);font-size:12px">${x.d}</span><div class="bar" style="flex:1"><div style="width:${(x.c/kmax*100).toFixed(1)}%;background:#6ccb5f;"></div></div><span style="width:34px;text-align:right;font-size:13px">${x.c}</span></div>`
+    ).join('') || '<p style="color:var(--muted)">No keys created yet.</p>';
   } catch {}
 }
 
@@ -199,21 +249,93 @@ async function loadKeys() {
       const st = k.revoked ? '<span style="color:var(--red)">revoked</span>'
         : expired ? '<span style="color:var(--muted)">expired</span>'
         : '<span style="color:var(--green)">valid</span>';
+      const src = k.source === 'manual'
+        ? '<span style="color:#60cdff;border:1px solid #60cdff44;border-radius:20px;padding:1px 8px;font-size:11px;">manual</span>'
+        : '<span style="color:var(--muted);font-size:12px;">ad</span>';
       return `<tr>
-        <td class="mono">${k.kid.slice(0,10)}…</td>
+        <td class="mono" style="cursor:pointer;" title="Click for detail" onclick="showKeyDetail(${k.id})"><b>${k.kid.slice(0,10)}…</b></td>
         <td>${k.bound_user_id ?? '–'}</td>
         <td class="mono">${new Date(k.expires_at).toLocaleString('en-US')}</td>
+        <td>${src}</td>
+        <td style="color:var(--muted);font-size:12px;">${esc(k.note) || '–'}</td>
         <td>${k.execs}</td>
         <td>${st}</td>
         <td>${k.revoked
           ? `<button class="btn small ghost" onclick="unrevokeKey(${k.id})">Restore</button>`
           : `<button class="btn small red" onclick="revokeKey(${k.id})">Revoke</button>`}</td>
       </tr>`;
-    }).join('') || '<tr><td colspan="6" style="color:var(--muted)">No keys.</td></tr>';
+    }).join('') || '<tr><td colspan="8" style="color:var(--muted)">No keys.</td></tr>';
   } catch {}
 }
 async function revokeKey(id) { await api(`/keys/${id}/revoke`, { method: 'POST' }); loadKeys(); }
 async function unrevokeKey(id) { await api(`/keys/${id}/unrevoke`, { method: 'POST' }); loadKeys(); }
+
+async function createKeys() {
+  const msg = document.getElementById('createMsg');
+  const durationHours = parseInt(document.getElementById('ckDuration').value, 10);
+  const count = parseInt(document.getElementById('ckCount').value, 10) || 1;
+  const boundRaw = document.getElementById('ckBound').value.trim();
+  const note = document.getElementById('ckNote').value.trim();
+  const boundUserId = boundRaw ? parseInt(boundRaw, 10) : null;
+
+  if (!Number.isFinite(durationHours) || durationHours < 1) { msg.textContent = '❌ Invalid duration (min 1 hour)'; return; }
+  if (boundUserId !== null && !Number.isFinite(boundUserId)) { msg.textContent = '❌ Invalid UserId'; return; }
+
+  msg.textContent = '⏳ Generating…';
+  try {
+    const d = await api('/keys/create', { method: 'POST', body: JSON.stringify({ durationHours, count, boundUserId, note }) });
+    if (!d.success) { msg.textContent = '❌ ' + d.error; return; }
+    msg.textContent = '';
+    document.getElementById('createdCount').textContent = d.count;
+    document.getElementById('createdDuration').textContent = d.durationHours + 'h';
+    document.getElementById('createdKeys').value = d.created.map(c => c.key).join('\n');
+    document.getElementById('createdModal').style.display = 'grid';
+    loadKeys();
+    if (window.showToast) showToast('🔑 ' + d.count + ' key(s) created!');
+  } catch (e) {
+    msg.textContent = '❌ Network error';
+  }
+}
+
+function copyCreatedKeys() {
+  const v = document.getElementById('createdKeys').value;
+  if (v) navigator.clipboard.writeText(v);
+  if (window.showToast) showToast('📋 All keys copied!');
+}
+
+async function showKeyDetail(id) {
+  try {
+    const d = await api(`/keys/${id}/detail`);
+    if (!d.success) return;
+    const k = d.key;
+    const expired = new Date(k.expiresAt) < new Date();
+    const execRows = (d.executions || []).map(e => `
+      <tr>
+        <td class="mono">${new Date(e.at).toLocaleString('en-US')}</td>
+        <td>${esc(e.executor) || '–'}</td>
+        <td class="mono">v${e.version}</td>
+        <td class="mono">${esc(e.ip) || '–'}</td>
+      </tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted)">No executions yet.</td></tr>';
+
+    document.getElementById('detailBody').innerHTML = `
+      <textarea readonly rows="2" style="width:100%;font-family:Consolas,monospace;font-size:12px;background:#0d0d12;border:1px solid #232330;border-radius:8px;color:#9ecbff;padding:10px;user-select:all;">${k.keyString}</textarea>
+      <button class="btn small" style="margin-top:8px;" onclick="navigator.clipboard.writeText('${k.keyString}');showToast('📋 Key copied!')">📋 Copy key</button>
+      <table style="margin-top:16px;">
+        <tr><td style="color:var(--muted)">Status</td><td>${k.revoked ? '<span style="color:var(--red)">revoked</span>' : expired ? '<span style="color:var(--muted)">expired</span>' : '<span style="color:var(--green)">valid</span>'}</td></tr>
+        <tr><td style="color:var(--muted)">Source</td><td>${k.source === 'manual' ? 'manual (no ads)' : 'ad (LootLabs)'}</td></tr>
+        <tr><td style="color:var(--muted)">Bound to</td><td>${k.boundUserId ?? 'not bound yet'}</td></tr>
+        <tr><td style="color:var(--muted)">Created</td><td>${new Date(k.createdAt).toLocaleString('en-US')}</td></tr>
+        <tr><td style="color:var(--muted)">Expires</td><td>${new Date(k.expiresAt).toLocaleString('en-US')} (${k.durationHours}h)</td></tr>
+        <tr><td style="color:var(--muted)">Renewals</td><td>${k.renewedCount}</td></tr>
+        <tr><td style="color:var(--muted)">Note</td><td>${esc(k.note) || '–'}</td></tr>
+        <tr><td style="color:var(--muted)">Total executions</td><td>${k.totalExecs}</td></tr>
+      </table>
+      <h4 style="margin:18px 0 8px;">Execution history</h4>
+      <table><thead><tr><th>Date</th><th>Executor</th><th>Version</th><th>IP</th></tr></thead><tbody>${execRows}</tbody></table>
+    `;
+    document.getElementById('detailModal').style.display = 'grid';
+  } catch {}
+}
 
 // ---- BANS ----
 async function loadBans() {

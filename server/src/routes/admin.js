@@ -61,7 +61,7 @@ router.get('/me', async (req, res) => {
 // ---------- STATS ----------
 router.get('/stats', requireAdmin, async (req, res) => {
   try {
-    const [execs, uniq, byExec, perDay, errs] = await Promise.all([
+    const [execs, uniq, byExec, perDay, errs, keysPerDay, manualTotal] = await Promise.all([
       pool.query('SELECT COUNT(*)::int c FROM executions'),
       pool.query('SELECT COUNT(DISTINCT user_id)::int c FROM executions'),
       pool.query(
@@ -75,6 +75,12 @@ router.get('/stats', requireAdmin, async (req, res) => {
       pool.query(
         `SELECT COUNT(*)::int c FROM error_reports WHERE created_at > now() - interval '7 days'`
       ),
+      pool.query(
+        `SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') d, COUNT(*)::int c
+         FROM keys WHERE created_at > now() - interval '30 days'
+         GROUP BY 1 ORDER BY 1`
+      ),
+      pool.query(`SELECT COUNT(*)::int c FROM keys WHERE source = 'manual'`),
     ]);
     res.json({
       success: true,
@@ -83,6 +89,8 @@ router.get('/stats', requireAdmin, async (req, res) => {
       byExecutor: byExec.rows,
       perDay: perDay.rows,
       errors7d: errs.rows[0].c,
+      keysPerDay: keysPerDay.rows,
+      manualKeysTotal: manualTotal.rows[0].c,
     });
   } catch (e) {
     console.error('[admin/stats]', e);
@@ -94,7 +102,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
 router.get('/keys', requireAdmin, async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
   const { rows } = await pool.query(
-    `SELECT k.id, k.kid, k.bound_user_id, k.duration_hours, k.expires_at, k.renewed_count, k.revoked, k.created_at,
+    `SELECT k.id, k.kid, k.bound_user_id, k.duration_hours, k.note, k.source, k.expires_at, k.renewed_count, k.revoked, k.created_at,
             (SELECT COUNT(*)::int FROM executions e WHERE e.key_id = k.id) AS execs
      FROM keys k ORDER BY k.created_at DESC LIMIT $1`,
     [limit]
@@ -110,6 +118,93 @@ router.post('/keys/:id/revoke', requireAdmin, async (req, res) => {
 router.post('/keys/:id/unrevoke', requireAdmin, async (req, res) => {
   await pool.query('UPDATE keys SET revoked = false WHERE id = $1', [req.params.id]);
   res.json({ success: true });
+});
+
+// ---------- CREATION DE CLES MANUELLES ----------
+// Body: { durationHours, count, boundUserId?, note? }
+router.post('/keys/create', requireAdmin, async (req, res) => {
+  try {
+    const durationHours = parseInt(req.body?.durationHours, 10);
+    const count = parseInt(req.body?.count, 10) || 1;
+    const boundUserId = parseInt(req.body?.boundUserId, 10) || null;
+    const note = (req.body?.note || '').slice(0, 200);
+
+    if (!Number.isFinite(durationHours) || durationHours < 1 || durationHours > 8760) {
+      return res.status(400).json({ success: false, error: 'Duration must be 1-8760 hours.' });
+    }
+    if (count < 1 || count > 50) {
+      return res.status(400).json({ success: false, error: 'Count must be 1-50.' });
+    }
+
+    const created = [];
+    for (let i = 0; i < count; i++) {
+      const gen = crypto.generateKey();
+      const ins = await pool.query(
+        `INSERT INTO keys (kid, signature, bound_user_id, duration_hours, note, source, expires_at)
+         VALUES ($1, $2, $3, $4, $5, 'manual', now() + make_interval(hours => $4))
+         RETURNING id, kid, signature, expires_at`,
+        [gen.kid, gen.signature, boundUserId, durationHours, note || null]
+      );
+      const r = ins.rows[0];
+      created.push({
+        id: r.id,
+        key: `${r.kid}.${r.signature}`,
+        expiresAt: r.expires_at,
+      });
+    }
+
+    res.json({ success: true, created, count: created.length, durationHours });
+  } catch (e) {
+    console.error('[keys/create]', e);
+    res.status(500).json({ success: false, error: 'Server error.' });
+  }
+});
+
+// ---------- DETAIL D'UNE CLE ----------
+router.get('/keys/:id/detail', requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { rows } = await pool.query(
+      `SELECT id, kid, signature, bound_user_id, duration_hours, note, source,
+              expires_at, renewed_count, revoked, created_at
+       FROM keys WHERE id = $1`,
+      [id]
+    );
+    const k = rows[0];
+    if (!k) return res.status(404).json({ success: false, error: 'Key not found.' });
+
+    const execs = await pool.query(
+      `SELECT executor, version, ip, created_at FROM executions
+       WHERE key_id = $1 ORDER BY created_at DESC LIMIT 100`,
+      [id]
+    );
+
+    res.json({
+      success: true,
+      key: {
+        id: k.id,
+        keyString: `${k.kid}.${k.signature}`,
+        boundUserId: k.bound_user_id !== null ? parseInt(k.bound_user_id, 10) : null,
+        durationHours: k.duration_hours,
+        note: k.note,
+        source: k.source,
+        expiresAt: k.expires_at,
+        renewedCount: k.renewed_count,
+        revoked: k.revoked,
+        createdAt: k.created_at,
+        totalExecs: execs.rows.length,
+      },
+      executions: execs.rows.map((e) => ({
+        executor: e.executor,
+        version: parseInt(e.version, 10),
+        ip: e.ip,
+        at: e.created_at,
+      })),
+    });
+  } catch (e) {
+    console.error('[keys/detail]', e);
+    res.status(500).json({ success: false, error: 'Server error.' });
+  }
 });
 
 // ---------- BANS ----------
