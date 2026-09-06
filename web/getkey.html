@@ -208,7 +208,7 @@ function showModal(key, renewed, expiresAt) {
 function closeModal() { document.getElementById('keyModal').classList.remove('open'); }
 function copyModalKey() {
   const v = document.getElementById('modalKey').textContent;
-  if (v) { navigator.clipboard.writeText(v); showToast('🔑 Key copied to clipboard!'); }
+  if (v) { navigator.clipboard.writeText(v); showToast('🔑 Key copied to clipboard!'); flashCopied(document.querySelector('#keyModal .modal-actions .btn.small')); }
 }
 // close modal on overlay click
 document.getElementById('keyModal').addEventListener('click', (e) => {
@@ -300,9 +300,21 @@ async function poll(puid) {
   } catch {}
 }
 
+/* Feedback visuel Copy: bouton devient "Copied ✓" 1.4s */
+function flashCopied(btn) {
+  if (!btn) return;
+  const old = btn.innerHTML;
+  btn.classList.add('copied');
+  btn.innerHTML = 'Copied ✓';
+  setTimeout(() => {
+    btn.classList.remove('copied');
+    btn.innerHTML = old;
+  }, 1400);
+}
+
 function copyKey() {
   const v = document.getElementById('newKey').textContent;
-  if (v) { navigator.clipboard.writeText(v); showToast('🔑 Key copied to clipboard!'); }
+  if (v) { navigator.clipboard.writeText(v); showToast('🔑 Key copied to clipboard!'); flashCopied(document.querySelector('#resultActions .btn.small')); }
 }
 
 // LootLabs callback lands here: /getkey/callback (puid comes from localStorage)

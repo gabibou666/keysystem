@@ -4,37 +4,59 @@
    ============================================================ */
 
 :root {
-  /* Charte: noir profond + violets */
-  --bg: #0a0a0f;
-  --bg2: #0f0d16;
-  --card: #131018cc;
-  --card-solid: #131018;
-  --card-hover: #1a1526;
-  --input: #0f0d14;
-  --stroke: #ffffff12;
-  --stroke2: #ffffff1c;
-  --text: #ffffff;
-  --muted: #ffffffa0;
-  --accent: #c084fc;      /* néon clair (lueurs) */
-  --accent2: #7c3aed;     /* violet principal */
-  --accent3: #8b5cf6;     /* violet moyen */
-  --violet-glow: #8b5cf6;
-  --red: #ff99a4;         /* erreur système - discret */
+  /* ===== Charte noir/violet — variables nommées ===== */
+  --color-bg: #08070c;          /* fond principal: noir profond */
+  --color-bg-soft: #0d0b12;     /* surfaces secondaires */
+  --color-card: #12101a;         /* cards: plus claires que le fond = profondeur */
+  --color-card-hover: #1a1526;
+  --color-input: #17141f;        /* champs: encore plus clairs = actionnables */
+  --color-border: #ffffff10;
+  --color-border-violet: #8b5cf62e;   /* bordure violette semi-transparente */
+  --color-text: #ffffff;
+  --color-muted: #a1a1aa;       /* gris clair lisible sur noir */
+  --color-muted-2: #71717a;     /* gris discret (metadata) */
+  --color-accent: #8b5cf6;       /* violet principal */
+  --color-accent-soft: #a855f7;
+  --color-glow: #c084fc;         /* violet néon (lueurs, chiffres) */
+  --color-glow-2: #d8b4fe;       /* violet très clair */
+  --color-err: #f472b6;          /* erreur: rouge-violet, pas rouge pur */
+  --color-ok: #d8b4fe;           /* succes: reste dans le violet clair */
   --radius: 12px;
   --radius-lg: 16px;
-  --shadow: 0 8px 32px #00000080;
-  --ease-out: cubic-bezier(.22,.9,.36,1);            /* sortie douce */
-  --ease-bounce: cubic-bezier(.34,1.56,.64,1);       /* rebond léger */
+  --shadow-deep: 0 12px 40px #00000090, 0 2px 8px #00000070;
+  --glow-card: 0 0 0 1px #8b5cf62e, 0 16px 48px #7c3aed26;
+  --glow-strong: 0 0 32px #8b5cf64d;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);          /* easing standard 200-300ms */
+  --ease-bounce: cubic-bezier(.34,1.56,.64,1);   /* rebond léger */
   --dur-1: 200ms;
   --dur-2: 300ms;
+
+  /* Alias retro-compat (le reste du fichier utilise ces noms) */
+  --bg: var(--color-bg);
+  --bg2: var(--color-bg-soft);
+  --card: var(--color-card);
+  --card-solid: #12101a;
+  --stroke: var(--color-border);
+  --stroke2: #ffffff1c;
+  --text: var(--color-text);
+  --muted: var(--color-muted);
+  --accent: var(--color-glow);
+  --accent2: var(--color-accent);
+  --accent3: var(--color-accent-soft);
+  --violet-glow: var(--color-accent);
+  --red: var(--color-err);
+  --green: var(--color-ok);
+  --radius-lg2: var(--radius-lg);
+  --shadow: var(--shadow-deep);
+  --ease-out: var(--ease);
   --dur-3: 400ms;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif; }
 html { scroll-behavior: smooth; }
 body {
-  background: var(--bg);
-  color: var(--text);
+  background: var(--color-bg);
+  color: var(--color-text);
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -46,10 +68,22 @@ body::before {
   inset: 0;
   background:
     radial-gradient(600px 400px at 85% -10%, #7c3aed2b, transparent 70%),
-    radial-gradient(500px 350px at 10% 110%, #c084fc14, transparent 70%),
-    radial-gradient(800px 600px at 50% 50%, #0d0d1420, transparent 80%);
+    radial-gradient(500px 350px at 10% 110%, #c084fc14, transparent 70%);
   pointer-events: none;
   z-index: 0;
+}
+
+/* Grain de verre (feTurbulence SVG inline): texture "verre fumé" au-dessus des halos.
+   Soft-light = subtil, n'assombrit pas, casse le rendu trop "flat" du noir pur. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: .35;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  mix-blend-mode: soft-light;
 }
 main, nav, footer { position: relative; z-index: 1; }
 
@@ -78,12 +112,24 @@ nav .links a {
 }
 nav .links a:hover { color: var(--text); background: #ffffff0d; }
 
+/* Curseur violet custom (tous navigateurs modernes, fallback natif sinon) */
+body { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M5 3l14 7.5-6.2 1.8L9.5 19z' fill='%23c084fc' stroke='%2312101a' stroke-width='1.5'/%3E%3C/svg%3E") 4 2, auto; }
+a, button, .btn, [onclick] { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M5 3l14 7.5-6.2 1.8L9.5 19z' fill='%23d8b4fe' stroke='%23c084fc' stroke-width='1.5'/%3E%3C/svg%3E") 4 2, pointer; }
+input, textarea, select { cursor: text; }
+
 /* ===== HERO ===== */
 .hero { text-align: center; padding: 90px 20px 50px; max-width: 800px; margin: 0 auto; }
-.hero h1 { font-size: 46px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1;
-  background: linear-gradient(135deg, #ffffff, #c084fc 70%, #8b5cf6);
-  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-.hero p { color: var(--muted); font-size: 17px; margin-top: 16px; line-height: 1.6; }
+/* Titre: dégradé violet + scanlines CRT rétro-futuristes (2 couches clip) */
+.hero h1 {
+  font-size: 46px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1;
+  background:
+    repeating-linear-gradient(0deg, #ffffff 0 2px, #c084fc 2px 4px),
+    linear-gradient(135deg, #ffffff, #c084fc 70%, #8b5cf6);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 22px #8b5cf62e);
+}
+.hero p { color: var(--color-muted); font-size: 17px; margin-top: 16px; line-height: 1.6; }
 .hero .actions { margin-top: 32px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
 
 /* ============================================================
@@ -109,7 +155,7 @@ nav .links a:hover { color: var(--text); background: #ffffff0d; }
 }
 /* Hover: élévation + glow néon violet */
 .btn:hover {
-  transform: translateY(-2px) scale(1.02);
+  transform: translateY(-1px) scale(1.03);
   border-color: #c084fc88;
   box-shadow:
     0 6px 22px #8b5cf64d,
@@ -118,7 +164,7 @@ nav .links a:hover { color: var(--text); background: #ffffff0d; }
 }
 /* Active: enfoncement net */
 .btn:active {
-  transform: translateY(0) scale(.97);
+  transform: translateY(0) scale(0.98);
   transition-duration: 80ms;
   box-shadow: 0 1px 6px #7c3aed30, inset 0 2px 6px #00000040;
 }
@@ -148,55 +194,69 @@ nav .links a:hover { color: var(--text); background: #ffffff0d; }
 }
 .btn.small { padding: 8px 16px; font-size: 13px; }
 
-/* CTA principal: anneau néon pulsant (scale+opacity = GPU) */
+/* Feedback "Copied": fond flashé violet clair puis retour doux */
+.btn.copied {
+  background: linear-gradient(135deg, #a855f7, #7c3aed) !important;
+  border-color: #d8b4fe !important;
+  box-shadow: 0 0 24px #c084fc66, inset 0 1px 0 #ffffff35 !important;
+}
+
+/* CTA principal: pulse lent 2s, discret (scale+opacity = GPU) */
 .btn.pulse::before {
   content: '';
   position: absolute; inset: -2px; border-radius: inherit;
   border: 2px solid #8b5cf6;
   opacity: 0;
   pointer-events: none;
-  animation: ctaRing 2.6s ease-out infinite;
+  animation: ctaPulseSoft 2s var(--ease) infinite;
 }
-@keyframes ctaRing {
-  0%   { transform: scale(1); opacity: .55; }
-  60%  { opacity: .18; }
-  100% { transform: scale(1.15); opacity: 0; }
+@keyframes ctaPulseSoft {
+  0%   { transform: scale(1); opacity: .40; }
+  50%  { transform: scale(1.05); opacity: .14; }
+  100% { transform: scale(1); opacity: .40; }
 }
 
 /* ============================================================
-   CARDS — élévation + halo violet diffus
+   CARDS — relief: fond + clair que le fond, bordure gradient
+   violet (double pseudo), glow au survol
    ============================================================ */
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+
+/* Bordure gradient violette: technique border-image-fallback via
+   background double couche (pas de support border-image gradient partout) */
+.card, .stat, .game-card, .keypanel, .activity-list, .modal, .countdown-wrap {
+  border: 1px solid var(--color-border-violet);
+}
+
 .card {
-  background: var(--card);
+  background: linear-gradient(180deg, var(--color-card) 0%, #0e0c15 100%);
   backdrop-filter: blur(24px);
-  border: 1px solid var(--stroke);
   border-radius: var(--radius-lg);
   padding: 26px;
-  box-shadow: var(--shadow), inset 0 1px 0 #ffffff12;
+  box-shadow: var(--shadow-deep), inset 0 1px 0 #ffffff0d;
   transition:
-    transform var(--dur-3) var(--ease-out),
-    border-color var(--dur-2) ease,
-    box-shadow var(--dur-3) ease,
-    background var(--dur-2) ease;
+    transform var(--dur-2) var(--ease),
+    border-color var(--dur-1) ease,
+    box-shadow var(--dur-2) ease;
   will-change: transform;
 }
+/* Relief au survol: élévation + halo violet diffus */
 .card:hover {
   transform: translateY(-4px);
-  border-color: #8b5cf64d;
-  background: var(--card-hover);
+  border-color: #8b5cf673;
   box-shadow:
-    var(--shadow),
-    0 14px 44px #7c3aed2e,
-    inset 0 1px 0 #ffffff12;
+    var(--shadow-deep),
+    0 16px 48px #7c3aed2e,
+    0 0 26px #8b5cf61f,
+    inset 0 1px 0 #ffffff0d;
 }
 .card h3 { font-size: 17px; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
-.card p { color: var(--muted); font-size: 14px; line-height: 1.6; }
-/* Icônes: réaction au survol — rotation + rebond */
+.card p { color: var(--color-muted); font-size: 14px; line-height: 1.6; }
+/* Icônes: réaction au survol — rotation + rebond + lueur */
 .card .icon {
   font-size: 22px;
   display: inline-block;
-  transition: transform var(--dur-3) var(--ease-bounce), filter var(--dur-2) ease;
+  transition: transform var(--dur-2) var(--ease-bounce), filter var(--dur-1) ease;
 }
 .card:hover .icon { transform: rotate(-10deg) scale(1.25); filter: drop-shadow(0 0 8px #c084fcaa); }
 
@@ -237,19 +297,22 @@ nav .links a:hover { color: var(--text); background: #ffffff0d; }
   .neon-frame::before { display: none; }
 }
 
+/* Champs interactifs: identifiables immédiatement — fond #17141f (plus clair
+   que les cards #12101a), bordure violette semi-transparente -> pleine + glow au focus */
 .keybox {
   display: flex; gap: 10px; align-items: stretch;
-  background: var(--input); border: 1px solid var(--stroke2);
+  background: var(--color-input); border: 1px solid var(--color-border-violet);
   border-radius: var(--radius); padding: 6px;
-  transition: border-color var(--dur-2) ease, box-shadow var(--dur-2) ease;
+  transition: border-color var(--dur-1) ease, box-shadow var(--dur-2) ease;
 }
+.keybox:hover { border-color: #8b5cf65c; }
 .keybox:focus-within {
-  border-color: #c084fc88;
-  box-shadow: 0 0 0 3px #7c3aed26, 0 0 24px #8b5cf61f;
+  border-color: #c084fcd9;
+  box-shadow: 0 0 0 3px #7c3aed2e, 0 0 28px #8b5cf633;
 }
 .keybox textarea {
   flex: 1; background: transparent; border: none; outline: none;
-  color: var(--accent); font-family: Consolas, monospace; font-size: 14px;
+  color: var(--color-glow); font-family: Consolas, monospace; font-size: 14px;
   resize: none; padding: 10px 12px; user-select: all;
 }
 .keybox textarea::placeholder { color: #ffffff45; }
@@ -265,34 +328,46 @@ nav .links a:hover { color: var(--text); background: #ffffff0d; }
   text-shadow: 0 0 24px #c084fc50; }
 .countdown .lbl { display: block; font-size: 12px; color: var(--muted); font-family: 'Segoe UI', sans-serif; font-weight: 400; margin-top: 4px; }
 
-/* ===== STATS ===== */
+/* ===== STATS — chiffres en violet clair (identité) ===== */
 .stats { display: flex; gap: 18px; justify-content: center; margin: 40px auto 0; flex-wrap: wrap; max-width: 720px; padding: 0 24px; }
 .stat {
   flex: 1; min-width: 180px; text-align: center;
-  background: var(--card); backdrop-filter: blur(24px);
-  border: 1px solid var(--stroke); border-radius: var(--radius-lg);
-  padding: 22px; box-shadow: var(--shadow);
-  transition: transform var(--dur-2) var(--ease-out), border-color var(--dur-2) ease, box-shadow var(--dur-3) ease;
+  background: linear-gradient(180deg, var(--color-card) 0%, #0e0c15 100%);
+  backdrop-filter: blur(24px);
+  border-radius: var(--radius-lg);
+  padding: 22px; box-shadow: var(--shadow-deep), inset 0 1px 0 #ffffff0d;
+  transition: transform var(--dur-2) var(--ease), border-color var(--dur-1) ease, box-shadow var(--dur-2) ease;
 }
 .stat:hover {
   transform: translateY(-3px);
   border-color: #c084fc45;
-  box-shadow: var(--shadow), 0 10px 34px #7c3aed26;
+  box-shadow: var(--shadow-deep), 0 12px 36px #7c3aed26, 0 0 22px #8b5cf619;
 }
-.stat .num { font-size: 30px; font-weight: 700;
-  background: linear-gradient(135deg, #fff, #c084fc); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-.stat .lbl { color: var(--muted); font-size: 13px; margin-top: 4px; }
+/* Chiffres: violet clair #c084fc + lueur néon (count-up géré en JS) */
+.stat .num {
+  font-size: 30px; font-weight: 700;
+  background: linear-gradient(135deg, #d8b4fe, #c084fc);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 14px #c084fc40);
+}
+.stat .lbl { color: var(--color-muted); font-size: 13px; margin-top: 4px; }
 .stat .num, .count-num { display: inline-block; }
+/* Respiration très subtile sur la stat "online now" (temps réel) */
+.stat.live { animation: breathe 2.4s ease-in-out infinite; }
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .88; }
+}
 
-/* ===== CODE ===== */
+/* ===== CODE — zone copiable: meme langage visuel que keybox ===== */
 .codebox {
-  background: #0d0b12; border: 1px solid var(--stroke2);
+  background: var(--color-input); border: 1px solid var(--color-border-violet);
   border-radius: var(--radius); padding: 16px 18px; margin-top: 14px;
   font-family: Consolas, monospace; font-size: 13px; color: #d8b4fe;
   user-select: all; word-break: break-all; position: relative;
-  transition: border-color var(--dur-2) ease, box-shadow var(--dur-2) ease;
+  transition: border-color var(--dur-1) ease, box-shadow var(--dur-2) ease;
 }
-.codebox:hover { border-color: #c084fc45; box-shadow: 0 0 22px #8b5cf626; }
+.codebox:hover { border-color: #c084fc55; box-shadow: 0 0 22px #8b5cf626, inset 0 1px 0 #ffffff0d; }
 
 /* ===== FOOTER ===== */
 footer { text-align: center; padding: 40px; color: #ffffff60; font-size: 13px; margin-top: 80px;
@@ -523,7 +598,7 @@ nav .links a:hover::after { transform: scaleX(1); }
   animation: toastIn .35s cubic-bezier(.2,.9,.3,1.2) both;
   backdrop-filter: blur(10px);
 }
-.toast.err { border-color: #f1646455; color: #ffd9de; box-shadow: 0 8px 30px #00000080; }
+.toast.err { border-color: #f472b655; color: #fbcfe8; box-shadow: 0 8px 30px #00000080; }
 .toast.out { animation: toastOut .25s ease both; }
 @keyframes toastIn {
   from { opacity: 0; transform: translateX(40px) scale(.9); }
@@ -541,6 +616,21 @@ nav .links a:hover::after { transform: scaleX(1); }
 @keyframes rip { to { transform: scale(2.6); opacity: 0; } }
 
 /* ============================================================
+   VIEW TRANSITIONS API — navigation cross-page fluide
+   (progressive: ignoré par les navigateurs sans support;
+   le JS de effects.js intercepte les liens internes)
+   ============================================================ */
+@view-transition { navigation: auto; }
+::view-transition-old(root) {
+  animation: vtOut .18s ease both;
+}
+::view-transition-new(root) {
+  animation: vtIn .26s var(--ease) both;
+}
+@keyframes vtOut { to { opacity: 0; transform: translateY(-6px); } }
+@keyframes vtIn { from { opacity: 0; transform: translateY(8px); } }
+
+/* ============================================================
    ACCESSIBILITÉ — reduced motion: tout au repos
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
@@ -552,6 +642,8 @@ nav .links a:hover::after { transform: scaleX(1); }
   .reveal { opacity: 1; transform: none; }
   .hero > * { animation: none; opacity: 1; }
   .game-card { animation: none; opacity: 1; transform: none; }
+  .stat.live { animation: none; opacity: 1; }
   .btn.pulse::before, .neon-frame::before,
   #ks-particles, #ks-glow, .ks-ripple, .skeleton { display: none !important; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none !important; }
 }

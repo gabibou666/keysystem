@@ -14,8 +14,8 @@
     '#ks-particles{position:fixed;inset:0;z-index:0;pointer-events:none;}',
     '#ks-glow{position:fixed;width:340px;height:340px;margin:-170px 0 0 -170px;left:-500px;top:-500px;background:radial-gradient(circle,#8b5cf626 0%,transparent 65%);pointer-events:none;z-index:0;will-change:left,top;}',
     '#ks-toasts{position:fixed;bottom:22px;right:22px;z-index:1001;display:flex;flex-direction:column;gap:10px;pointer-events:none;}',
-    '.toast{background:#131018f0;border:1px solid #c084fc55;color:#f3e8ff;padding:12px 18px;border-radius:12px;font-size:14px;box-shadow:0 8px 30px #00000080,0 0 24px #7c3aed26;animation:ksToastIn .35s cubic-bezier(.2,.9,.3,1.2) both;backdrop-filter:blur(10px);font-family:Segoe UI,system-ui,sans-serif;}',
-    '.toast.err{border-color:#f1646455;color:#ffd9de;}',
+    '.toast{background:#12101af0;border:1px solid #c084fc55;color:#f3e8ff;padding:12px 18px;border-radius:12px;font-size:14px;box-shadow:0 8px 30px #00000080,0 0 24px #7c3aed26;animation:ksToastIn .35s cubic-bezier(.2,.9,.3,1.2) both;backdrop-filter:blur(10px);font-family:Segoe UI,system-ui,sans-serif;}',
+    '.toast.err{border-color:#f472b655;color:#fbcfe8;}',
     '.toast.out{animation:ksToastOut .25s ease both;}',
     '@keyframes ksToastIn{from{opacity:0;transform:translateX(40px) scale(.9);}to{opacity:1;transform:translateX(0) scale(1);}}',
     '@keyframes ksToastOut{to{opacity:0;transform:translateX(40px) scale(.9);}}',
@@ -252,4 +252,22 @@
   /* bind initial statiques */
   var init = document.querySelectorAll('.btn, .game-card, .card');
   for (var k = 0; k < init.length; k++) bindFx(init[k]);
+
+  /* ---------- 8. View Transitions: navigation interne fluide ----------
+     Progressive enhancement: si l'API existe, les liens internes du site
+     declenchent une transition (fondu+glissement definis dans style.css).
+     Sans support -> navigation normale, aucun changement. */
+  if (document.startViewTransition && !reduced) {
+    document.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (!a) return;
+      var href = a.getAttribute('href') || '';
+      // interne seulement, pas d'ancre pure ni de nouvelle fenetre
+      if (!href || href.startsWith('#') || href.startsWith('http') || href.startsWith('mailto') || a.target === '_blank') return;
+      e.preventDefault();
+      document.startViewTransition(function () {
+        location.assign(href);
+      });
+    });
+  }
 })();

@@ -28,7 +28,7 @@
   </section>
 
   <section class="stats">
-    <div class="stat reveal"><div class="num" id="execCount">…</div><div class="lbl">executions</div></div>
+    <div class="stat reveal live"><div class="num" id="execCount">…</div><div class="lbl">executions</div></div>
     <div class="stat reveal d1"><div class="num" id="userCount">…</div><div class="lbl">users</div></div>
     <div class="stat reveal d2"><div class="num" id="uptime">24/7</div><div class="lbl">uptime</div></div>
   </section>
@@ -53,10 +53,10 @@
     </div>
   </div>
   <section class="stats reveal d2">
-    <div class="stat"><div class="num" id="onlineNowStat">0</div><div class="lbl">online now (15 min)</div></div>
-    <div class="stat"><div class="num" id="usersToday">0</div><div class="lbl">users today</div></div>
-    <div class="stat"><div class="num" id="execToday">0</div><div class="lbl">executions today</div></div>
-    <div class="stat"><div class="num" id="totalUsers">0</div><div class="lbl">total users</div></div>
+    <div class="stat reveal"><div class="num" id="onlineNowStat">0</div><div class="lbl">online now (15 min)</div></div>
+    <div class="stat reveal d1"><div class="num" id="usersToday">0</div><div class="lbl">users today</div></div>
+    <div class="stat reveal d2"><div class="num" id="execToday">0</div><div class="lbl">executions today</div></div>
+    <div class="stat reveal d3"><div class="num" id="totalUsers">0</div><div class="lbl">total users</div></div>
   </section>
 
   <section class="keypanel neon-frame reveal" id="keyCard">
@@ -93,7 +93,7 @@
     <p class="sub">One single line in your executor:</p>
     <div class="codebox" id="loaderCode">-- loads below --</div>
     <div style="margin-top: 14px;">
-      <button class="btn small" onclick="copyLoader()">📋 Copy loader</button>
+      <button class="btn small" id="loaderCardBtn" onclick="copyLoader()">📋 Copy loader</button>
     </div>
     <p class="sub" style="margin-top: 18px; margin-bottom: 0;">
       1. Copy the line → 2. Paste it into your executor → 3. Enter your key → the script loads.
@@ -265,15 +265,28 @@ function tickCountdown(target) {
   if (diff < 3600000) el.classList.add('urgent');
 }
 
+/* Feedback visuel Copy: le bouton devient "Copied ✓" 1.4s (classe .copied = flash violet) */
+function flashCopied(btn, baseLabel) {
+  if (!btn) return;
+  const old = baseLabel || btn.innerHTML;
+  btn.classList.add('copied');
+  btn.innerHTML = 'Copied ✓';
+  setTimeout(() => {
+    btn.classList.remove('copied');
+    btn.innerHTML = old;
+  }, 1400);
+}
+
 function copyKey() {
   const v = document.getElementById('keybox').value;
-  if (v) { navigator.clipboard.writeText(v); setStatus('Key copied!', 'ok'); showToast('🔑 Key copied to clipboard!'); }
+  if (v) { navigator.clipboard.writeText(v); setStatus('Key copied!', 'ok'); showToast('🔑 Key copied to clipboard!'); flashCopied(document.querySelector('#keyCard .btn.small')); }
 }
 
 function copyLoader() {
   navigator.clipboard.writeText(document.getElementById('loaderCode').textContent);
   setStatus('Loader copied!', 'ok');
   showToast('📋 Loader copied to clipboard!');
+  flashCopied(document.getElementById('loaderCardBtn'), '📋 Copy loader');
 }
 
 document.getElementById('loaderCode').textContent =
