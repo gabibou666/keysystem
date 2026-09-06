@@ -422,3 +422,75 @@ nav .links a:hover::after { transform: scaleX(1); }
   text-align: center; color: var(--muted); padding: 36px 20px; font-size: 14px;
 }
 .a-more { text-align: center; padding: 10px; color: var(--muted); font-size: 12px; }
+
+/* ============================================================
+   UI EFFECTS ENGINE (effects.js)
+   ============================================================ */
+
+/* Scroll progress bar */
+#ks-progress {
+  position: fixed; top: 0; left: 0; height: 3px; width: 0;
+  background: linear-gradient(90deg, #0078d4, #60cdff, #a5d8ff);
+  z-index: 200; border-radius: 0 3px 3px 0;
+  box-shadow: 0 0 12px #60cdff88;
+  transition: width .1s linear;
+}
+
+/* Canvas particules: derriere tout, ne bloque pas les clics */
+#ks-particles {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+}
+
+/* Cursor glow */
+#ks-glow {
+  position: fixed; width: 340px; height: 340px;
+  margin: -170px 0 0 -170px; left: -500px; top: -500px;
+  background: radial-gradient(circle, #0078d424 0%, transparent 65%);
+  pointer-events: none; z-index: 0;
+  will-change: left, top;
+}
+
+/* Toasts */
+#ks-toasts {
+  position: fixed; bottom: 22px; right: 22px; z-index: 300;
+  display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+}
+.toast {
+  background: #2d2d2df0; border: 1px solid #6ccb5f55;
+  color: #dff5e0; padding: 12px 18px; border-radius: 12px;
+  font-size: 14px; box-shadow: 0 8px 30px #00000070;
+  animation: toastIn .35s cubic-bezier(.2,.9,.3,1.2) both;
+  backdrop-filter: blur(10px);
+}
+.toast.err { border-color: #f1646455; color: #ffd9de; }
+.toast.out { animation: toastOut .25s ease both; }
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(40px) scale(.9); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes toastOut {
+  to { opacity: 0; transform: translateX(40px) scale(.9); }
+}
+
+/* Ripple: positionne le span via left/top inline */
+.ks-ripple {
+  position: absolute; border-radius: 50%;
+  background: #ffffff55;
+  transform: scale(0); animation: rip .6s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes rip { to { transform: scale(2.6); opacity: 0; } }
+
+/* Cards/game-cards: transition douce pour le tilt 3D */
+.game-card, .card { transition: transform .25s ease, border-color .2s, box-shadow .2s; will-change: transform; }
+
+/* Boutons magnetiques: base transition */
+.btn { transition: transform .18s ease, filter .15s, box-shadow .25s; will-change: transform; }
+.btn:hover { filter: brightness(1.12); }
+
+/* z-index: contenu au-dessus du canvas */
+nav, main, footer { position: relative; z-index: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  #ks-particles, #ks-glow, .ks-ripple { display: none !important; }
+}

@@ -189,7 +189,7 @@ async function loadCurrentKey() {
 
 function copyCurrentKey() {
   const v = document.getElementById('currentKey').value;
-  if (v) { navigator.clipboard.writeText(v); setKeyCardStatus('Key copied!', 'ok'); }
+  if (v) { navigator.clipboard.writeText(v); setKeyCardStatus('Key copied!', 'ok'); showToast('🔑 Key copied to clipboard!'); }
 }
 function setKeyCardStatus(t, cls) {
   const s = document.getElementById('currentKeyStatus');
@@ -208,7 +208,7 @@ function showModal(key, renewed, expiresAt) {
 function closeModal() { document.getElementById('keyModal').classList.remove('open'); }
 function copyModalKey() {
   const v = document.getElementById('modalKey').textContent;
-  if (v) navigator.clipboard.writeText(v);
+  if (v) { navigator.clipboard.writeText(v); showToast('🔑 Key copied to clipboard!'); }
 }
 // close modal on overlay click
 document.getElementById('keyModal').addEventListener('click', (e) => {
@@ -302,7 +302,7 @@ async function poll(puid) {
 
 function copyKey() {
   const v = document.getElementById('newKey').textContent;
-  if (v) navigator.clipboard.writeText(v);
+  if (v) { navigator.clipboard.writeText(v); showToast('🔑 Key copied to clipboard!'); }
 }
 
 // LootLabs callback lands here: /getkey/callback (puid comes from localStorage)
@@ -321,5 +321,6 @@ function resumePendingSession() {
 loadCurrentKey();
 loadDiscordStatus();
 </script>
+<script src="/effects.js"></script>
 </body>
 </html>

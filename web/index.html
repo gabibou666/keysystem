@@ -147,6 +147,7 @@ function countUp(el, target, duration = 1200) {
         localStorage.removeItem(PUID_STORAGE);
         loadKeyInfo();
         setStatus('🎉 Your key is ready! Copy it above.', 'ok');
+        showToast('🎉 Your key is ready!', 'ok');
       }
     } catch {}
   }, 3000);
@@ -266,12 +267,13 @@ function tickCountdown(target) {
 
 function copyKey() {
   const v = document.getElementById('keybox').value;
-  if (v) { navigator.clipboard.writeText(v); setStatus('Key copied!', 'ok'); }
+  if (v) { navigator.clipboard.writeText(v); setStatus('Key copied!', 'ok'); showToast('🔑 Key copied to clipboard!'); }
 }
 
 function copyLoader() {
   navigator.clipboard.writeText(document.getElementById('loaderCode').textContent);
   setStatus('Loader copied!', 'ok');
+  showToast('📋 Loader copied to clipboard!');
 }
 
 document.getElementById('loaderCode').textContent =
@@ -284,5 +286,6 @@ loadActivity();
 setInterval(loadStats, 30000);
 setInterval(loadActivity, 30000);
 </script>
+<script src="/effects.js"></script>
 </body>
 </html>
