@@ -367,18 +367,47 @@ router.post('/script/publish', requireAdmin, async (req, res) => {
     });
   }
 
-  // Desactive uniquement les builds du MEME jeu (ou les builds "tous jeux" si place_id null)
-  if (placeId) {
-    await pool.query('UPDATE script_builds SET active = false WHERE active = true AND place_id = $1', [placeId]);
-  } else {
-    await pool.query('UPDATE script_builds SET active = false WHERE active = true AND place_id IS NULL');
+  // AUTO-SUPPRESSION: publier une version pour un jeu supprime automatiquement
+  // toutes les anciennes versions de CE jeu (builds + versions + patches orphelins).
+  // Le dashboard reste propre: un PlaceId = UNE version en cours.
+  const verRow = ver.rows[0];
+
+  // 1. Anciennes versions du meme PlaceId (hors celle qu'on publie)
+  const oldVersions = await pool.query(
+    `SELECT v.id, v.version FROM script_versions v
+     WHERE v.place_id IS NOT DISTINCT FROM $1 AND v.id <> $2`,
+    [placeId, verRow.id]
+  );
+  let removedVersions = 0;
+  if (oldVersions.rows.length) {
+    const oldIds = oldVersions.rows.map((r) => r.id);
+    // Ordonne: detach executions -> patches -> builds -> versions (respect des FK)
+    await pool.query(
+      `UPDATE executions SET build_id = NULL WHERE build_id IN (SELECT id FROM script_builds WHERE version_id = ANY($1::int[]))`,
+      [oldIds]
+    );
+    await pool.query(
+      `DELETE FROM ai_patches WHERE build_id IN (SELECT id FROM script_builds WHERE version_id = ANY($1::int[]))`,
+      [oldIds]
+    );
+    await pool.query(`DELETE FROM script_builds WHERE version_id = ANY($1::int[])`, [oldIds]);
+    await pool.query(`DELETE FROM script_versions WHERE id = ANY($1::int[])`, [oldIds]);
+    removedVersions = oldIds.length;
   }
+
+  // 2. Builds inactifs restants du meme jeu (securite: il n'en reste qu'un — le nouveau)
+  await pool.query(
+    `DELETE FROM script_builds WHERE version_id = $2 OR (place_id IS NOT DISTINCT FROM $1 AND version <> $3)`,
+    [placeId, verRow.id, version]
+  );
+
+  // 3. Active la version publiee
   await pool.query('UPDATE script_builds SET active = true WHERE version = $1', [version]);
   await pool.query(
     'UPDATE script_versions SET published = true, published_at = now() WHERE version = $1',
     [version]
   );
-  res.json({ success: true });
+  res.json({ success: true, removedOldVersions: removedVersions });
 });
 
 // ---------- PATCHS IA ----------

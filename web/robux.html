@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pay with Robux</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<nav>
+  <a class="logo" href="/" style="text-decoration:none;color:inherit"><div class="logo-badge">🔑</div> KeySystem</a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/getkey">Free key</a>
+    <a href="/changelog">Changelog</a>
+  </div>
+</nav>
+
+<main>
+  <section class="hero" style="padding-bottom: 30px;">
+    <h1>Pay with Robux</h1>
+    <p>Skip the ads — buy a key directly with Robux. Instant delivery, bound to your Roblox account.</p>
+  </section>
+
+  <!-- Offers -->
+  <section class="keypanel">
+    <h2>1 · Choose your offer</h2>
+    <p class="sub">Click "Buy on Roblox" — the game pass page opens in a new tab.</p>
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px;" id="offersGrid">
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+    </div>
+    <div id="offersNote" class="status"></div>
+  </section>
+
+  <!-- Verify -->
+  <section class="keypanel" id="verifyCard">
+    <h2>2 · Verify your purchase</h2>
+    <p class="sub">Enter the Roblox username you bought the pass with.</p>
+    <div class="keybox" style="margin-bottom: 12px;">
+      <input id="username" placeholder="Roblox username" style="flex:1; background:transparent; border:none; outline:none; color:var(--text); font-size:15px; padding:10px 12px;">
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+      <select id="offerSelect" style="background:var(--color-input); border:1px solid var(--color-border-violet); border-radius:10px; color:var(--text); padding:11px 12px; font-size:14px;">
+        <option value="">Select your offer…</option>
+      </select>
+      <button class="btn" id="verifyBtn" onclick="startVerify()">I paid — verify</button>
+    </div>
+    <div id="verifyStatus" class="status"></div>
+  </section>
+
+  <!-- Result -->
+  <section class="keypanel hidden" id="resultCard">
+    <h2 id="resultTitle">🎉 Key delivered!</h2>
+    <p class="sub" id="resultSub">Copy it into the loader — it's bound to your Roblox account.</p>
+    <div id="newKey" class="codebox" style="color: var(--accent);"></div>
+    <div style="margin-top: 16px; display:flex; gap: 12px; flex-wrap:wrap;">
+      <button class="btn small" onclick="copyKey()">📋 Copy key</button>
+      <a class="btn small secondary" href="/">← Back home</a>
+    </div>
+  </section>
+</main>
+
+<!-- Key modal -->
+<div class="modal-overlay" id="keyModal">
+  <div class="modal neon-frame">
+    <div class="modal-icon">💎</div>
+    <h2 id="modalTitle">Key delivered!</h2>
+    <p class="modal-sub">Paid with Robux — bound to your account.</p>
+    <div class="keycode" id="modalKey">...</div>
+    <p class="expires" id="modalExpires"></p>
+    <div class="modal-actions">
+      <button class="btn small" onclick="copyModalKey()">📋 Copy key</button>
+      <button class="btn small secondary" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Powered by LootLabs · <a href="/">Home</a> · Robux payments via game passes
+</footer>
+
+<script>
+const KEY_STORAGE = 'keysystem_key';
+
+// ===== Offers =====
+async function loadOffers() {
+  try {
+    const r = await fetch('/api/robux/offers');
+    const d = await r.json();
+    const grid = document.getElementById('offersGrid');
+    if (!d.offers || !d.offers.length) {
+      grid.innerHTML = '<p class="games-empty">No offers available.</p>';
+      return;
+    }
+    grid.innerHTML = d.offers.map(o => `
+      <div class="card" style="text-align:center; padding: 24px 16px; cursor:${o.configured ? 'default' : 'not-allowed'};">
+        <div style="font-size: 26px; font-weight: 700; background: linear-gradient(135deg,#d8b4fe,#c084fc); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">${o.name}</div>
+        <p style="margin-top: 6px;"><b style="color: var(--accent);">${o.priceR$} R$</b></p>
+        ${o.configured
+          ? `<a class="btn small ${o.configured ? '' : 'disabled'}" style="margin-top: 12px;" href="${o.buyUrl}" target="_blank" rel="noopener" onclick="preselect('${o.sku}')">🛒 Buy on Roblox</a>`
+          : `<p style="color: var(--color-muted-2); font-size: 12px; margin-top: 10px;">Coming soon</p>`}
+      </div>
+    `).join('');
+    // Options du select
+    const sel = document.getElementById('offerSelect');
+    d.offers.filter(o => o.configured).forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o.sku;
+      opt.textContent = `${o.name} — ${o.priceR$} R$`;
+      sel.appendChild(opt);
+    });
+    if (d.offers.some(o => !o.configured)) {
+      document.getElementById('offersNote').textContent = 'Some offers are not configured yet.';
+    }
+  } catch {
+    document.getElementById('offersGrid').innerHTML = '<p class="games-empty">Failed to load offers.</p>';
+  }
+}
+
+function preselect(sku) {
+  // Quand l'utilisateur clique Buy, pre-selectionne l'offre pour la verif
+  const sel = document.getElementById('offerSelect');
+  sel.value = sku;
+  document.getElementById('verifyStatus').textContent = '';
+}
+
+// ===== Verify + polling =====
+let pollTimer = null;
+let pollEnd = 0;
+
+async function verifyOnce(username, sku) {
+  const r = await fetch('/api/robux/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, offer_sku: sku }),
+  });
+  return r.json();
+}
+
+async function startVerify() {
+  const username = document.getElementById('username').value.trim();
+  const sku = document.getElementById('offerSelect').value;
+  const status = document.getElementById('verifyStatus');
+  const btn = document.getElementById('verifyBtn');
+
+  if (!username || !sku) {
+    status.textContent = '⚠️ Enter your username and select your offer.';
+    status.className = 'status err';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.classList.add('disabled');
+  status.textContent = '⏳ Checking your purchase on Roblox…';
+  status.className = 'status';
+
+  try {
+    const d = await verifyOnce(username, sku);
+
+    if (d.success && d.key) {
+      deliverKey(d);
+      return;
+    }
+    if (d.status === 'already_used') {
+      if (d.key) {
+        deliverKey(d, true); // deja utilise MAIS on montre sa cle (c'est la sienne)
+      } else {
+        status.textContent = '⛔ This game pass has already been used by another session.';
+        status.className = 'status err';
+      }
+      return;
+    }
+    if (d.status === 'not_found') {
+      status.textContent = '❌ Roblox account not found — check the username.';
+      status.className = 'status err';
+      return;
+    }
+    if (d.status === 'pending') {
+      // Polling auto: 10s pendant ~2 min
+      status.textContent = '⏳ Purchase not detected yet — Roblox can take 1-2 minutes. Checking automatically…';
+      status.className = 'status';
+      pollEnd = Date.now() + 2 * 60 * 1000;
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(async () => {
+        if (Date.now() > pollEnd) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          status.textContent = '⚠️ Still not detected after 2 minutes — verify you bought the right pass, then try again.';
+          status.className = 'status err';
+          return;
+        }
+        try {
+          const p = await verifyOnce(username, sku);
+          if (p.success && p.key) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+            deliverKey(p);
+          } else if (p.status === 'already_used' && p.key) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+            deliverKey(p, true);
+          }
+        } catch {}
+      }, 10000);
+      return;
+    }
+    if (d.status === 'rate_limited') {
+      status.textContent = '⛔ Too many attempts — wait a minute.';
+      status.className = 'status err';
+      return;
+    }
+    status.textContent = '❌ ' + (d.error || 'Unexpected error.');
+    status.className = 'status err';
+  } catch {
+    status.textContent = 'Network error — try again.';
+    status.className = 'status err';
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('disabled');
+  }
+}
+
+function deliverKey(d, wasUsed) {
+  document.getElementById('verifyCard').classList.add('hidden');
+  const card = document.getElementById('resultCard');
+  card.classList.remove('hidden');
+  document.getElementById('resultTitle').textContent = wasUsed ? '✅ Your key (already delivered)' : '🎉 Key delivered!';
+  document.getElementById('resultSub').textContent = 'Bound to ' + (d.robloxUser || 'your Roblox account') + ' — paste it into the loader.';
+  const el = document.getElementById('newKey');
+  el.textContent = d.key;
+  // Sauvegarde locale + modal
+  localStorage.setItem(KEY_STORAGE, d.key);
+  document.getElementById('modalKey').textContent = d.key;
+  if (d.expiresAt) {
+    document.getElementById('modalExpires').textContent = 'Valid until ' + new Date(d.expiresAt).toLocaleString('en-US');
+  }
+  document.getElementById('keyModal').classList.add('open');
+  if (window.showToast) showToast('💎 Your Robux key is ready!');
+}
+
+function copyKey() {
+  const v = document.getElementById('newKey').textContent;
+  if (v) navigator.clipboard.writeText(v);
+  if (window.showToast) showToast('🔑 Key copied!');
+}
+function copyModalKey() {
+  const v = document.getElementById('modalKey').textContent;
+  if (v) navigator.clipboard.writeText(v);
+  if (window.showToast) showToast('🔑 Key copied!');
+}
+function closeModal() { document.getElementById('keyModal').classList.remove('open'); }
+document.getElementById('keyModal').addEventListener('click', e => { if (e.target.id === 'keyModal') closeModal(); });
+
+loadOffers();
+</script>
+<script src="/effects.js"></script>
+</body>
+</html>

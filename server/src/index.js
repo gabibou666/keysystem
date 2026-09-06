@@ -6,6 +6,7 @@ const path = require('path');
 const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
 const discordRoutes = require('./routes/discord');
+const robuxRoutes = require('./routes/robux');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -55,6 +56,7 @@ app.use(express.static(webDir, { extensions: ['html'] }));
 app.use('/api', apiRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/discord', discordRoutes.router);
+app.use('/api/robux', robuxRoutes);
 
 // OAuth Discord: redirect configure dans Discord = /admin/auth/callback
 app.use('/admin', adminRoutes);
@@ -72,6 +74,11 @@ app.get('/getkey/callback', (req, res) => {
     console.log('[getkey/callback] referer non-LootLabs:', req.headers.referer || '(none)');
   }
   res.sendFile(path.join(webDir, 'getkey.html'));
+});
+
+// Page paiement Robux
+app.get('/robux/', (req, res) => {
+  res.sendFile(path.join(webDir, 'robux.html'));
 });
 
 // /admin -> dashboard
