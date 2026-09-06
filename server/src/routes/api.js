@@ -395,73 +395,33 @@ router.get('/games/public', async (req, res) => {
 });
 
 // ---------- GET /api/activity/public ----------
-// Feed d'activite public: dernieres executions (utilisateurs du script) + liveNow
+// Stats d'activite publiques: NOMBRES uniquement (anonyme - pas de pseudos)
 router.get('/activity/public', async (req, res) => {
   try {
-    const LIVE_WINDOW_MIN = 15;
-
-    // Dernieres executions distinctes par utilisateur (le plus recent par user)
-    const { rows: execs } = await pool.query(
-      `SELECT DISTINCT ON (user_id) user_id, executor, version, created_at
-       FROM executions
-       ORDER BY user_id, created_at DESC
-       LIMIT 50`
-    );
-
-    // liveNow: users ayant execute dans les 15 dernieres minutes
-    const liveQ = execs.filter(
-      (e) => new Date(e.created_at).getTime() > Date.now() - LIVE_WINDOW_MIN * 60000
-    ).length;
-
-    if (!execs.length) {
-      return res.json({ success: true, activity: [], liveNow: 0, totalUsers: 0 });
-    }
-
-    // Infos Roblox (pseudo + avatar, cache)
-    const userIds = execs.map((e) => e.user_id);
-    const usersInfo = await getUsersInfo(userIds);
-    const infoMap = new Map(usersInfo.map((u) => [u.userId, u]));
-
-    // Jeu de chaque version (place_id du build)
-    const versionIds = [...new Set(execs.map((e) => e.version))];
-    const { rows: builds } = await pool.query(
-      'SELECT DISTINCT ON (version) version, place_id FROM script_builds WHERE version = ANY($1::int[]) ORDER BY version, created_at DESC',
-      [versionIds]
-    );
-    const placeMap = new Map(builds.map((b) => [parseInt(b.version, 10), b.place_id ? parseInt(b.place_id, 10) : null]));
-    const placeIds = [...new Set([...placeMap.values()].filter((p) => p != null))];
-    const gamesInfo = await Promise.all(placeIds.map((p) => getGameInfo(p)));
-    const gameMap = new Map(gamesInfo.map((g) => [g.placeId, g.name]));
-
-    const activity = execs
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, 20)
-      .map((e) => {
-        const info = infoMap.get(parseInt(e.user_id, 10)) || {};
-        const placeId = placeMap.get(parseInt(e.version, 10)) || null;
-        return {
-          userId: parseInt(e.user_id, 10),
-          username: info.username || `user_${e.user_id}`,
-          display: info.display || info.username || `User ${e.user_id}`,
-          avatarUrl: info.avatarUrl || null,
-          executor: e.executor || 'Unknown',
-          version: parseInt(e.version, 10),
-          game: placeId ? gameMap.get(placeId) || `Game ${placeId}` : null,
-          at: e.created_at,
-        };
-      });
-
-    const { rows: totalQ } = await pool.query('SELECT COUNT(DISTINCT user_id)::int AS c FROM executions');
-
+    const [onlineQ, usersTodayQ, execTodayQ, totalUsersQ] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(DISTINCT user_id)::int AS c FROM executions
+         WHERE created_at > now() - interval '15 minutes'`
+      ),
+      pool.query(
+        `SELECT COUNT(DISTINCT user_id)::int AS c FROM executions
+         WHERE created_at > date_trunc('day', now())`
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS c FROM executions WHERE created_at > date_trunc('day', now())`
+      ),
+      pool.query('SELECT COUNT(DISTINCT user_id)::int AS c FROM executions'),
+    ]);
     res.json({
       success: true,
-      activity,
-      liveNow: liveQ,
-      totalUsers: totalQ[0].c,
+      onlineNow: onlineQ.rows[0].c,
+      usersToday: usersTodayQ.rows[0].c,
+      executionsToday: execTodayQ.rows[0].c,
+      totalUsers: totalUsersQ.rows[0].c,
     });
   } catch (e) {
     console.error('[activity/public]', e);
-    res.json({ success: true, activity: [], liveNow: 0, totalUsers: 0 });
+    res.json({ success: true, onlineNow: 0, usersToday: 0, executionsToday: 0, totalUsers: 0 });
   }
 });
 
