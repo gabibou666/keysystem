@@ -452,6 +452,25 @@ async function rejectPatch(id) { await api(`/patches/${id}/reject`, { method: 'P
   } catch { showLogin(); }
 })();
 </script>
-<script src="/effects.js"></script>
+<script src="/effects.js" defer onload="this.dataset.loaded='1'"></script>
+<script>
+// Admin: neutralise le canvas particules/glow si jamais une version non-fixee est servie
+// (ceinture de securite le temps que le deploiement Render du CSS embarque soit actif)
+(function () {
+  var kill = function () {
+    var c = document.getElementById('ks-particles');
+    if (c) c.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:0;';
+    var g = document.getElementById('ks-glow');
+    if (g) g.style.cssText = 'position:fixed;pointer-events:none;z-index:0;margin:-170px 0 0 -170px;left:-500px;top:-500px;width:340px;height:340px;';
+    var p = document.getElementById('ks-progress');
+    if (p) p.style.cssText = 'position:fixed;top:0;left:0;height:3px;z-index:1000;pointer-events:none;';
+    var t = document.getElementById('ks-toasts');
+    if (t) t.style.cssText = 'position:fixed;bottom:22px;right:22px;z-index:1001;pointer-events:none;';
+  };
+  kill();
+  setTimeout(kill, 50);
+  setTimeout(kill, 500);
+})();
+</script>
 </body>
 </html>
