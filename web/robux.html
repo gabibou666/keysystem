@@ -38,16 +38,13 @@
   <!-- Verify -->
   <section class="keypanel" id="verifyCard">
     <h2>2 · Verify your purchase</h2>
-    <p class="sub">Enter the Roblox username you bought the pass with.</p>
+    <p class="sub">Enter the Roblox username you bought the pass with, then pick your offer.</p>
     <div class="keybox" style="margin-bottom: 12px;">
       <input id="username" placeholder="Roblox username" style="flex:1; background:transparent; border:none; outline:none; color:var(--text); font-size:15px; padding:10px 12px;">
     </div>
-    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-      <select id="offerSelect" style="background:var(--color-input); border:1px solid var(--color-border-violet); border-radius:10px; color:var(--text); padding:11px 12px; font-size:14px;">
-        <option value="">Select your offer…</option>
-      </select>
-      <button class="btn" id="verifyBtn" onclick="startVerify()">I paid — verify</button>
-    </div>
+    <p class="sub" style="margin-bottom:8px;">Your offer:</p>
+    <div id="offerButtons" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;"></div>
+    <button class="btn" id="verifyBtn" onclick="startVerify()">I paid — verify</button>
     <div id="verifyStatus" class="status"></div>
   </section>
 
@@ -86,6 +83,8 @@
 const KEY_STORAGE = 'keysystem_key';
 
 // ===== Offers =====
+let selectedSku = null;
+
 async function loadOffers() {
   try {
     const r = await fetch('/api/robux/offers');
@@ -96,35 +95,44 @@ async function loadOffers() {
       return;
     }
     grid.innerHTML = d.offers.map(o => `
-      <div class="card" style="text-align:center; padding: 24px 16px; cursor:${o.configured ? 'default' : 'not-allowed'};">
+      <div class="card" style="text-align:center; padding: 24px 16px;">
         <div style="font-size: 26px; font-weight: 700; background: linear-gradient(135deg,#d8b4fe,#c084fc); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">${o.name}</div>
         <p style="margin-top: 6px;"><b style="color: var(--accent);">${o.priceR$} R$</b></p>
         ${o.configured
-          ? `<a class="btn small ${o.configured ? '' : 'disabled'}" style="margin-top: 12px;" href="${o.buyUrl}" target="_blank" rel="noopener" onclick="preselect('${o.sku}')">🛒 Buy on Roblox</a>`
+          ? `<a class="btn small" style="margin-top: 12px;" href="${o.buyUrl}" target="_blank" rel="noopener" onclick="preselect('${o.sku}')">🛒 Buy on Roblox</a>`
           : `<p style="color: var(--color-muted-2); font-size: 12px; margin-top: 10px;">Coming soon</p>`}
       </div>
     `).join('');
-    // Options du select
-    const sel = document.getElementById('offerSelect');
+
+    // Boutons de selection d'offre (remplace le select natif)
+    const btnsWrap = document.getElementById('offerButtons');
+    btnsWrap.innerHTML = '';
     d.offers.filter(o => o.configured).forEach(o => {
-      const opt = document.createElement('option');
-      opt.value = o.sku;
-      opt.textContent = `${o.name} — ${o.priceR$} R$`;
-      sel.appendChild(opt);
+      const b = document.createElement('button');
+      b.className = 'btn small secondary offer-btn';
+      b.dataset.sku = o.sku;
+      b.textContent = `${o.name} — ${o.priceR$} R$`;
+      b.onclick = () => selectOffer(o.sku);
+      btnsWrap.appendChild(b);
     });
-    if (d.offers.some(o => !o.configured)) {
-      document.getElementById('offersNote').textContent = 'Some offers are not configured yet.';
+    if (!d.offers.some(o => o.configured)) {
+      btnsWrap.innerHTML = '<p class="sub">No offers configured yet.</p>';
     }
   } catch {
     document.getElementById('offersGrid').innerHTML = '<p class="games-empty">Failed to load offers.</p>';
   }
 }
 
-function preselect(sku) {
-  // Quand l'utilisateur clique Buy, pre-selectionne l'offre pour la verif
-  const sel = document.getElementById('offerSelect');
-  sel.value = sku;
+function selectOffer(sku) {
+  selectedSku = sku;
+  document.querySelectorAll('.offer-btn').forEach(b => b.classList.toggle('copied', b.dataset.sku === sku));
   document.getElementById('verifyStatus').textContent = '';
+}
+
+function preselect(sku) {
+  // Clic sur "Buy on Roblox": pre-selectionne l'offre pour la verification
+  selectOffer(sku);
+  document.getElementById('verifyCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 // ===== Verify + polling =====
@@ -142,12 +150,14 @@ async function verifyOnce(username, sku) {
 
 async function startVerify() {
   const username = document.getElementById('username').value.trim();
-  const sku = document.getElementById('offerSelect').value;
+  const sku = selectedSku;
   const status = document.getElementById('verifyStatus');
   const btn = document.getElementById('verifyBtn');
 
   if (!username || !sku) {
-    status.textContent = '⚠️ Enter your username and select your offer.';
+    status.textContent = !username
+      ? '⚠️ Enter your Roblox username.'
+      : '⚠️ Pick your offer (buttons above).';
     status.className = 'status err';
     return;
   }

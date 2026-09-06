@@ -15,8 +15,21 @@
 const pool = require('../db');
 
 // ===== Offres (prix hardcodes — brief: "NE PAS interroger d'API de prix") =====
-// Les gamepass_id sont configures via .env (ROBUX_PASS_DAY1 etc.)
+// Gamepass IDs: valeurs par defaut = tes gamepass reellement crees.
+// L'env (ROBUX_PASS_*) peut les surcharger, mais le site marche meme sans config.
 // Roblox prend ~30%: prix affiche = ce que paye l'acheteur.
+const DEFAULT_GAMEPASS = {
+  day1: 1970709260,
+  week1: 1966371114,
+  month1: 1970613300,
+  lifetime: 1969069565,
+};
+
+function envOr(key, fallback) {
+  const v = parseInt(process.env[key], 10);
+  return Number.isFinite(v) ? v : fallback;
+}
+
 function getOffers() {
   return [
     {
@@ -24,28 +37,28 @@ function getOffers() {
       name: '1 Day',
       durationHours: 24,
       priceR$: 50,
-      gamepassId: process.env.ROBUX_PASS_DAY1 ? parseInt(process.env.ROBUX_PASS_DAY1, 10) : null,
+      gamepassId: envOr('ROBUX_PASS_DAY1', DEFAULT_GAMEPASS.day1),
     },
     {
       sku: 'week1',
       name: '7 Days',
       durationHours: 24 * 7,
       priceR$: 250,
-      gamepassId: process.env.ROBUX_PASS_WEEK1 ? parseInt(process.env.ROBUX_PASS_WEEK1, 10) : null,
+      gamepassId: envOr('ROBUX_PASS_WEEK1', DEFAULT_GAMEPASS.week1),
     },
     {
       sku: 'month1',
       name: '30 Days',
       durationHours: 24 * 30,
       priceR$: 750,
-      gamepassId: process.env.ROBUX_PASS_MONTH1 ? parseInt(process.env.ROBUX_PASS_MONTH1, 10) : null,
+      gamepassId: envOr('ROBUX_PASS_MONTH1', DEFAULT_GAMEPASS.month1),
     },
     {
       sku: 'lifetime',
       name: 'Lifetime',
       durationHours: 24 * 365 * 100, // ~100 ans: lifetime pratique
       priceR$: 2000,
-      gamepassId: process.env.ROBUX_PASS_LIFETIME ? parseInt(process.env.ROBUX_PASS_LIFETIME, 10) : null,
+      gamepassId: envOr('ROBUX_PASS_LIFETIME', DEFAULT_GAMEPASS.lifetime),
     },
   ];
 }
