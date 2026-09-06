@@ -60,11 +60,13 @@ router.get('/callback', async (req, res) => {
     await discord.upsertJoin(user.id, username, user.avatar, join.joined);
 
     // Cookie session user signe
+    const isHttps = req.secure || (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
     res.cookie(discord.USER_COOKIE, discord.signUserCookie(user.id), {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isHttps,
       sameSite: 'lax',
       maxAge: discord.USER_TTL_MS,
+      path: '/',
     });
 
     res.redirect('/getkey?login=ok');

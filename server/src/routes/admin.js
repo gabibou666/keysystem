@@ -34,11 +34,14 @@ router.get('/auth/callback', async (req, res) => {
       return res.status(403).send('Ce compte Discord n est pas administrateur.');
     }
     const token = await auth.createSession(user.id);
+    // secure: base sur la requete reelle (Render = toujours HTTPS) plutot que NODE_ENV
+    const isHttps = req.secure || (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
     res.cookie('ks_admin', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isHttps,
       sameSite: 'lax',
       maxAge: auth.SESSION_DURATION_MS,
+      path: '/',
     });
     res.redirect('/admin/');
   } catch (e) {

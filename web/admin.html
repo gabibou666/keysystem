@@ -179,6 +179,7 @@ const API = '/api/admin';
 async function api(path, opts = {}) {
   const r = await fetch(API + path, {
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
     ...opts,
   });
   if (r.status === 401) { showLogin(); throw new Error('unauthorized'); }
@@ -197,7 +198,7 @@ function showMain() {
 }
 
 async function logout() {
-  await fetch(API + '/auth/logout', { method: 'POST' });
+  await fetch(API + '/auth/logout', { method: 'POST', credentials: 'same-origin' });
   showLogin();
 }
 
@@ -445,7 +446,7 @@ async function rejectPatch(id) { await api(`/patches/${id}/reject`, { method: 'P
 // ---- INIT ----
 (async function init() {
   try {
-    const me = await fetch(API + '/me').then(r => r.json());
+    const me = await fetch(API + '/me', { credentials: 'same-origin' }).then(r => r.json());
     if (me.loggedIn) { showMain(); showTab('stats'); }
     else showLogin();
   } catch { showLogin(); }
