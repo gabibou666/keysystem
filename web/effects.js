@@ -10,16 +10,16 @@
 
   /* ---------- 0. Styles embarques (autonome: marche sans style.css) ---------- */
   var css = [
-    '#ks-progress{position:fixed;top:0;left:0;height:3px;width:0;background:linear-gradient(90deg,#0078d4,#60cdff,#a5d8ff);z-index:1000;border-radius:0 3px 3px 0;box-shadow:0 0 12px #60cdff88;transition:width .1s linear;pointer-events:none;}',
+    '#ks-progress{position:fixed;top:0;left:0;height:3px;width:100%;background:linear-gradient(90deg,#7c3aed,#c084fc,#e9d5ff);z-index:1000;border-radius:0 3px 3px 0;box-shadow:0 0 14px #c084fc99;transform-origin:left;transform:scaleX(0);pointer-events:none;will-change:transform;}',
     '#ks-particles{position:fixed;inset:0;z-index:0;pointer-events:none;}',
-    '#ks-glow{position:fixed;width:340px;height:340px;margin:-170px 0 0 -170px;left:-500px;top:-500px;background:radial-gradient(circle,#0078d424 0%,transparent 65%);pointer-events:none;z-index:0;will-change:left,top;}',
+    '#ks-glow{position:fixed;width:340px;height:340px;margin:-170px 0 0 -170px;left:-500px;top:-500px;background:radial-gradient(circle,#8b5cf626 0%,transparent 65%);pointer-events:none;z-index:0;will-change:left,top;}',
     '#ks-toasts{position:fixed;bottom:22px;right:22px;z-index:1001;display:flex;flex-direction:column;gap:10px;pointer-events:none;}',
-    '.toast{background:#2d2d2df0;border:1px solid #6ccb5f55;color:#dff5e0;padding:12px 18px;border-radius:12px;font-size:14px;box-shadow:0 8px 30px #00000070;animation:ksToastIn .35s cubic-bezier(.2,.9,.3,1.2) both;backdrop-filter:blur(10px);font-family:Segoe UI,system-ui,sans-serif;}',
+    '.toast{background:#131018f0;border:1px solid #c084fc55;color:#f3e8ff;padding:12px 18px;border-radius:12px;font-size:14px;box-shadow:0 8px 30px #00000080,0 0 24px #7c3aed26;animation:ksToastIn .35s cubic-bezier(.2,.9,.3,1.2) both;backdrop-filter:blur(10px);font-family:Segoe UI,system-ui,sans-serif;}',
     '.toast.err{border-color:#f1646455;color:#ffd9de;}',
     '.toast.out{animation:ksToastOut .25s ease both;}',
     '@keyframes ksToastIn{from{opacity:0;transform:translateX(40px) scale(.9);}to{opacity:1;transform:translateX(0) scale(1);}}',
     '@keyframes ksToastOut{to{opacity:0;transform:translateX(40px) scale(.9);}}',
-    '.ks-ripple{position:absolute;border-radius:50%;background:#ffffff55;transform:scale(0);animation:ksRip .6s ease-out forwards;pointer-events:none;}',
+    '.ks-ripple{position:absolute;border-radius:50%;background:#c084fc55;transform:scale(0);animation:ksRip .55s ease-out forwards;pointer-events:none;}',
     '@keyframes ksRip{to{transform:scale(2.6);opacity:0;}}',
     'body > main, body > nav, body > footer, body > .keypanel, body > .games-grid, body > .activity-panel, body > .login, body > table, body > form, body > .panel, body > .grid, body > .stats, body > .games-head, body > .activity-head {position: relative; z-index: 1;}',
     '@media (prefers-reduced-motion: reduce){#ks-particles,#ks-glow,.ks-ripple{display:none !important;}}'
@@ -29,14 +29,15 @@
   styleEl.textContent = css;
   document.head.appendChild(styleEl);
 
-  /* ---------- 1. Scroll progress bar ---------- */
+  /* ---------- 1. Scroll progress bar (scaleX = GPU, pas de reflow width) ---------- */
   var bar = document.createElement('div');
   bar.id = 'ks-progress';
   document.body.appendChild(bar);
   function updProgress() {
     var h = document.documentElement;
     var max = h.scrollHeight - h.clientHeight;
-    bar.style.width = (max > 0 ? (h.scrollTop / max) * 100 : 0) + '%';
+    var p = max > 0 ? h.scrollTop / max : 0;
+    bar.style.transform = 'scaleX(' + p.toFixed(4) + ')';
   }
   window.addEventListener('scroll', updProgress, { passive: true });
   window.addEventListener('resize', updProgress);
@@ -157,7 +158,7 @@
       if (p.y > H + 10) p.y = -10;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, 7);
-      ctx.fillStyle = 'rgba(96,205,255,0.35)';
+      ctx.fillStyle = 'rgba(192,132,252,0.38)';
       ctx.fill();
     }
     for (i = 0; i < parts.length; i++) {
@@ -169,7 +170,7 @@
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
           ctx.lineTo(b.x, b.y);
-          ctx.strokeStyle = 'rgba(0,120,212,' + (0.14 * (1 - d / 12000)).toFixed(3) + ')';
+          ctx.strokeStyle = 'rgba(168,85,247,' + (0.14 * (1 - d / 12000)).toFixed(3) + ')';
           ctx.stroke();
         }
       }

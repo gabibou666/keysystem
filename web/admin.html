@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin</title>
 <style>
-:root { --bg:#121218; --card:#1b1b23; --accent:#5865f2; --green:#2ea053; --red:#f16464; --text:#eef0f4; --muted:#969ba6; }
+:root { --bg:#0e0b16; --card:#1c1728; --accent:#a855f7; --green:#a855f7; --red:#f16464; --text:#eef0f4; --muted:#969ba6; }
 * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',system-ui,sans-serif; }
 body { background:var(--bg); color:var(--text); min-height:100vh; }
-nav { display:flex; align-items:center; gap:22px; padding:16px 30px; border-bottom:1px solid #232330; }
+nav { display:flex; align-items:center; gap:22px; padding:16px 30px; border-bottom:1px solid #231c33; }
 nav .logo { font-weight:700; font-size:19px; margin-right:auto; }
 nav button, nav .tab { background:none; border:none; color:var(--muted); font-size:15px; cursor:pointer; padding:6px 10px; border-radius:8px; }
-nav .tab.active { color:var(--text); background:#232330; }
+nav .tab.active { color:var(--text); background:#231c33; }
 nav button:hover { color:var(--text); }
 main { max-width:1080px; margin:26px auto; padding:0 18px; }
 .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-bottom:26px; }
@@ -21,10 +21,10 @@ main { max-width:1080px; margin:26px auto; padding:0 18px; }
 .panel { background:var(--card); border-radius:14px; padding:24px; margin-bottom:22px; }
 .panel h3 { margin-bottom:16px; }
 table { width:100%; border-collapse:collapse; font-size:14px; }
-th, td { text-align:left; padding:9px 10px; border-bottom:1px solid #232330; color:var(--muted); }
+th, td { text-align:left; padding:9px 10px; border-bottom:1px solid #231c33; color:var(--muted); }
 th { color:var(--muted); font-weight:600; }
 td.mono { font-family:Consolas,monospace; font-size:12.5px; }
-input, textarea, select { background:#232330; border:1px solid #2e2e3d; border-radius:8px; color:var(--text); padding:10px 12px; font-size:14px; }
+input, textarea, select { background:#231c33; border:1px solid #2e2542; border-radius:8px; color:var(--text); padding:10px 12px; font-size:14px; }
 textarea.code { width:100%; height:340px; font-family:Consolas,monospace; font-size:13px; white-space:pre; }
 .btn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:10px 20px; font-size:14px; font-weight:600; cursor:pointer; margin-right:8px; margin-top:10px; }
 .btn:hover { filter:brightness(1.1); }
@@ -33,9 +33,9 @@ textarea.code { width:100%; height:340px; font-family:Consolas,monospace; font-s
 .btn.green { background:var(--green); }
 .btn.ghost { background:transparent; border:1px solid #3a3a4d; color:var(--text); }
 .msg { margin-top:10px; font-size:14px; min-height:20px; }
-.patch { background:#232330; border-radius:10px; padding:16px; margin-bottom:12px; }
-.patch pre { background:#0d0d12; padding:10px; border-radius:8px; font-size:12px; overflow:auto; margin:8px 0; }
-.bar { height:10px; background:#232330; border-radius:6px; overflow:hidden; margin-top:6px; }
+.patch { background:#231c33; border-radius:10px; padding:16px; margin-bottom:12px; }
+.patch pre { background:#13101c; padding:10px; border-radius:8px; font-size:12px; overflow:auto; margin:8px 0; }
+.bar { height:10px; background:#231c33; border-radius:6px; overflow:hidden; margin-top:6px; }
 .bar > div { height:100%; background:var(--accent); }
 .login { text-align:center; margin-top:120px; }
 .hidden { display:none; }
@@ -43,7 +43,7 @@ select { margin-right:8px; }
 .split { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
 @media (max-width:800px){ .split { grid-template-columns:1fr; } }
 .diff del { color:#f16464; background:rgba(241,100,100,.12); text-decoration:none; }
-.diff ins { color:#2ea053; background:rgba(46,160,83,.12); text-decoration:none; }
+.diff ins { color:#a855f7; background:rgba(168,85,247,.12); text-decoration:none; }
 </style>
 </head>
 <body>
@@ -145,10 +145,10 @@ select { margin-right:8px; }
 
 <!-- Modal: created keys -->
 <div style="position:fixed;inset:0;background:#000000aa;z-index:100;display:none;place-items:center;" id="createdModal" onclick="if(event.target===this)this.style.display='none'">
-  <div style="background:var(--card);border:1px solid #2e2e3d;border-radius:14px;padding:28px;max-width:560px;width:calc(100vw - 40px);max-height:80vh;overflow:auto;">
+  <div style="background:var(--card);border:1px solid #2e2542;border-radius:14px;padding:28px;max-width:560px;width:calc(100vw - 40px);max-height:80vh;overflow:auto;">
     <h3 style="margin-bottom:6px;">✅ <span id="createdCount"></span> keys created</h3>
     <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">Valid <span id="createdDuration"></span> — share them!</p>
-    <textarea id="createdKeys" rows="8" readonly style="width:100%;font-family:Consolas,monospace;font-size:12px;background:#0d0d12;border:1px solid #232330;border-radius:8px;color:#9ecbff;padding:12px;user-select:all;"></textarea>
+    <textarea id="createdKeys" rows="8" readonly style="width:100%;font-family:Consolas,monospace;font-size:12px;background:#13101c;border:1px solid #231c33;border-radius:8px;color:#d8b4fe;padding:12px;user-select:all;"></textarea>
     <div style="display:flex;gap:10px;margin-top:14px;">
       <button class="btn small" onclick="copyCreatedKeys()">📋 Copy all</button>
       <button class="btn small ghost" onclick="document.getElementById('createdModal').style.display='none'">Close</button>
@@ -158,7 +158,7 @@ select { margin-right:8px; }
 
 <!-- Modal: key detail -->
 <div style="position:fixed;inset:0;background:#000000aa;z-index:100;display:none;place-items:center;" id="detailModal" onclick="if(event.target===this)this.style.display='none'">
-  <div style="background:var(--card);border:1px solid #2e2e3d;border-radius:14px;padding:28px;max-width:620px;width:calc(100vw - 40px);max-height:82vh;overflow:auto;">
+  <div style="background:var(--card);border:1px solid #2e2542;border-radius:14px;padding:28px;max-width:620px;width:calc(100vw - 40px);max-height:82vh;overflow:auto;">
     <h3 style="margin-bottom:12px;">🔑 Key detail</h3>
     <div id="detailBody"></div>
     <div style="margin-top:14px;">
@@ -236,7 +236,7 @@ async function loadStats() {
     }
     const kmax = Math.max(1, ...(d.keysPerDay || []).map(x => x.c));
     document.getElementById('keysperday').innerHTML = (d.keysPerDay || []).map(x =>
-      `<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="width:86px;color:var(--muted);font-size:12px">${x.d}</span><div class="bar" style="flex:1"><div style="width:${(x.c/kmax*100).toFixed(1)}%;background:#6ccb5f;"></div></div><span style="width:34px;text-align:right;font-size:13px">${x.c}</span></div>`
+      `<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="width:86px;color:var(--muted);font-size:12px">${x.d}</span><div class="bar" style="flex:1"><div style="width:${(x.c/kmax*100).toFixed(1)}%;background:#c084fc;"></div></div><span style="width:34px;text-align:right;font-size:13px">${x.c}</span></div>`
     ).join('') || '<p style="color:var(--muted)">No keys created yet.</p>';
   } catch {}
 }
@@ -251,7 +251,7 @@ async function loadKeys() {
         : expired ? '<span style="color:var(--muted)">expired</span>'
         : '<span style="color:var(--green)">valid</span>';
       const src = k.source === 'manual'
-        ? '<span style="color:#60cdff;border:1px solid #60cdff44;border-radius:20px;padding:1px 8px;font-size:11px;">manual</span>'
+        ? '<span style="color:#c084fc;border:1px solid #c084fc44;border-radius:20px;padding:1px 8px;font-size:11px;">manual</span>'
         : '<span style="color:var(--muted);font-size:12px;">ad</span>';
       return `<tr>
         <td class="mono" style="cursor:pointer;" title="Click for detail" onclick="showKeyDetail(${k.id})"><b>${k.kid.slice(0,10)}…</b></td>
@@ -319,7 +319,7 @@ async function showKeyDetail(id) {
       </tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted)">No executions yet.</td></tr>';
 
     document.getElementById('detailBody').innerHTML = `
-      <textarea readonly rows="2" style="width:100%;font-family:Consolas,monospace;font-size:12px;background:#0d0d12;border:1px solid #232330;border-radius:8px;color:#9ecbff;padding:10px;user-select:all;">${k.keyString}</textarea>
+      <textarea readonly rows="2" style="width:100%;font-family:Consolas,monospace;font-size:12px;background:#13101c;border:1px solid #231c33;border-radius:8px;color:#d8b4fe;padding:10px;user-select:all;">${k.keyString}</textarea>
       <button class="btn small" style="margin-top:8px;" onclick="navigator.clipboard.writeText('${k.keyString}');showToast('📋 Key copied!')">📋 Copy key</button>
       <table style="margin-top:16px;">
         <tr><td style="color:var(--muted)">Status</td><td>${k.revoked ? '<span style="color:var(--red)">revoked</span>' : expired ? '<span style="color:var(--muted)">expired</span>' : '<span style="color:var(--green)">valid</span>'}</td></tr>

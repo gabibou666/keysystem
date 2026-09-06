@@ -58,11 +58,11 @@
     <p class="sub">The longer the duration, the more checkpoints.</p>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px;">
       <div class="card" style="cursor:pointer; text-align:center; padding: 30px 20px;" onclick="start(12)">
-        <div style="font-size: 32px; font-weight: 700; background: linear-gradient(135deg,#fff,#60cdff); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">12h</div>
+        <div style="font-size: 32px; font-weight: 700; background: linear-gradient(135deg,#fff,#c084fc); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">12h</div>
         <p style="margin-top: 8px;">🟢 1 checkpoint</p>
       </div>
       <div class="card" style="cursor:pointer; text-align:center; padding: 30px 20px;" onclick="start(24)">
-        <div style="font-size: 32px; font-weight: 700; background: linear-gradient(135deg,#fff,#60cdff); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">24h</div>
+        <div style="font-size: 32px; font-weight: 700; background: linear-gradient(135deg,#fff,#c084fc); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">24h</div>
         <p style="margin-top: 8px;">🟡🟡 2 checkpoints</p>
       </div>
     </div>
@@ -77,7 +77,7 @@
       <button class="btn small" onclick="copyKey()">📋 Copy key</button>
       <a class="btn small secondary" href="/">← Back home</a>
     </div>
-    <div class="steps" id="waitSteps" style="margin-top: 22px; padding: 18px; border-radius: var(--radius); background: #1b1b1bcc; border: 1px solid var(--stroke);">
+    <div class="steps" id="waitSteps" style="margin-top: 22px; padding: 18px; border-radius: var(--radius); background: #13101ccc; border: 1px solid var(--stroke);">
       <p style="color: var(--muted); font-size: 14px; line-height: 1.8;">
         <b style="color: var(--text)">While the ad page opens:</b><br>
         1. Complete the tasks shown all the way through<br>
@@ -90,7 +90,7 @@
 
 <!-- Key modal (petit carre fin des pubs) -->
 <div class="modal-overlay" id="keyModal">
-  <div class="modal">
+  <div class="modal neon-frame">
     <div class="modal-icon">🔓</div>
     <h2 id="modalTitle">Key obtained!</h2>
     <p class="modal-sub" id="modalSub">Copy it into the loader — it's also saved in your browser.</p>
