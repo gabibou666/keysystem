@@ -30,21 +30,21 @@ function getOffers() {
       sku: 'week1',
       name: '7 Days',
       durationHours: 24 * 7,
-      priceR$: 200,
+      priceR$: 250,
       gamepassId: process.env.ROBUX_PASS_WEEK1 ? parseInt(process.env.ROBUX_PASS_WEEK1, 10) : null,
     },
     {
       sku: 'month1',
       name: '30 Days',
       durationHours: 24 * 30,
-      priceR$: 500,
+      priceR$: 750,
       gamepassId: process.env.ROBUX_PASS_MONTH1 ? parseInt(process.env.ROBUX_PASS_MONTH1, 10) : null,
     },
     {
       sku: 'lifetime',
       name: 'Lifetime',
       durationHours: 24 * 365 * 100, // ~100 ans: lifetime pratique
-      priceR$: 1500,
+      priceR$: 2000,
       gamepassId: process.env.ROBUX_PASS_LIFETIME ? parseInt(process.env.ROBUX_PASS_LIFETIME, 10) : null,
     },
   ];
