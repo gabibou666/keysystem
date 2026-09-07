@@ -476,6 +476,21 @@ router.post('/v1/report', rateLimit({ windowMs: 60 * 1000, max: 30 }), async (re
   }
 });
 
+// ---------- GET /api/v1/windui ----------
+// Self-host de la lib WindUI (dist officiel, v1.6.66 figee): le loader ne depend
+// plus du GitHub Footagesus (dispo/renommage). Cache 1h navigateur.
+router.get('/v1/windui', (req, res) => {
+  const fs = require('fs');
+  const p = path.join(__dirname, '..', '..', 'loader', 'windui-dist.lua');
+  try {
+    res.set('Content-Type', 'text/plain; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.send(fs.readFileSync(p, 'utf8'));
+  } catch {
+    res.status(503).send('-- windui indisponible');
+  }
+});
+
 // ---------- GET /api/v1/loader ----------
 // Sert le loader GUI (rotatable sans redistribution)
 router.get('/v1/loader', (req, res) => {

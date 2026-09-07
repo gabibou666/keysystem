@@ -9,36 +9,53 @@
 <body>
 <nav>
   <a class="logo" href="/" style="text-decoration:none;color:inherit"><div class="logo-badge">🔑</div> KeySystem</a>
-  <div class="links">
+  <div class="links" id="navLinks">
     <a href="/">Home</a>
     <a href="/getkey">Free key</a>
     <a href="/changelog">Changelog</a>
   </div>
+  <button class="nav-hamburger" id="navHamburger" onclick="toggleNav()">
+    <span></span><span></span><span></span>
+  </button>
 </nav>
 
 <main>
-  <section class="hero" style="padding-bottom: 30px;">
+  <section class="hero-mini">
     <h1>Pay with Robux</h1>
     <p>Skip the ads — buy a key directly with Robux. Instant delivery, bound to your Roblox account.</p>
   </section>
 
-  <!-- Offers -->
-  <section class="keypanel">
-    <h2>1 · Choose your offer</h2>
-    <p class="sub">Click "Buy on Roblox" — the game pass page opens in a new tab.</p>
-    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px;" id="offersGrid">
-      <div class="skeleton"></div>
-      <div class="skeleton"></div>
-      <div class="skeleton"></div>
-      <div class="skeleton"></div>
+  <!-- Progress bar -->
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-step">
+      <div class="progress-dot active" id="pd1">1</div>
+    </div>
+    <div class="progress-line" id="pl1"></div>
+    <div class="progress-step">
+      <div class="progress-dot" id="pd2">2</div>
+    </div>
+    <div class="progress-line" id="pl2"></div>
+    <div class="progress-step">
+      <div class="progress-dot" id="pd3">3</div>
+    </div>
+  </div>
+
+  <!-- Step 1: Offers -->
+  <section class="keypanel" id="offerCard">
+    <h2>Step 1 · Choose your offer</h2>
+    <p class="sub">Click "Buy" — the game pass page opens in a new tab.</p>
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px;" id="offersGrid">
+      <div class="skeleton" style="min-height:140px"></div>
+      <div class="skeleton" style="min-height:140px"></div>
+      <div class="skeleton" style="min-height:140px"></div>
     </div>
     <div id="offersNote" class="status"></div>
   </section>
 
-  <!-- Verify -->
+  <!-- Step 2: Verify -->
   <section class="keypanel" id="verifyCard">
-    <h2>2 · Verify your purchase</h2>
-    <p class="sub">Enter the Roblox username you bought the pass with, then pick your offer.</p>
+    <h2>Step 2 · Verify your purchase</h2>
+    <p class="sub">Enter the Roblox username you bought the pass with, then click verify.</p>
     <div class="keybox" style="margin-bottom: 12px;">
       <input id="username" placeholder="Roblox username" style="flex:1; background:transparent; border:none; outline:none; color:var(--text); font-size:15px; padding:10px 12px;">
     </div>
@@ -48,8 +65,11 @@
     <div id="verifyStatus" class="status"></div>
   </section>
 
-  <!-- Result -->
+  <!-- Step 3: Result -->
   <section class="keypanel hidden" id="resultCard">
+    <div class="ks-check" id="resultCheck">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
     <h2 id="resultTitle">🎉 Key delivered!</h2>
     <p class="sub" id="resultSub">Copy it into the loader — it's bound to your Roblox account.</p>
     <div id="newKey" class="codebox" style="color: var(--accent);"></div>
@@ -63,7 +83,9 @@
 <!-- Key modal -->
 <div class="modal-overlay" id="keyModal">
   <div class="modal neon-frame">
-    <div class="modal-icon">💎</div>
+    <div class="ks-check">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
     <h2 id="modalTitle">Key delivered!</h2>
     <p class="modal-sub">Paid with Robux — bound to your account.</p>
     <div class="keycode" id="modalKey">...</div>
@@ -82,6 +104,31 @@
 <script>
 const KEY_STORAGE = 'keysystem_key';
 
+// ===== Mobile nav =====
+function toggleNav() {
+  document.getElementById('navLinks').classList.toggle('open');
+  document.getElementById('navHamburger').classList.toggle('open');
+}
+document.querySelectorAll('#navLinks a').forEach(a => {
+  a.addEventListener('click', () => {
+    document.getElementById('navLinks').classList.remove('open');
+    document.getElementById('navHamburger').classList.remove('open');
+  });
+});
+
+// ===== Progress bar =====
+function setStep(n) {
+  for (let i = 1; i <= 3; i++) {
+    const dot = document.getElementById('pd' + i);
+    dot.classList.toggle('active', i === n);
+    dot.classList.toggle('done', i < n);
+    dot.textContent = i < n ? '✓' : i;
+  }
+  for (let i = 1; i <= 2; i++) {
+    document.getElementById('pl' + i).classList.toggle('active', i < n);
+  }
+}
+
 // ===== Offers =====
 let selectedSku = null;
 
@@ -95,16 +142,17 @@ async function loadOffers() {
       return;
     }
     grid.innerHTML = d.offers.map(o => `
-      <div class="card" style="text-align:center; padding: 24px 16px;">
-        <div style="font-size: 26px; font-weight: 700; background: linear-gradient(135deg,#d8b4fe,#c084fc); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">${o.name}</div>
-        <p style="margin-top: 6px;"><b style="color: var(--accent);">${o.priceR$} R$</b></p>
+      <div class="offer-enhanced" data-sku="${o.sku}" onclick="selectOfferCard('${o.sku}')">
+        ${!o.configured ? '' : '<div class="offer-tag">Available</div>'}
+        <div class="offer-price">${o.priceR$} R$</div>
+        <div class="offer-name">${o.name}</div>
+        <div class="offer-duration">${o.durationHours >= 24 ? Math.round(o.durationHours/24) + ' days' : o.durationHours + 'h'}</div>
         ${o.configured
-          ? `<a class="btn small" style="margin-top: 12px;" href="${o.buyUrl}" target="_blank" rel="noopener" onclick="preselect('${o.sku}')">🛒 Buy on Roblox</a>`
-          : `<p style="color: var(--color-muted-2); font-size: 12px; margin-top: 10px;">Coming soon</p>`}
+          ? `<a class="btn small" style="margin-top: 14px;" href="${o.buyUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation(); preselect('${o.sku}')">🛒 Buy on Roblox</a>`
+          : `<p style="color: var(--muted); font-size: 12px; margin-top: 10px;">Coming soon</p>`}
       </div>
     `).join('');
 
-    // Boutons de selection d'offre (remplace le select natif)
     const btnsWrap = document.getElementById('offerButtons');
     btnsWrap.innerHTML = '';
     d.offers.filter(o => o.configured).forEach(o => {
@@ -112,7 +160,7 @@ async function loadOffers() {
       b.className = 'btn small secondary offer-btn';
       b.dataset.sku = o.sku;
       b.textContent = `${o.name} — ${o.priceR$} R$`;
-      b.onclick = () => selectOffer(o.sku);
+      b.onclick = () => selectOfferBtn(o.sku);
       btnsWrap.appendChild(b);
     });
     if (!d.offers.some(o => o.configured)) {
@@ -123,15 +171,20 @@ async function loadOffers() {
   }
 }
 
-function selectOffer(sku) {
+function selectOfferCard(sku) {
+  document.querySelectorAll('.offer-enhanced').forEach(c => c.classList.toggle('selected', c.dataset.sku === sku));
+  selectOfferBtn(sku);
+}
+
+function selectOfferBtn(sku) {
   selectedSku = sku;
   document.querySelectorAll('.offer-btn').forEach(b => b.classList.toggle('copied', b.dataset.sku === sku));
   document.getElementById('verifyStatus').textContent = '';
+  setStep(2);
 }
 
 function preselect(sku) {
-  // Clic sur "Buy on Roblox": pre-selectionne l'offre pour la verification
-  selectOffer(sku);
+  selectOfferCard(sku);
   document.getElementById('verifyCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
@@ -176,7 +229,7 @@ async function startVerify() {
     }
     if (d.status === 'already_used') {
       if (d.key) {
-        deliverKey(d, true); // deja utilise MAIS on montre sa cle (c'est la sienne)
+        deliverKey(d, true);
       } else {
         status.textContent = '⛔ This game pass has already been used by another session.';
         status.className = 'status err';
@@ -194,7 +247,6 @@ async function startVerify() {
       return;
     }
     if (d.status === 'pending') {
-      // Polling auto: 10s pendant ~2 min
       status.textContent = '⏳ Purchase not detected yet — Roblox can take 1-2 minutes. Checking automatically…';
       status.className = 'status';
       pollEnd = Date.now() + 2 * 60 * 1000;
@@ -240,6 +292,7 @@ async function startVerify() {
 
 function deliverKey(d, wasUsed) {
   document.getElementById('verifyCard').classList.add('hidden');
+  setStep(3);
   const card = document.getElementById('resultCard');
   card.classList.remove('hidden');
   document.getElementById('resultTitle').textContent = wasUsed
@@ -253,7 +306,6 @@ function deliverKey(d, wasUsed) {
     '. Paste it into the loader.';
   const el = document.getElementById('newKey');
   el.textContent = d.key;
-  // Sauvegarde locale + modal
   localStorage.setItem(KEY_STORAGE, d.key);
   document.getElementById('modalKey').textContent = d.key;
   document.getElementById('modalTitle').textContent = d.extended ? '⏰ Time added!' : '💎 Key delivered!';
@@ -261,7 +313,6 @@ function deliverKey(d, wasUsed) {
     document.getElementById('modalExpires').textContent = 'Valid until ' + new Date(d.expiresAt).toLocaleString('en-US');
   }
   document.getElementById('keyModal').classList.add('open');
-  if (window.showToast) showToast(d.extended ? '⏰ Time added to your key!' : '💎 Your Robux key is ready!');
 }
 
 function copyKey() {

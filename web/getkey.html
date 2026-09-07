@@ -9,19 +9,38 @@
 <body>
 <nav>
   <a class="logo" href="/" style="text-decoration:none;color:inherit"><div class="logo-badge">🔑</div> KeySystem</a>
-  <div class="links">
+  <div class="links" id="navLinks">
     <a href="/">Home</a>
+    <a href="/robux">Pay with Robux</a>
     <a href="/changelog">Changelog</a>
   </div>
+  <button class="nav-hamburger" id="navHamburger" onclick="toggleNav()">
+    <span></span><span></span><span></span>
+  </button>
 </nav>
 
 <main>
-  <section class="hero" style="padding-bottom: 30px;">
+  <section class="hero-mini">
     <h1>Get a key</h1>
-    <p>Choose your duration — checkpoints are ads from our sponsor LootLabs. Max 2 ads every 12 hours.</p>
+    <p>Watch a short ad — your key is ready in 30 seconds.</p>
   </section>
 
-  <!-- Discord gate -->
+  <!-- Progress bar -->
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-step">
+      <div class="progress-dot active" id="pd1">1</div>
+    </div>
+    <div class="progress-line" id="pl1"></div>
+    <div class="progress-step">
+      <div class="progress-dot" id="pd2">2</div>
+    </div>
+    <div class="progress-line" id="pl2"></div>
+    <div class="progress-step">
+      <div class="progress-dot" id="pd3">3</div>
+    </div>
+  </div>
+
+  <!-- Step 1: Discord -->
   <section class="keypanel" id="discordCard">
     <h2>Step 1 · Sign in with Discord</h2>
     <p class="sub" id="discordSub">Joining gives you your key — you'll be added to our Discord server automatically.</p>
@@ -44,7 +63,7 @@
 
   <!-- Current key -->
   <section class="keypanel" id="currentKeyCard" style="margin-top: 0;">
-    <h2>Your current key</h2>
+    <h2>🔑 Your current key</h2>
     <p class="sub">Saved in this browser.</p>
     <div class="keybox">
       <textarea id="currentKey" rows="2" readonly placeholder="No key yet — get one below."></textarea>
@@ -53,25 +72,37 @@
     <div id="currentKeyStatus" class="status"></div>
   </section>
 
+  <!-- Step 2: Duration -->
   <section class="keypanel" id="choiceCard">
-    <h2>Step 2 · Duration</h2>
-    <p class="sub">The longer the duration, the more checkpoints.</p>
+    <h2>Step 2 · Choose your duration</h2>
+    <p class="sub">The longer the key, the more checkpoints (short ads).</p>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px;">
-      <div class="card" style="cursor:pointer; text-align:center; padding: 30px 20px;" onclick="start(12)">
-        <div style="font-size: 32px; font-weight: 700; background: linear-gradient(135deg,#fff,#c084fc); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">12h</div>
-        <p style="margin-top: 8px;">🟢 1 checkpoint</p>
+      <div class="card" style="cursor:pointer; text-align:center; padding: 30px 20px; position:relative;" onclick="start(12)">
+        <div style="font-size: 36px; font-weight: 700; background: linear-gradient(135deg,#fff,#c084fc); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">12h</div>
+        <p style="margin-top: 8px; color: var(--muted);">1 checkpoint</p>
+        <div style="margin-top: 12px; display: inline-flex; gap: 4px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:#c084fc;display:inline-block;"></span>
+        </div>
       </div>
-      <div class="card" style="cursor:pointer; text-align:center; padding: 30px 20px;" onclick="start(24)">
-        <div style="font-size: 32px; font-weight: 700; background: linear-gradient(135deg,#fff,#c084fc); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">24h</div>
-        <p style="margin-top: 8px;">🟡🟡 2 checkpoints</p>
+      <div class="card" style="cursor:pointer; text-align:center; padding: 30px 20px; position:relative;" onclick="start(24)">
+        <div style="font-size: 36px; font-weight: 700; background: linear-gradient(135deg,#fff,#c084fc); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">24h</div>
+        <p style="margin-top: 8px; color: var(--muted);">2 checkpoints</p>
+        <div style="margin-top: 12px; display: inline-flex; gap: 4px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:#c084fc;display:inline-block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;background:#c084fc;display:inline-block;"></span>
+        </div>
       </div>
     </div>
     <div id="startStatus" class="status" style="text-align:center; margin-top: 16px;"></div>
   </section>
 
+  <!-- Step 3: Waiting / Result -->
   <section class="keypanel hidden" id="result">
-    <h2 id="resultTitle">⏳ Waiting…</h2>
-    <p class="sub" id="resultSub">Complete the tasks in the other tab — this page checks automatically.</p>
+    <div id="waitState">
+      <div class="ks-spinner"></div>
+      <h2 id="resultTitle">⏳ Waiting…</h2>
+      <p class="sub" id="resultSub">Complete the tasks in the other tab — this page checks automatically.</p>
+    </div>
     <div id="newKey" class="codebox hidden" style="color: var(--accent);"></div>
     <div id="resultActions" class="hidden" style="margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
       <button class="btn small" onclick="copyKey()">📋 Copy key</button>
@@ -80,18 +111,20 @@
     <div class="steps" id="waitSteps" style="margin-top: 22px; padding: 18px; border-radius: var(--radius); background: #13101ccc; border: 1px solid var(--stroke);">
       <p style="color: var(--muted); font-size: 14px; line-height: 1.8;">
         <b style="color: var(--text)">While the ad page opens:</b><br>
-        1. Complete the tasks shown all the way through<br>
+        1. Complete the tasks all the way through<br>
         2. This page verifies your completion automatically<br>
-        3. Your key will pop up as soon as it's validated
+        3. Your key will appear as soon as it's validated
       </p>
     </div>
   </section>
 </main>
 
-<!-- Key modal (petit carre fin des pubs) -->
+<!-- Key modal -->
 <div class="modal-overlay" id="keyModal">
   <div class="modal neon-frame">
-    <div class="modal-icon">🔓</div>
+    <div class="ks-check">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
     <h2 id="modalTitle">Key obtained!</h2>
     <p class="modal-sub" id="modalSub">Copy it into the loader — it's also saved in your browser.</p>
     <div class="keycode" id="modalKey">...</div>
@@ -112,6 +145,33 @@ const KEY_STORAGE = 'keysystem_key';
 const PUID_STORAGE = 'keysystem_pending_puid';
 let pollTimer = null;
 let discordOk = false;
+let currentStep = 1;
+
+// ===== Mobile nav =====
+function toggleNav() {
+  document.getElementById('navLinks').classList.toggle('open');
+  document.getElementById('navHamburger').classList.toggle('open');
+}
+document.querySelectorAll('#navLinks a').forEach(a => {
+  a.addEventListener('click', () => {
+    document.getElementById('navLinks').classList.remove('open');
+    document.getElementById('navHamburger').classList.remove('open');
+  });
+});
+
+// ===== Progress bar =====
+function setStep(n) {
+  currentStep = n;
+  for (let i = 1; i <= 3; i++) {
+    const dot = document.getElementById('pd' + i);
+    dot.classList.toggle('active', i === n);
+    dot.classList.toggle('done', i < n);
+    dot.textContent = i < n ? '✓' : i;
+  }
+  for (let i = 1; i <= 2; i++) {
+    document.getElementById('pl' + i).classList.toggle('active', i < n);
+  }
+}
 
 // ===== Discord gate =====
 async function loadDiscordStatus() {
@@ -126,8 +186,10 @@ async function loadDiscordStatus() {
       const av = document.getElementById('userAvatar');
       if (d.avatar) { av.src = d.avatar; av.classList.remove('hidden'); }
       document.getElementById('serverNote').textContent = d.inServer ? '✅ Member of our Discord server' : 'Connected — server join pending';
+      setStep(2);
     } else {
       discordOk = false;
+      setStep(1);
     }
   } catch {}
 }
@@ -137,7 +199,6 @@ async function discordLogout() {
   location.reload();
 }
 
-// Messages de retour OAuth (?login=...)
 (function loginBanner() {
   const q = new URLSearchParams(location.search);
   const login = q.get('login');
@@ -189,11 +250,7 @@ async function loadCurrentKey() {
 
 function copyCurrentKey() {
   const v = document.getElementById('currentKey').value;
-  if (v) { navigator.clipboard.writeText(v); setKeyCardStatus('Key copied!', 'ok'); showToast('🔑 Key copied to clipboard!'); }
-}
-function setKeyCardStatus(t, cls) {
-  const s = document.getElementById('currentKeyStatus');
-  s.textContent = t; s.className = 'status ' + (cls || '');
+  if (v) { navigator.clipboard.writeText(v); showToast('🔑 Key copied to clipboard!'); }
 }
 
 // ===== Modal =====
@@ -208,9 +265,8 @@ function showModal(key, renewed, expiresAt) {
 function closeModal() { document.getElementById('keyModal').classList.remove('open'); }
 function copyModalKey() {
   const v = document.getElementById('modalKey').textContent;
-  if (v) { navigator.clipboard.writeText(v); showToast('🔑 Key copied to clipboard!'); flashCopied(document.querySelector('#keyModal .modal-actions .btn.small')); }
+  if (v) { navigator.clipboard.writeText(v); showToast('🔑 Key copied to clipboard!'); }
 }
-// close modal on overlay click
 document.getElementById('keyModal').addEventListener('click', (e) => {
   if (e.target.id === 'keyModal') closeModal();
 });
@@ -256,6 +312,7 @@ async function start(duration) {
     window.open(d.lootUrl, '_blank');
     showWaiting('⏳ Waiting for completion…', 'Complete the ' + d.tasksRequired + ' checkpoint(s) in the other tab.');
     startPolling(d.puid);
+    setStep(3);
   } catch (e) {
     document.getElementById('choiceCard').style.opacity = '1';
     status.textContent = 'Network error — try again.';
@@ -266,13 +323,15 @@ async function start(duration) {
 function showWaiting(title, sub, retryable = false) {
   document.getElementById('choiceCard').classList.add('hidden');
   document.getElementById('result').classList.remove('hidden');
+  document.getElementById('waitState').classList.remove('hidden');
   document.getElementById('resultTitle').textContent = title;
   document.getElementById('resultSub').textContent = sub;
   document.getElementById('newKey').classList.add('hidden');
   document.getElementById('resultActions').classList.add('hidden');
-  document.getElementById('waitSteps').classList.add('hidden');
+  document.getElementById('waitSteps').classList.remove('hidden');
+  document.querySelector('#waitState .ks-spinner').classList.remove('hidden');
   if (retryable) {
-    // Message d'erreur anti-bypass: bouton pour recommencer proprement
+    document.getElementById('waitState').classList.add('hidden');
     const actions = document.getElementById('resultActions');
     actions.innerHTML = '<a class="btn small secondary" href="/getkey">↻ Try again</a>';
     actions.classList.remove('hidden');
@@ -289,12 +348,12 @@ async function poll(puid) {
     const r = await fetch('/api/key/status?puid=' + encodeURIComponent(puid));
     const d = await r.json();
 
-    // Succes: cle delivree (statut 'completed' = session delivree une fois, puis 'claimed')
     if (d.success && d.status === 'completed' && d.key) {
       clearInterval(pollTimer);
       pollTimer = null;
       localStorage.setItem(KEY_STORAGE, d.key);
       localStorage.removeItem(PUID_STORAGE);
+      document.getElementById('waitState').classList.add('hidden');
       document.getElementById('resultTitle').textContent = d.renewed ? '✅ Key renewed!' : '🎉 Key obtained!';
       document.getElementById('resultSub').textContent = 'Paste it into the loader — it\'s also saved in your browser.';
       const el = document.getElementById('newKey');
@@ -302,13 +361,11 @@ async function poll(puid) {
       el.textContent = d.key;
       document.getElementById('resultActions').classList.remove('hidden');
       document.getElementById('waitSteps').classList.add('hidden');
-      // petit carre qui affiche la cle
       showModal(d.key, d.renewed, d.expiresAt);
       loadCurrentKey();
       return;
     }
 
-    // Statuts anti-bypass: messages clairs, pas de spin infini pour un utilisateur legitime
     if (d.status === 'rejected' || d.status === 'token_expired' || d.status === 'token_invalid') {
       clearInterval(pollTimer);
       pollTimer = null;
@@ -320,7 +377,7 @@ async function poll(puid) {
       clearInterval(pollTimer);
       pollTimer = null;
       localStorage.removeItem(PUID_STORAGE);
-      showWaiting('🔒 Session mismatch', 'This key session doesn\'t belong to this browser — sign in again and retry.', true);
+      showWaiting('🔒 Session mismatch', 'This session doesn\'t belong to this browser — sign in again and retry.', true);
       return;
     }
     if (d.status === 'already_claimed') {
@@ -330,24 +387,15 @@ async function poll(puid) {
       showWaiting('✅ Already claimed', 'This session\'s key was already retrieved — get a new one below.', true);
       return;
     }
-    if (d.success && d.status === 'pending') {
-      // en attente normale: rien a afficher de plus (le statut courant reste)
-      return;
-    }
-    // erreur serveur: on continue de poller (transitoire) sans casser l'experience
   } catch {}
 }
 
-/* Feedback visuel Copy: bouton devient "Copied ✓" 1.4s */
 function flashCopied(btn) {
   if (!btn) return;
   const old = btn.innerHTML;
   btn.classList.add('copied');
   btn.innerHTML = 'Copied ✓';
-  setTimeout(() => {
-    btn.classList.remove('copied');
-    btn.innerHTML = old;
-  }, 1400);
+  setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = old; }, 1400);
 }
 
 function copyKey() {
@@ -355,7 +403,6 @@ function copyKey() {
   if (v) { navigator.clipboard.writeText(v); showToast('🔑 Key copied to clipboard!'); flashCopied(document.querySelector('#resultActions .btn.small')); }
 }
 
-// LootLabs callback lands here: /getkey/callback (puid comes from localStorage)
 if (location.pathname.endsWith('/callback')) {
   history.replaceState({}, '', '/getkey');
 }
@@ -364,6 +411,7 @@ resumePendingSession();
 function resumePendingSession() {
   const puid = localStorage.getItem(PUID_STORAGE);
   if (!puid) return;
+  setStep(3);
   showWaiting('⏳ Verifying your session…', 'Your key will pop up as soon as it\'s validated.');
   startPolling(puid);
 }

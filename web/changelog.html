@@ -9,21 +9,24 @@
 <body>
 <nav>
   <a class="logo" href="/" style="text-decoration:none;color:inherit"><div class="logo-badge">🔑</div> KeySystem</a>
-  <div class="links">
+  <div class="links" id="navLinks">
     <a href="/">Home</a>
     <a href="/getkey">Get a key</a>
     <a href="/robux">Pay with Robux</a>
   </div>
+  <button class="nav-hamburger" id="navHamburger" onclick="toggleNav()">
+    <span></span><span></span><span></span>
+  </button>
 </nav>
 
 <main>
-  <section class="hero" style="padding-bottom: 30px;">
+  <section class="hero-mini">
     <h1>Changelog</h1>
     <p>What changed in each published version of the script.</p>
   </section>
 
-  <section style="max-width: 680px; margin: 0 auto; padding: 0 24px 40px;">
-    <div id="list"><p style="color: var(--muted);">Loading…</p></div>
+  <section style="max-width: 680px; margin: 0 auto; padding: 0 24px 60px;">
+    <div id="list"><div class="skel" style="min-height: 120px;"></div></div>
   </section>
 </main>
 
@@ -32,25 +35,44 @@
 </footer>
 
 <script>
+function toggleNav() {
+  document.getElementById('navLinks').classList.toggle('open');
+  document.getElementById('navHamburger').classList.toggle('open');
+}
+document.querySelectorAll('#navLinks a').forEach(a => {
+  a.addEventListener('click', () => {
+    document.getElementById('navLinks').classList.remove('open');
+    document.getElementById('navHamburger').classList.remove('open');
+  });
+});
+
 fetch('/api/admin/changelog')
   .then(r => r.json())
   .then(d => {
     const list = document.getElementById('list');
     if (!d.versions || !d.versions.length) {
-      list.innerHTML = '<p style="color: var(--muted);">No published versions yet.</p>';
+      list.innerHTML = '<p style="color: var(--muted); text-align:center; padding:40px 0;">No published versions yet.</p>';
       return;
     }
-    list.innerHTML = d.versions.map(v => `
-      <div class="card" style="margin-bottom: 14px;">
-        <div style="display:flex; justify-content:space-between; align-items:baseline;">
-          <span style="font-size: 19px; font-weight: 700; color: var(--accent);">v${v.version}</span>
-          <span style="color: var(--muted); font-size: 13px;">${new Date(v.created_at).toLocaleDateString('en-US')}</span>
+    list.innerHTML = d.versions.map((v, i) => `
+      <div class="card reveal" style="margin-bottom: 14px; animation-delay: ${i * 0.06}s;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
+          <span style="font-size: 19px; font-weight: 700; background: linear-gradient(135deg, #d8b4fe, #c084fc); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">v${v.version}</span>
+          <span style="color: var(--muted); font-size: 13px;">${new Date(v.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
         </div>
-        <p style="margin-top: 10px; line-height: 1.6;">${(v.note || '').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>
+        <p style="margin-top: 10px; line-height: 1.7; color: var(--muted);">${(v.note || '').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>
       </div>
     `).join('');
+
+    // Trigger reveal animation
+    list.querySelectorAll('.reveal').forEach(el => {
+      const io = new IntersectionObserver(entries => {
+        entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }});
+      }, { threshold: 0.12 });
+      io.observe(el);
+    });
   })
-  .catch(() => document.getElementById('list').innerHTML = '<p style="color: var(--muted);">Failed to load.</p>');
+  .catch(() => document.getElementById('list').innerHTML = '<p style="color: var(--muted); text-align:center;">Failed to load.</p>');
 </script>
 <script src="/effects.js"></script>
 </body>

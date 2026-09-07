@@ -3,174 +3,501 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin</title>
+<title>KeySystem — Admin</title>
+<link rel="stylesheet" href="/style.css">
 <style>
-:root { --bg:#0e0b16; --card:#1c1728; --accent:#a855f7; --green:#a855f7; --red:#f472b6; --text:#eef0f4; --muted:#969ba6; }
-* { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',system-ui,sans-serif; }
-body { background:var(--bg); color:var(--text); min-height:100vh; }
-nav { display:flex; align-items:center; gap:22px; padding:16px 30px; border-bottom:1px solid #231c33; }
-nav .logo { font-weight:700; font-size:19px; margin-right:auto; }
-nav button, nav .tab { background:none; border:none; color:var(--muted); font-size:15px; cursor:pointer; padding:6px 10px; border-radius:8px; }
-nav .tab.active { color:var(--text); background:#231c33; }
-nav button:hover { color:var(--text); }
-main { max-width:1080px; margin:26px auto; padding:0 18px; }
-.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-bottom:26px; }
-.stat { background:var(--card); border-radius:14px; padding:20px; }
-.stat .num { font-size:28px; font-weight:700; color:var(--accent); }
-.stat .lbl { color:var(--muted); font-size:13px; margin-top:4px; }
-.panel { background:var(--card); border-radius:14px; padding:24px; margin-bottom:22px; }
-.panel h3 { margin-bottom:16px; }
-table { width:100%; border-collapse:collapse; font-size:14px; }
-th, td { text-align:left; padding:9px 10px; border-bottom:1px solid #231c33; color:var(--muted); }
-th { color:var(--muted); font-weight:600; }
-td.mono { font-family:Consolas,monospace; font-size:12.5px; }
-input, textarea, select { background:#231c33; border:1px solid #2e2542; border-radius:8px; color:var(--text); padding:10px 12px; font-size:14px; }
-textarea.code { width:100%; height:340px; font-family:Consolas,monospace; font-size:13px; white-space:pre; }
-.btn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:10px 20px; font-size:14px; font-weight:600; cursor:pointer; margin-right:8px; margin-top:10px; }
-.btn:hover { filter:brightness(1.1); }
-.btn.small { padding:5px 12px; font-size:12.5px; margin:0; }
-.btn.red { background:var(--red); }
-.btn.green { background:var(--green); }
-.btn.ghost { background:transparent; border:1px solid #3a3a4d; color:var(--text); }
-.msg { margin-top:10px; font-size:14px; min-height:20px; }
-.patch { background:#231c33; border-radius:10px; padding:16px; margin-bottom:12px; }
-.patch pre { background:#13101c; padding:10px; border-radius:8px; font-size:12px; overflow:auto; margin:8px 0; }
-.bar { height:10px; background:#231c33; border-radius:6px; overflow:hidden; margin-top:6px; }
-.bar > div { height:100%; background:var(--accent); }
-.login { text-align:center; margin-top:120px; }
-.hidden { display:none; }
-select { margin-right:8px; }
-.split { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
-@media (max-width:800px){ .split { grid-template-columns:1fr; } }
-.diff del { color:#f472b6; background:rgba(241,100,100,.12); text-decoration:none; }
-.diff ins { color:#a855f7; background:rgba(168,85,247,.12); text-decoration:none; }
+/* Admin-specific overrides — inherits the full theme from style.css */
+:root {
+  --admin-bg: #08070c;
+  --admin-card: #12101a;
+  --admin-card-hover: #1a1526;
+  --admin-border: #ffffff10;
+  --admin-border-accent: #8b5cf62e;
+  --admin-input: #17141f;
+  --admin-text: #ffffff;
+  --admin-muted: #a1a1aa;
+  --admin-muted-2: #71717a;
+  --admin-accent: #8b5cf6;
+  --admin-glow: #c084fc;
+  --admin-ok: #d8b4fe;
+  --admin-err: #f472b6;
+}
+
+body { background: var(--admin-bg); color: var(--admin-text); min-height: 100vh; overflow-x: hidden; }
+
+/* ===== ADMIN NAVBAR ===== */
+.admin-nav {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 32px;
+  background: #0d0b13cc;
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--admin-border);
+  position: sticky; top: 0; z-index: 50;
+}
+.admin-nav .logo {
+  display: flex; align-items: center; gap: 10px;
+  font-weight: 700; font-size: 17px; margin-right: auto;
+}
+.admin-nav .logo .logo-badge {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: linear-gradient(135deg, #7c3aed, #c084fc);
+  display: grid; place-items: center; font-size: 16px;
+  box-shadow: 0 0 14px #7c3aed66;
+}
+.admin-nav .tab {
+  background: none; border: none; color: var(--admin-muted-2);
+  font-size: 14px; font-weight: 500; cursor: pointer;
+  padding: 8px 16px; border-radius: 8px;
+  transition: color 200ms ease, background 200ms ease;
+}
+.admin-nav .tab:hover { color: var(--admin-text); background: #ffffff0d; }
+.admin-nav .tab.active { color: var(--admin-text); background: #8b5cf618; border: 1px solid #8b5cf62e; }
+.admin-nav .logout-btn {
+  background: none; border: 1px solid #ffffff15; color: var(--admin-muted-2);
+  font-size: 13px; cursor: pointer; padding: 6px 14px; border-radius: 8px;
+  transition: all 200ms ease;
+}
+.admin-nav .logout-btn:hover { color: var(--admin-err); border-color: #f472b640; }
+
+/* ===== MAIN LAYOUT ===== */
+.admin-main { max-width: 1120px; margin: 0 auto; padding: 28px 24px; }
+
+/* ===== STAT CARDS ===== */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px; margin-bottom: 28px;
+}
+.admin-stat {
+  background: linear-gradient(180deg, var(--admin-card) 0%, #0e0c15 100%);
+  border: 1px solid var(--admin-border-accent);
+  border-radius: 14px;
+  padding: 22px 20px;
+  box-shadow: 0 12px 40px #00000090, inset 0 1px 0 #ffffff0d;
+  transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+  position: relative; overflow: hidden;
+}
+.admin-stat:hover {
+  transform: translateY(-3px);
+  border-color: #8b5cf645;
+  box-shadow: 0 16px 48px #7c3aed26, 0 0 22px #8b5cf619, inset 0 1px 0 #ffffff0d;
+}
+.admin-stat .stat-icon {
+  width: 38px; height: 38px; border-radius: 10px;
+  background: linear-gradient(135deg, #7c3aed30, #c084fc20);
+  display: grid; place-items: center; font-size: 18px;
+  margin-bottom: 12px; border: 1px solid #8b5cf61a;
+}
+.admin-stat .num {
+  font-size: 28px; font-weight: 700;
+  background: linear-gradient(135deg, #d8b4fe, #c084fc);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 14px #c084fc40);
+  line-height: 1.1;
+}
+.admin-stat .lbl { color: var(--admin-muted); font-size: 13px; margin-top: 4px; }
+.admin-stat .sub-stat {
+  display: flex; gap: 16px; margin-top: 10px;
+  padding-top: 10px; border-top: 1px solid var(--admin-border);
+}
+.admin-stat .sub-stat .ss { font-size: 12px; color: var(--admin-muted-2); }
+.admin-stat .sub-stat .ss b { color: var(--admin-glow); font-weight: 600; }
+.admin-stat.revenue .num {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 14px #f59e0b40);
+}
+
+/* ===== PANELS ===== */
+.admin-panel {
+  background: linear-gradient(180deg, var(--admin-card) 0%, #0e0c15 100%);
+  border: 1px solid var(--admin-border-accent);
+  border-radius: 14px;
+  padding: 26px;
+  margin-bottom: 22px;
+  box-shadow: 0 8px 32px #00000080, inset 0 1px 0 #ffffff0d;
+}
+.admin-panel h3 {
+  font-size: 16px; font-weight: 600; margin-bottom: 18px;
+  display: flex; align-items: center; gap: 8px;
+}
+.admin-panel h3 .icon { font-size: 18px; }
+.admin-panel .sub { color: var(--admin-muted-2); font-size: 13px; margin-bottom: 16px; }
+
+/* ===== CHART BARS ===== */
+.chart-row {
+  display: flex; align-items: center; gap: 10px;
+  margin: 5px 0; font-size: 13px;
+}
+.chart-row .label { width: 86px; color: var(--admin-muted-2); font-size: 12px; text-align: right; }
+.chart-row .bar {
+  flex: 1; height: 24px; background: #17141f; border-radius: 6px;
+  overflow: hidden; position: relative;
+}
+.chart-row .bar-fill {
+  height: 100%; border-radius: 6px;
+  transition: width 600ms cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+.chart-row .bar-fill::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 100%);
+  border-radius: 6px;
+}
+.chart-row .bar-fill.violet { background: linear-gradient(90deg, #7c3aed, #a855f7); }
+.chart-row .bar-fill.gold { background: linear-gradient(90deg, #b45309, #f59e0b); }
+.chart-row .bar-fill.pink { background: linear-gradient(90deg, #be185d, #f472b6); }
+.chart-row .value { width: 50px; text-align: right; font-weight: 600; font-size: 13px; color: var(--admin-text); }
+
+/* ===== OFFER BREAKDOWN ===== */
+.offer-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.offer-card {
+  background: #17141f; border: 1px solid var(--admin-border); border-radius: 12px;
+  padding: 18px 14px; text-align: center;
+  transition: border-color 200ms ease, transform 200ms ease;
+}
+.offer-card:hover { border-color: #8b5cf640; transform: translateY(-2px); }
+.offer-card .offer-name {
+  font-size: 14px; font-weight: 600; color: var(--admin-text); margin-bottom: 4px;
+}
+.offer-card .offer-rev {
+  font-size: 22px; font-weight: 700;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.offer-card .offer-count { font-size: 12px; color: var(--admin-muted-2); margin-top: 4px; }
+.offer-card .offer-price { font-size: 11px; color: var(--admin-muted-2); margin-top: 2px; }
+
+/* ===== TABLES ===== */
+.admin-table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.admin-table th {
+  text-align: left; padding: 10px 12px; font-weight: 600;
+  color: var(--admin-muted-2); font-size: 12px; text-transform: uppercase;
+  letter-spacing: 0.04em; border-bottom: 1px solid var(--admin-border);
+  background: #0d0b1266;
+}
+.admin-table td {
+  padding: 10px 12px; border-bottom: 1px solid var(--admin-border);
+  color: var(--admin-muted); transition: background 150ms ease;
+}
+.admin-table tr:hover td { background: #ffffff06; }
+.admin-table .mono { font-family: Consolas, monospace; font-size: 12px; }
+.admin-table .badge {
+  display: inline-block; padding: 2px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 600;
+}
+.badge.ok { background: #d8b4fc18; color: #d8b4fe; border: 1px solid #d8b4fc3d; }
+.badge.err { background: #f472b618; color: #f472b6; border: 1px solid #f472b63d; }
+.badge.muted { background: #71717a18; color: #71717a; border: 1px solid #71717a3d; }
+.badge.violet { background: #8b5cf618; color: #a855f7; border: 1px solid #8b5cf63d; }
+
+/* ===== FORMS ===== */
+.admin-input {
+  background: var(--admin-input); border: 1px solid var(--admin-border-accent);
+  border-radius: 8px; color: var(--admin-text); padding: 10px 14px;
+  font-size: 14px; outline: none;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+.admin-input:focus { border-color: #c084fcd9; box-shadow: 0 0 0 3px #7c3aed20; }
+.admin-input::placeholder { color: var(--admin-muted-2); }
+
+/* ===== BUTTONS ===== */
+.admin-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: #fff; border: 1px solid #ffffff2e; border-radius: 8px;
+  padding: 10px 20px; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: all 200ms ease;
+}
+.admin-btn:hover {
+  transform: translateY(-1px); border-color: #c084fc88;
+  box-shadow: 0 6px 22px #8b5cf64d, 0 0 30px #7c3aed33;
+}
+.admin-btn:active { transform: translateY(0) scale(0.98); transition-duration: 80ms; }
+.admin-btn.small { padding: 6px 14px; font-size: 12.5px; }
+.admin-btn.red { background: linear-gradient(135deg, #be185d, #9d174d); }
+.admin-btn.red:hover { box-shadow: 0 6px 22px #f472b64d; border-color: #f472b688; }
+.admin-btn.green { background: linear-gradient(135deg, #7c3aed, #a855f7); }
+.admin-btn.ghost { background: transparent; border: 1px solid #ffffff1c; color: var(--admin-text); }
+.admin-btn.ghost:hover { background: #ffffff0d; border-color: #c084fc44; }
+.admin-btn:disabled { background: #171320; color: #ffffff42; border-color: #ffffff12; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* ===== TEXTAREA ===== */
+.admin-textarea {
+  width: 100%; min-height: 320px;
+  background: var(--admin-input); border: 1px solid var(--admin-border-accent);
+  border-radius: 8px; color: var(--admin-text); padding: 14px;
+  font-family: Consolas, monospace; font-size: 13px;
+  resize: vertical; outline: none;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+.admin-textarea:focus { border-color: #c084fcd9; box-shadow: 0 0 0 3px #7c3aed20; }
+
+/* ===== SPLIT LAYOUT ===== */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 800px) { .split { grid-template-columns: 1fr; } }
+
+/* ===== MESSAGE ===== */
+.msg { margin-top: 10px; font-size: 13px; min-height: 20px; color: var(--admin-muted); }
+.msg.ok { color: var(--admin-ok); }
+.msg.err { color: var(--admin-err); }
+
+/* ===== MODAL ===== */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: #000000cc; backdrop-filter: blur(6px);
+  display: grid; place-items: center;
+  opacity: 0; pointer-events: none; transition: opacity 200ms ease;
+}
+.modal-overlay.open { opacity: 1; pointer-events: auto; }
+.modal-box {
+  width: min(560px, calc(100vw - 40px));
+  background: var(--admin-card); border: 1px solid #ffffff1c;
+  border-radius: 14px;
+  box-shadow: 0 24px 70px #000000c0, 0 0 50px #7c3aed26;
+  padding: 28px;
+  transform: translateY(16px) scale(.96);
+  transition: transform 300ms cubic-bezier(.2,.9,.3,1.15);
+  max-height: 85vh; overflow-y: auto;
+}
+.modal-overlay.open .modal-box { transform: translateY(0) scale(1); }
+.modal-box h3 { margin-bottom: 12px; }
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #8b5cf633; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #8b5cf655; }
+
+/* ===== ANIMATIONS ===== */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp .4s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.fade-up-d1 { animation-delay: .06s; }
+.fade-up-d2 { animation-delay: .12s; }
+.fade-up-d3 { animation-delay: .18s; }
+.fade-up-d4 { animation-delay: .24s; }
+
+/* ===== LOADING SKELETON ===== */
+.skel {
+  background: linear-gradient(100deg, #131018 40%, #241d38 50%, #131018 60%);
+  background-size: 200% 100%;
+  animation: skelWave 1.4s ease infinite;
+  border-radius: 8px;
+  min-height: 60px;
+}
+@keyframes skelWave { to { background-position: -200% 0; } }
+
+/* ===== EMPTY STATE ===== */
+.empty-state {
+  text-align: center; padding: 40px 20px; color: var(--admin-muted-2);
+}
+.empty-state .icon { font-size: 36px; margin-bottom: 10px; opacity: 0.5; }
+
+/* ===== LOGIN ===== */
+.login-page {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 80vh; text-align: center;
+}
+.login-page h1 {
+  font-size: 32px; font-weight: 700; margin-bottom: 8px;
+  background: linear-gradient(135deg, #ffffff, #c084fc 70%, #8b5cf6);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.login-page p { color: var(--admin-muted); margin-bottom: 30px; }
+.hidden { display: none !important; }
 </style>
 </head>
 <body>
-<nav>
-  <div class="logo">🔑 Admin</div>
-  <button class="tab active" data-tab="stats" onclick="showTab('stats')">Stats</button>
+
+<!-- ===== NAVBAR ===== -->
+<nav class="admin-nav">
+  <div class="logo">
+    <div class="logo-badge">🔑</div>
+    KeySystem
+  </div>
+  <button class="tab active" data-tab="dashboard" onclick="showTab('dashboard')">Dashboard</button>
+  <button class="tab" data-tab="revenue" onclick="showTab('revenue')">Revenue</button>
   <button class="tab" data-tab="keys" onclick="showTab('keys')">Keys</button>
   <button class="tab" data-tab="bans" onclick="showTab('bans')">Bans</button>
   <button class="tab" data-tab="script" onclick="showTab('script')">Script</button>
-  <button class="tab" data-tab="patches" onclick="showTab('patches')">AI Patches</button>
-  <button onclick="logout()" id="logoutBtn" class="hidden">Log out</button>
+  <button class="tab" data-tab="patches" onclick="showTab('patches')">Patches</button>
+  <button class="logout-btn hidden" id="logoutBtn" onclick="logout()">Log out</button>
 </nav>
-<main id="main" class="hidden">
 
-<!-- STATS -->
-<section id="tab-stats">
-  <div class="grid">
-    <div class="stat"><div class="num" id="s-exec">–</div><div class="lbl">executions</div></div>
-    <div class="stat"><div class="num" id="s-users">–</div><div class="lbl">unique users</div></div>
-    <div class="stat"><div class="num" id="s-errs">–</div><div class="lbl">errors (7d)</div></div>
+<!-- ===== MAIN ===== -->
+<div class="admin-main" id="main" class="hidden">
+
+<!-- ==================== DASHBOARD TAB ==================== -->
+<section id="tab-dashboard">
+  <div class="stat-grid" id="dashStats">
+    <div class="admin-stat fade-up"><div class="skel" style="min-height:80px"></div></div>
+    <div class="admin-stat fade-up fade-up-d1"><div class="skel" style="min-height:80px"></div></div>
+    <div class="admin-stat fade-up fade-up-d2"><div class="skel" style="min-height:80px"></div></div>
+    <div class="admin-stat fade-up fade-up-d3"><div class="skel" style="min-height:80px"></div></div>
   </div>
-  <div class="panel">
-    <h3>Executions per day (30d)</h3>
-    <div id="perday"></div>
+
+  <div class="split">
+    <div class="admin-panel fade-up fade-up-d1">
+      <h3><span class="icon">📊</span> Executions per day (30d)</h3>
+      <div id="perday"><div class="skel"></div></div>
+    </div>
+    <div class="admin-panel fade-up fade-up-d2">
+      <h3><span class="icon">🔑</span> Keys created per day (30d)</h3>
+      <div id="keysperday"><div class="skel"></div></div>
+    </div>
   </div>
-  <div class="panel">
-    <h3>Keys created per day (30d) <span id="manualBadge" style="font-size:12px;color:var(--muted);font-weight:400;"></span></h3>
-    <div id="keysperday"></div>
-  </div>
-  <div class="panel">
-    <h3>By executor</h3>
-    <div id="byexec"></div>
+
+  <div class="admin-panel fade-up fade-up-d3">
+    <h3><span class="icon">🧩</span> By executor</h3>
+    <div id="byexec"><div class="skel"></div></div>
   </div>
 </section>
 
-<!-- KEYS -->
+<!-- ==================== REVENUE TAB ==================== -->
+<section id="tab-revenue" class="hidden">
+  <div class="stat-grid" id="revStats">
+    <div class="admin-stat revenue fade-up"><div class="skel" style="min-height:80px"></div></div>
+    <div class="admin-stat fade-up fade-up-d1"><div class="skel" style="min-height:80px"></div></div>
+    <div class="admin-stat fade-up fade-up-d2"><div class="skel" style="min-height:80px"></div></div>
+  </div>
+
+  <div class="admin-panel fade-up fade-up-d1">
+    <h3><span class="icon">💰</span> Revenue per day</h3>
+    <div id="revPerDay"><div class="skel"></div></div>
+  </div>
+
+  <div class="admin-panel fade-up fade-up-d2">
+    <h3><span class="icon">📦</span> Revenue by offer</h3>
+    <div class="offer-cards" id="offerBreakdown"><div class="skel" style="min-height:100px"></div></div>
+  </div>
+
+  <div class="admin-panel fade-up fade-up-d3">
+    <h3><span class="icon">🛒</span> Recent sales</h3>
+    <div style="overflow-x:auto">
+      <table class="admin-table" id="salesTable">
+        <thead><tr><th>User</th><th>Offer</th><th>Price</th><th>Method</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== KEYS TAB ==================== -->
 <section id="tab-keys" class="hidden">
-  <div class="panel">
-    <h3>Create keys (manual)</h3>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:12px">Keys created here bypass ads — they work instantly in the loader. Duration is free (hours).</p>
+  <div class="admin-panel fade-up">
+    <h3><span class="icon">🔑</span> Generate keys</h3>
+    <p class="sub">Keys created here bypass ads — they work instantly in the loader.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-      <input id="ckDuration" placeholder="Duration (hours)" style="width:150px" type="number" min="1" max="8760" value="24">
-      <input id="ckCount" placeholder="Count" style="width:100px" type="number" min="1" max="50" value="1">
-      <input id="ckBound" placeholder="Bind to Roblox UserId (optional)" style="width:230px" type="number">
-      <input id="ckNote" placeholder="Note (e.g. giveaway)" style="flex:1;min-width:160px">
-      <button class="btn" onclick="createKeys()">🔑 Generate</button>
+      <input id="ckDuration" class="admin-input" placeholder="Duration (hours)" style="width:150px" type="number" min="1" max="8760" value="24">
+      <input id="ckCount" class="admin-input" placeholder="Count" style="width:100px" type="number" min="1" max="50" value="1">
+      <input id="ckBound" class="admin-input" placeholder="Roblox UserId (optional)" style="width:200px" type="number">
+      <input id="ckNote" class="admin-input" placeholder="Note (e.g. giveaway)" style="flex:1;min-width:160px">
+      <button class="admin-btn" onclick="createKeys()">🔑 Generate</button>
     </div>
     <div class="msg" id="createMsg"></div>
   </div>
-  <div class="panel">
-    <h3>Keys (last 50)</h3>
-    <table id="keysTable"><thead><tr><th>Key</th><th>UserId</th><th>Expire</th><th>Source</th><th>Note</th><th>Execs</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
-  </div>
-</section>
-
-<!-- BANS -->
-<section id="tab-bans" class="hidden">
-  <div class="panel">
-    <h3>Ban a Roblox UserId</h3>
-    <input id="banUserId" placeholder="Roblox UserId (e.g. 1234567890)" style="width:280px">
-    <input id="banReason" placeholder="Reason (optional)" style="width:280px">
-    <button class="btn" onclick="banUser()">Ban</button>
-  </div>
-  <div class="panel">
-    <h3>Active bans</h3>
-    <table id="bansTable"><thead><tr><th>UserId</th><th>Reason</th><th>Date</th><th></th></tr></thead><tbody></tbody></table>
-  </div>
-</section>
-
-<!-- SCRIPT -->
-<section id="tab-script" class="hidden">
-  <div class="panel">
-    <h3>Versions</h3>
-    <table id="versionsTable"><thead><tr><th>Version</th><th>Note</th><th>Date</th><th>Builds</th><th>Published</th><th>Actions</th></tr></thead><tbody></tbody></table>
-  </div>
-  <div class="panel">
-    <h3>Edit / create a version</h3>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:10px">Saving = draft. Nothing goes live until you click Publish. Leave PlaceId empty for an "all games" script.</p>
-    <div style="display:flex;gap:10px;margin-bottom:10px">
-      <input id="scriptPlaceId" placeholder="Game PlaceId (e.g. 2753915549) — empty = all games" style="flex:1">
+  <div class="admin-panel fade-up fade-up-d1">
+    <h3><span class="icon">📋</span> All keys</h3>
+    <div style="overflow-x:auto">
+      <table class="admin-table" id="keysTable">
+        <thead><tr><th>Key</th><th>UserId</th><th>Expires</th><th>Source</th><th>Note</th><th>Execs</th><th>Status</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
     </div>
-    <textarea id="scriptSource" class="code" placeholder="Paste your Luau script here..."></textarea>
-    <input id="scriptNote" placeholder="Changelog note (e.g. fix aimbot + new tab)" style="width:100%;margin-top:10px">
-    <button class="btn" onclick="saveScript()">💾 Save (draft) + auto pipeline</button>
+  </div>
+</section>
+
+<!-- ==================== BANS TAB ==================== -->
+<section id="tab-bans" class="hidden">
+  <div class="admin-panel fade-up">
+    <h3><span class="icon">🚫</span> Ban a Roblox user</h3>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <input id="banUserId" class="admin-input" placeholder="Roblox UserId" style="width:220px">
+      <input id="banReason" class="admin-input" placeholder="Reason (optional)" style="width:280px">
+      <button class="admin-btn red" onclick="banUser()">Ban</button>
+    </div>
+  </div>
+  <div class="admin-panel fade-up fade-up-d1">
+    <h3><span class="icon">📋</span> Active bans</h3>
+    <div style="overflow-x:auto">
+      <table class="admin-table" id="bansTable">
+        <thead><tr><th>UserId</th><th>Reason</th><th>Date</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SCRIPT TAB ==================== -->
+<section id="tab-script" class="hidden">
+  <div class="admin-panel fade-up">
+    <h3><span class="icon">📝</span> Versions</h3>
+    <div style="overflow-x:auto">
+      <table class="admin-table" id="versionsTable">
+        <thead><tr><th>Version</th><th>Note</th><th>Date</th><th>Builds</th><th>Published</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="admin-panel fade-up fade-up-d1">
+    <h3><span class="icon">✏️</span> Editor</h3>
+    <p class="sub">Saving creates a draft. Nothing goes live until you publish.</p>
+    <input id="scriptPlaceId" class="admin-input" placeholder="Game PlaceId (empty = all games)" style="width:100%;margin-bottom:10px">
+    <textarea id="scriptSource" class="admin-textarea" placeholder="Paste your Luau script here..."></textarea>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:10px">
+      <input id="scriptNote" class="admin-input" placeholder="Changelog note" style="flex:1">
+      <button class="admin-btn" onclick="saveScript()">💾 Save draft + pipeline</button>
+    </div>
     <div class="msg" id="scriptMsg"></div>
   </div>
 </section>
 
-<!-- AI PATCHES -->
+<!-- ==================== PATCHES TAB ==================== -->
 <section id="tab-patches" class="hidden">
-  <div class="panel">
-    <h3>AI patches pending review</h3>
-    <p style="color:var(--muted);font-size:13px">Each patch is minimal (unique replacement). Approve or reject individually. Publishing is blocked while a patch is pending.</p>
-    <div id="patchesList"><p style="color:var(--muted)">No pending patches 🎉</p></div>
+  <div class="admin-panel fade-up">
+    <h3><span class="icon">🤖</span> AI Patches pending</h3>
+    <p class="sub">Each patch is a minimal replacement. Approve or reject individually.</p>
+    <div id="patchesList">
+      <div class="empty-state"><div class="icon">✨</div>No pending patches</div>
+    </div>
   </div>
 </section>
 
-</main>
+</div><!-- end admin-main -->
 
-<!-- Modal: created keys -->
-<div style="position:fixed;inset:0;background:#000000aa;z-index:100;display:none;place-items:center;" id="createdModal" onclick="if(event.target===this)this.style.display='none'">
-  <div style="background:var(--card);border:1px solid #2e2542;border-radius:14px;padding:28px;max-width:560px;width:calc(100vw - 40px);max-height:80vh;overflow:auto;">
-    <h3 style="margin-bottom:6px;">✅ <span id="createdCount"></span> keys created</h3>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">Valid <span id="createdDuration"></span> — share them!</p>
+<!-- ===== MODALS ===== -->
+<div class="modal-overlay" id="createdModal">
+  <div class="modal-box">
+    <h3>✅ <span id="createdCount"></span> keys created</h3>
+    <p style="color:var(--admin-muted);font-size:13px;margin-bottom:14px;">Valid <span id="createdDuration"></span> — share them!</p>
     <textarea id="createdKeys" rows="8" readonly style="width:100%;font-family:Consolas,monospace;font-size:12px;background:#13101c;border:1px solid #231c33;border-radius:8px;color:#d8b4fe;padding:12px;user-select:all;"></textarea>
     <div style="display:flex;gap:10px;margin-top:14px;">
-      <button class="btn small" onclick="copyCreatedKeys()">📋 Copy all</button>
-      <button class="btn small ghost" onclick="document.getElementById('createdModal').style.display='none'">Close</button>
+      <button class="admin-btn small" onclick="copyCreatedKeys()">📋 Copy all</button>
+      <button class="admin-btn small ghost" onclick="closeModal('createdModal')">Close</button>
     </div>
   </div>
 </div>
 
-<!-- Modal: key detail -->
-<div style="position:fixed;inset:0;background:#000000aa;z-index:100;display:none;place-items:center;" id="detailModal" onclick="if(event.target===this)this.style.display='none'">
-  <div style="background:var(--card);border:1px solid #2e2542;border-radius:14px;padding:28px;max-width:620px;width:calc(100vw - 40px);max-height:82vh;overflow:auto;">
-    <h3 style="margin-bottom:12px;">🔑 Key detail</h3>
+<div class="modal-overlay" id="detailModal">
+  <div class="modal-box">
+    <h3>🔑 Key detail</h3>
     <div id="detailBody"></div>
     <div style="margin-top:14px;">
-      <button class="btn small ghost" onclick="document.getElementById('detailModal').style.display='none'">Close</button>
+      <button class="admin-btn small ghost" onclick="closeModal('detailModal')">Close</button>
     </div>
   </div>
 </div>
 
-<div class="login" id="login">
-  <h1 style="margin-bottom:12px">Admin Dashboard</h1>
-  <p style="color:var(--muted);margin-bottom:26px">Sign in with Discord (allowlist).</p>
-  <a class="btn" href="/api/admin/auth/login" style="text-decoration:none">Sign in with Discord</a>
+<!-- ===== LOGIN PAGE ===== -->
+<div class="login-page" id="login">
+  <h1>KeySystem Admin</h1>
+  <p>Sign in with Discord to access the dashboard.</p>
+  <a class="admin-btn" href="/api/admin/auth/login" style="text-decoration:none">🔐 Sign in with Discord</a>
 </div>
 
 <script>
@@ -203,10 +530,11 @@ async function logout() {
 }
 
 function showTab(name) {
-  document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+  document.querySelectorAll('.admin-main > section').forEach(s => s.classList.add('hidden'));
   document.getElementById('tab-' + name).classList.remove('hidden');
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-  if (name === 'stats') loadStats();
+  document.querySelectorAll('.admin-nav .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'revenue') loadRevenue();
   if (name === 'keys') loadKeys();
   if (name === 'bans') loadBans();
   if (name === 'script') loadVersions();
@@ -215,57 +543,154 @@ function showTab(name) {
 
 function esc(s) { return String(s ?? '').replace(/</g, '&lt;'); }
 
-// ---- STATS ----
-async function loadStats() {
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+
+// Close modals on backdrop click
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) closeModal(el.id); });
+});
+
+function fmtNum(n) { return n.toLocaleString('en-US'); }
+
+function barRow(label, value, max, cls = 'violet') {
+  const pct = max > 0 ? (value / max * 100).toFixed(1) : 0;
+  return `<div class="chart-row">
+    <span class="label">${esc(label)}</span>
+    <div class="bar"><div class="bar-fill ${cls}" style="width:${pct}%"></div></div>
+    <span class="value">${fmtNum(value)}</span>
+  </div>`;
+}
+
+// ==================== DASHBOARD ====================
+let dashLoaded = false;
+async function loadDashboard() {
   try {
     const d = await api('/stats');
-    document.getElementById('s-exec').textContent = d.executions.toLocaleString('en-US');
-    document.getElementById('s-users').textContent = d.uniqueUsers.toLocaleString('en-US');
-    document.getElementById('s-errs').textContent = d.errors7d;
-    const max = Math.max(1, ...d.perDay.map(x => x.c));
-    document.getElementById('perday').innerHTML = d.perDay.map(x =>
-      `<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="width:86px;color:var(--muted);font-size:12px">${x.d}</span><div class="bar" style="flex:1"><div style="width:${(x.c/max*100).toFixed(1)}%"></div></div><span style="width:34px;text-align:right;font-size:13px">${x.c}</span></div>`
-    ).join('') || '<p style="color:var(--muted)">No data yet.</p>';
-    document.getElementById('byexec').innerHTML = d.byExecutor.map(x =>
-      `<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="width:130px;color:var(--muted);font-size:13px">${esc(x.executor || 'unknown')}</span><div class="bar" style="flex:1"><div style="width:${(x.c / (d.byExecutor[0].c) * 100).toFixed(1)}%"></div></div><span style="width:44px;text-align:right;font-size:13px">${x.c}</span></div>`
-    ).join('') || '<p style="color:var(--muted)">No data yet.</p>';
+    document.getElementById('dashStats').innerHTML = `
+      <div class="admin-stat fade-up">
+        <div class="stat-icon">⚡</div>
+        <div class="num">${fmtNum(d.executions)}</div>
+        <div class="lbl">Total executions</div>
+      </div>
+      <div class="admin-stat fade-up fade-up-d1">
+        <div class="stat-icon">👥</div>
+        <div class="num">${fmtNum(d.uniqueUsers)}</div>
+        <div class="lbl">Unique users</div>
+      </div>
+      <div class="admin-stat fade-up fade-up-d2">
+        <div class="stat-icon">🔑</div>
+        <div class="num">${fmtNum(d.keysPerDay?.reduce((a, x) => a + x.c, 0) || 0)}</div>
+        <div class="lbl">Keys created (30d)</div>
+        <div class="sub-stat"><span class="ss"><b>${d.manualKeysTotal}</b> manual</span></div>
+      </div>
+      <div class="admin-stat fade-up fade-up-d3">
+        <div class="stat-icon">⚠️</div>
+        <div class="num">${d.errors7d}</div>
+        <div class="lbl">Errors (7d)</div>
+      </div>`;
 
-    // Keys created per day (barres vertes pour distinguer des executions bleues)
-    if (d.manualKeysTotal !== undefined) {
-      document.getElementById('manualBadge').textContent = '· ' + d.manualKeysTotal + ' manual total';
-    }
+    const max = Math.max(1, ...d.perDay.map(x => x.c));
+    document.getElementById('perday').innerHTML = d.perDay.length
+      ? d.perDay.map(x => barRow(x.d, x.c, max, 'violet')).join('')
+      : '<div class="empty-state"><div class="icon">📊</div>No data yet</div>';
+
     const kmax = Math.max(1, ...(d.keysPerDay || []).map(x => x.c));
-    document.getElementById('keysperday').innerHTML = (d.keysPerDay || []).map(x =>
-      `<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="width:86px;color:var(--muted);font-size:12px">${x.d}</span><div class="bar" style="flex:1"><div style="width:${(x.c/kmax*100).toFixed(1)}%;background:#c084fc;"></div></div><span style="width:34px;text-align:right;font-size:13px">${x.c}</span></div>`
-    ).join('') || '<p style="color:var(--muted)">No keys created yet.</p>';
+    document.getElementById('keysperday').innerHTML = (d.keysPerDay || []).length
+      ? d.keysPerDay.map(x => barRow(x.d, x.c, kmax, 'pink')).join('')
+      : '<div class="empty-state"><div class="icon">🔑</div>No keys created yet</div>';
+
+    document.getElementById('byexec').innerHTML = d.byExecutor.length
+      ? d.byExecutor.map(x => barRow(x.executor || 'unknown', x.c, d.byExecutor[0].c, 'violet')).join('')
+      : '<div class="empty-state"><div class="icon">🧩</div>No executions yet</div>';
+
+    dashLoaded = true;
   } catch {}
 }
 
-// ---- KEYS ----
+// ==================== REVENUE ====================
+async function loadRevenue() {
+  try {
+    const d = await api('/robux-stats');
+    const t = d.totals;
+
+    document.getElementById('revStats').innerHTML = `
+      <div class="admin-stat revenue fade-up">
+        <div class="stat-icon">💰</div>
+        <div class="num">${fmtNum(t.revenueR$)} R$</div>
+        <div class="lbl">Total revenue</div>
+        <div class="sub-stat"><span class="ss"><b>${fmtNum(t.purchases)}</b> total sales</span></div>
+      </div>
+      <div class="admin-stat fade-up fade-up-d1">
+        <div class="stat-icon">📦</div>
+        <div class="num">${fmtNum(t.purchases)}</div>
+        <div class="lbl">Total purchases</div>
+      </div>
+      <div class="admin-stat fade-up fade-up-d2">
+        <div class="stat-icon">📈</div>
+        <div class="num">${d.perDay.length ? d.perDay.slice(-7).reduce((a, x) => a + x.revenue, 0) : 0} R$</div>
+        <div class="lbl">Last 7 days</div>
+      </div>`;
+
+    // Revenue per day chart
+    const maxRev = Math.max(1, ...d.perDay.map(x => x.revenue));
+    document.getElementById('revPerDay').innerHTML = d.perDay.length
+      ? d.perDay.map(x => barRow(x.d, x.revenue + ' R$', maxRev, 'gold')).join('')
+      : '<div class="empty-state"><div class="icon">💰</div>No revenue data yet</div>';
+
+    // Offer breakdown cards
+    document.getElementById('offerBreakdown').innerHTML = d.perOffer.length
+      ? d.perOffer.map(o => {
+          const nameMap = { day1: '1 Day', week1: '7 Days', month1: '30 Days', lifetime: 'Lifetime' };
+          return `<div class="offer-card">
+            <div class="offer-name">${nameMap[o.sku] || o.sku}</div>
+            <div class="offer-rev">${fmtNum(o.revenue)} R$</div>
+            <div class="offer-count">${o.count} sale${o.count !== 1 ? 's' : ''}</div>
+            <div class="offer-price">${o.priceR$} R$ each</div>
+          </div>`;
+        }).join('')
+      : '<div class="empty-state"><div class="icon">📦</div>No offers sold yet</div>';
+
+    // Recent sales table
+    const tbody = document.querySelector('#salesTable tbody');
+    tbody.innerHTML = d.recentSales.length
+      ? d.recentSales.map(s => `<tr>
+          <td><b>${esc(s.username || '–')}</b><br><span class="mono" style="font-size:11px;color:var(--admin-muted-2)">${s.userId}</span></td>
+          <td><span class="badge violet">${s.offer}</span></td>
+          <td><b style="color:#fbbf24">${s.priceR$} R$</b></td>
+          <td><span class="badge ${s.method === 'webhook' ? 'ok' : 'muted'}">${s.method}</span></td>
+          <td><span class="badge ${s.status === 'delivered' ? 'ok' : 'err'}">${s.status}</span></td>
+          <td class="mono">${new Date(s.date).toLocaleString('en-US')}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="6" style="text-align:center;color:var(--admin-muted-2)">No sales yet</td></tr>';
+  } catch {}
+}
+
+// ==================== KEYS ====================
 async function loadKeys() {
   try {
     const d = await api('/keys');
     document.querySelector('#keysTable tbody').innerHTML = d.keys.map(k => {
       const expired = new Date(k.expires_at) < new Date();
-      const st = k.revoked ? '<span style="color:var(--red)">revoked</span>'
-        : expired ? '<span style="color:var(--muted)">expired</span>'
-        : '<span style="color:var(--green)">valid</span>';
+      const st = k.revoked ? '<span class="badge err">revoked</span>'
+        : expired ? '<span class="badge muted">expired</span>'
+        : '<span class="badge ok">valid</span>';
       const src = k.source === 'manual'
-        ? '<span style="color:#c084fc;border:1px solid #c084fc44;border-radius:20px;padding:1px 8px;font-size:11px;">manual</span>'
-        : '<span style="color:var(--muted);font-size:12px;">ad</span>';
+        ? '<span class="badge violet">manual</span>'
+        : '<span class="badge muted">ad</span>';
       return `<tr>
-        <td class="mono" style="cursor:pointer;" title="Click for detail" onclick="showKeyDetail(${k.id})"><b>${k.kid.slice(0,10)}…</b></td>
+        <td class="mono" style="cursor:pointer;color:var(--admin-glow)" onclick="showKeyDetail(${k.id})"><b>${k.kid.slice(0,12)}…</b></td>
         <td>${k.bound_user_id ?? '–'}</td>
         <td class="mono">${new Date(k.expires_at).toLocaleString('en-US')}</td>
         <td>${src}</td>
-        <td style="color:var(--muted);font-size:12px;">${esc(k.note) || '–'}</td>
+        <td style="font-size:12px">${esc(k.note) || '–'}</td>
         <td>${k.execs}</td>
         <td>${st}</td>
         <td>${k.revoked
-          ? `<button class="btn small ghost" onclick="unrevokeKey(${k.id})">Restore</button>`
-          : `<button class="btn small red" onclick="revokeKey(${k.id})">Revoke</button>`}</td>
+          ? `<button class="admin-btn small ghost" onclick="unrevokeKey(${k.id})">Restore</button>`
+          : `<button class="admin-btn small red" onclick="revokeKey(${k.id})">Revoke</button>`}</td>
       </tr>`;
-    }).join('') || '<tr><td colspan="8" style="color:var(--muted)">No keys.</td></tr>';
+    }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--admin-muted-2)">No keys</td></tr>';
   } catch {}
 }
 async function revokeKey(id) { await api(`/keys/${id}/revoke`, { method: 'POST' }); loadKeys(); }
@@ -279,29 +704,27 @@ async function createKeys() {
   const note = document.getElementById('ckNote').value.trim();
   const boundUserId = boundRaw ? parseInt(boundRaw, 10) : null;
 
-  if (!Number.isFinite(durationHours) || durationHours < 1) { msg.textContent = '❌ Invalid duration (min 1 hour)'; return; }
-  if (boundUserId !== null && !Number.isFinite(boundUserId)) { msg.textContent = '❌ Invalid UserId'; return; }
+  if (!Number.isFinite(durationHours) || durationHours < 1) { msg.textContent = '❌ Invalid duration (min 1 hour)'; msg.className = 'msg err'; return; }
+  if (boundUserId !== null && !Number.isFinite(boundUserId)) { msg.textContent = '❌ Invalid UserId'; msg.className = 'msg err'; return; }
 
-  msg.textContent = '⏳ Generating…';
+  msg.textContent = '⏳ Generating…'; msg.className = 'msg';
   try {
     const d = await api('/keys/create', { method: 'POST', body: JSON.stringify({ durationHours, count, boundUserId, note }) });
-    if (!d.success) { msg.textContent = '❌ ' + d.error; return; }
+    if (!d.success) { msg.textContent = '❌ ' + d.error; msg.className = 'msg err'; return; }
     msg.textContent = '';
     document.getElementById('createdCount').textContent = d.count;
     document.getElementById('createdDuration').textContent = d.durationHours + 'h';
     document.getElementById('createdKeys').value = d.created.map(c => c.key).join('\n');
-    document.getElementById('createdModal').style.display = 'grid';
+    openModal('createdModal');
     loadKeys();
-    if (window.showToast) showToast('🔑 ' + d.count + ' key(s) created!');
   } catch (e) {
-    msg.textContent = '❌ Network error';
+    msg.textContent = '❌ Network error'; msg.className = 'msg err';
   }
 }
 
 function copyCreatedKeys() {
   const v = document.getElementById('createdKeys').value;
   if (v) navigator.clipboard.writeText(v);
-  if (window.showToast) showToast('📋 All keys copied!');
 }
 
 async function showKeyDetail(id) {
@@ -316,64 +739,66 @@ async function showKeyDetail(id) {
         <td>${esc(e.executor) || '–'}</td>
         <td class="mono">v${e.version}</td>
         <td class="mono">${esc(e.ip) || '–'}</td>
-      </tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted)">No executions yet.</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="4" style="color:var(--admin-muted-2)">No executions</td></tr>';
 
     document.getElementById('detailBody').innerHTML = `
       <textarea readonly rows="2" style="width:100%;font-family:Consolas,monospace;font-size:12px;background:#13101c;border:1px solid #231c33;border-radius:8px;color:#d8b4fe;padding:10px;user-select:all;">${k.keyString}</textarea>
-      <button class="btn small" style="margin-top:8px;" onclick="navigator.clipboard.writeText('${k.keyString}');showToast('📋 Key copied!')">📋 Copy key</button>
-      <table style="margin-top:16px;">
-        <tr><td style="color:var(--muted)">Status</td><td>${k.revoked ? '<span style="color:var(--red)">revoked</span>' : expired ? '<span style="color:var(--muted)">expired</span>' : '<span style="color:var(--green)">valid</span>'}</td></tr>
-        <tr><td style="color:var(--muted)">Source</td><td>${k.source === 'manual' ? 'manual (no ads)' : 'ad (LootLabs)'}</td></tr>
-        <tr><td style="color:var(--muted)">Bound to</td><td>${k.boundUserId ?? 'not bound yet'}</td></tr>
-        <tr><td style="color:var(--muted)">Created</td><td>${new Date(k.createdAt).toLocaleString('en-US')}</td></tr>
-        <tr><td style="color:var(--muted)">Expires</td><td>${new Date(k.expiresAt).toLocaleString('en-US')} (${k.durationHours}h)</td></tr>
-        <tr><td style="color:var(--muted)">Renewals</td><td>${k.renewedCount}</td></tr>
-        <tr><td style="color:var(--muted)">Note</td><td>${esc(k.note) || '–'}</td></tr>
-        <tr><td style="color:var(--muted)">Total executions</td><td>${k.totalExecs}</td></tr>
+      <button class="admin-btn small" style="margin-top:8px;" onclick="navigator.clipboard.writeText('${k.keyString}')">📋 Copy key</button>
+      <table style="margin-top:16px;width:100%">
+        <tr><td style="color:var(--admin-muted-2);padding:6px 0">Status</td><td>${k.revoked ? '<span class="badge err">revoked</span>' : expired ? '<span class="badge muted">expired</span>' : '<span class="badge ok">valid</span>'}</td></tr>
+        <tr><td style="color:var(--admin-muted-2);padding:6px 0">Source</td><td>${k.source === 'manual' ? 'manual (no ads)' : 'ad (LootLabs)'}</td></tr>
+        <tr><td style="color:var(--admin-muted-2);padding:6px 0">Bound to</td><td>${k.boundUserId ?? 'not bound yet'}</td></tr>
+        <tr><td style="color:var(--admin-muted-2);padding:6px 0">Created</td><td>${new Date(k.createdAt).toLocaleString('en-US')}</td></tr>
+        <tr><td style="color:var(--admin-muted-2);padding:6px 0">Expires</td><td>${new Date(k.expiresAt).toLocaleString('en-US')} (${k.durationHours}h)</td></tr>
+        <tr><td style="color:var(--admin-muted-2);padding:6px 0">Renewals</td><td>${k.renewedCount}</td></tr>
+        <tr><td style="color:var(--admin-muted-2);padding:6px 0">Note</td><td>${esc(k.note) || '–'}</td></tr>
+        <tr><td style="color:var(--admin-muted-2);padding:6px 0">Executions</td><td>${k.totalExecs}</td></tr>
       </table>
-      <h4 style="margin:18px 0 8px;">Execution history</h4>
-      <table><thead><tr><th>Date</th><th>Executor</th><th>Version</th><th>IP</th></tr></thead><tbody>${execRows}</tbody></table>
-    `;
-    document.getElementById('detailModal').style.display = 'grid';
+      <h4 style="margin:18px 0 8px">Execution history</h4>
+      <div style="overflow-x:auto">
+        <table class="admin-table"><thead><tr><th>Date</th><th>Executor</th><th>Version</th><th>IP</th></tr></thead><tbody>${execRows}</tbody></table>
+      </div>`;
+    openModal('detailModal');
   } catch {}
 }
 
-// ---- BANS ----
+// ==================== BANS ====================
 async function loadBans() {
   try {
     const d = await api('/bans');
     document.querySelector('#bansTable tbody').innerHTML = d.bans.map(b =>
-      `<tr><td class="mono">${b.user_id}</td><td>${esc(b.reason) || '–'}</td><td>${new Date(b.created_at).toLocaleString('en-US')}</td>
-       <td><button class="btn small green" onclick="unban(${b.user_id})">Unban</button></td></tr>`
-    ).join('') || '<tr><td colspan="4" style="color:var(--muted)">No bans.</td></tr>';
+      `<tr><td class="mono">${b.user_id}</td><td>${esc(b.reason) || '–'}</td><td class="mono">${new Date(b.created_at).toLocaleString('en-US')}</td>
+       <td><button class="admin-btn small green" onclick="unban(${b.user_id})">Unban</button></td></tr>`
+    ).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--admin-muted-2)">No bans</td></tr>';
   } catch {}
 }
 async function banUser() {
   const userId = parseInt(document.getElementById('banUserId').value);
-  if (!Number.isFinite(userId)) return alert('Invalid UserId');
+  if (!Number.isFinite(userId)) return;
   await api('/bans', { method: 'POST', body: JSON.stringify({ userId, reason: document.getElementById('banReason').value }) });
   document.getElementById('banUserId').value = '';
+  document.getElementById('banReason').value = '';
   loadBans();
 }
 async function unban(userId) { await api(`/bans/${userId}`, { method: 'DELETE' }); loadBans(); }
 
-// ---- SCRIPT ----
+// ==================== SCRIPT ====================
 async function loadVersions() {
   try {
     const d = await api('/script/versions');
     document.querySelector('#versionsTable tbody').innerHTML = d.versions.map(v =>
       `<tr>
         <td><b>v${v.version}</b></td>
-        <td>${v.place_id ? '<span class="mono" style="color:var(--accent)">🎮 ' + v.place_id + '</span><br>' : ''}<span style="color:var(--muted);font-size:12px">${esc(v.note)}</span></td>
-        <td>${new Date(v.created_at).toLocaleString('en-US')}</td>
+        <td>${v.place_id ? '<span class="mono" style="color:var(--admin-glow)">🎮 ' + v.place_id + '</span><br>' : ''}<span style="font-size:12px;color:var(--admin-muted-2)">${esc(v.note)}</span></td>
+        <td class="mono">${new Date(v.created_at).toLocaleString('en-US')}</td>
         <td>${v.builds}</td>
-        <td>${v.published ? '<span style="color:var(--green)">yes</span>' : '<span style="color:var(--muted)">no</span>'}</td>
-        <td>
-          <button class="btn small ghost" onclick="loadOriginal(${v.version})">Open in editor</button>
-          <button class="btn small green" onclick="publishVersion(${v.version})">Publish</button>
+        <td>${v.published ? '<span class="badge ok">published</span>' : '<span class="badge muted">draft</span>'}</td>
+        <td style="white-space:nowrap">
+          <button class="admin-btn small ghost" onclick="loadOriginal(${v.version})">Edit</button>
+          <button class="admin-btn small green" onclick="publishVersion(${v.version})">Publish</button>
         </td>
       </tr>`
-    ).join('') || '<tr><td colspan="6" style="color:var(--muted)">No versions.</td></tr>';
+    ).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--admin-muted-2)">No versions</td></tr>';
   } catch {}
 }
 async function loadOriginal(version) {
@@ -383,9 +808,11 @@ async function loadOriginal(version) {
     const vData = await api('/script/versions');
     const ver = (vData.versions || []).find(x => x.version === version);
     document.getElementById('scriptPlaceId').value = ver && ver.place_id ? ver.place_id : '';
-    document.getElementById('scriptMsg').textContent = `Version v${version} loaded in the editor — edit and save to create v${version + 1}.`;
+    document.getElementById('scriptMsg').textContent = `Version v${version} loaded — edit and save to create v${version + 1}.`;
+    document.getElementById('scriptMsg').className = 'msg ok';
   } else {
     document.getElementById('scriptMsg').textContent = d.error;
+    document.getElementById('scriptMsg').className = 'msg err';
   }
 }
 async function saveScript() {
@@ -395,47 +822,59 @@ async function saveScript() {
   const placeId = placeIdRaw ? parseInt(placeIdRaw) : null;
   const msg = document.getElementById('scriptMsg');
   if (placeId !== null && !Number.isFinite(placeId)) {
-    msg.textContent = '❌ Invalid PlaceId (number expected)';
-    return;
+    msg.textContent = '❌ Invalid PlaceId'; msg.className = 'msg err'; return;
   }
-  msg.textContent = '⏳ Pipeline running (analysis, shims, AI, obfuscation)...';
+  msg.textContent = '⏳ Pipeline running…'; msg.className = 'msg';
   try {
     const d = await api('/script/save', { method: 'POST', body: JSON.stringify({ source, note, placeId }) });
     if (d.success) {
-      msg.innerHTML = `✅ Draft v${d.version} created — ${d.buildType === 'ai' ? d.patches + ' AI patch(es) to review' : 'shims only, auto-approved'}. Nothing goes live until you publish.`;
+      msg.innerHTML = `✅ Draft v${d.version} — ${d.buildType === 'ai' ? d.patches + ' AI patch(es)' : 'shims only'}.`;
+      msg.className = 'msg ok';
       document.getElementById('scriptNote').value = '';
       loadVersions();
-      if (d.compatReport && d.compatReport.issues.length) {
-        msg.innerHTML += `<br><span style="color:var(--muted)">Compat: ${d.compatReport.issues.length} API(s) detected — handled by the prelude.</span>`;
-      }
     } else {
-      msg.textContent = '❌ ' + d.error;
+      msg.textContent = '❌ ' + d.error; msg.className = 'msg err';
     }
   } catch (e) {
-    msg.textContent = '❌ Network error';
+    msg.textContent = '❌ Network error'; msg.className = 'msg err';
   }
 }
 async function publishVersion(version) {
   const d = await api('/script/publish', { method: 'POST', body: JSON.stringify({ version }) });
-  alert(d.success ? `v${version} published — all users get the new version on their next execution.` : d.error);
+  if (d.success) {
+    document.getElementById('scriptMsg').textContent = `✅ v${version} published!`;
+    document.getElementById('scriptMsg').className = 'msg ok';
+  } else {
+    document.getElementById('scriptMsg').textContent = '❌ ' + d.error;
+    document.getElementById('scriptMsg').className = 'msg err';
+  }
   loadVersions();
 }
 
-// ---- AI PATCHES ----
+// ==================== PATCHES ====================
 async function loadPatches() {
   try {
     const d = await api('/patches/pending');
     const el = document.getElementById('patchesList');
     if (!d.patches || !d.patches.length) {
-      el.innerHTML = '<p style="color:var(--muted)">No pending patches 🎉</p>';
+      el.innerHTML = '<div class="empty-state"><div class="icon">✨</div>No pending patches</div>';
       return;
     }
     el.innerHTML = d.patches.map(p =>
-      `<div class="patch">
-        <b>v${p.version}</b> — <span style="color:var(--muted)">${esc(p.reason)}</span>
-        <pre>FIND:\n${esc(p.find)}\n\nREPLACE:\n${esc(p.replace)}</pre>
-        <button class="btn small green" onclick="approvePatch(${p.id})">Approve</button>
-        <button class="btn small red" onclick="rejectPatch(${p.id})">Reject</button>
+      `<div style="background:#17141f;border:1px solid var(--admin-border-accent);border-radius:12px;padding:18px;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span><b style="color:var(--admin-glow)">v${p.version}</b> — <span style="color:var(--admin-muted-2)">${esc(p.reason)}</span></span>
+        </div>
+        <div style="background:#0d0b12;border:1px solid var(--admin-border);border-radius:8px;padding:12px;font-family:Consolas,monospace;font-size:12px;margin-bottom:12px;">
+          <div style="color:var(--admin-muted-2);margin-bottom:6px;font-family:sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.05em">FIND:</div>
+          <div style="color:var(--admin-err);margin-bottom:12px;white-space:pre-wrap">${esc(p.find)}</div>
+          <div style="color:var(--admin-muted-2);margin-bottom:6px;font-family:sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.05em">REPLACE:</div>
+          <div style="color:var(--admin-ok);white-space:pre-wrap">${esc(p.replace)}</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="admin-btn small green" onclick="approvePatch(${p.id})">✅ Approve</button>
+          <button class="admin-btn small red" onclick="rejectPatch(${p.id})">❌ Reject</button>
+        </div>
       </div>`
     ).join('');
   } catch {}
@@ -443,33 +882,13 @@ async function loadPatches() {
 async function approvePatch(id) { await api(`/patches/${id}/approve`, { method: 'POST' }); loadPatches(); }
 async function rejectPatch(id) { await api(`/patches/${id}/reject`, { method: 'POST' }); loadPatches(); }
 
-// ---- INIT ----
+// ==================== INIT ====================
 (async function init() {
   try {
     const me = await fetch(API + '/me', { credentials: 'same-origin' }).then(r => r.json());
-    if (me.loggedIn) { showMain(); showTab('stats'); }
+    if (me.loggedIn) { showMain(); showTab('dashboard'); }
     else showLogin();
   } catch { showLogin(); }
-})();
-</script>
-<script src="/effects.js" defer onload="this.dataset.loaded='1'"></script>
-<script>
-// Admin: neutralise le canvas particules/glow si jamais une version non-fixee est servie
-// (ceinture de securite le temps que le deploiement Render du CSS embarque soit actif)
-(function () {
-  var kill = function () {
-    var c = document.getElementById('ks-particles');
-    if (c) c.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:0;';
-    var g = document.getElementById('ks-glow');
-    if (g) g.style.cssText = 'position:fixed;pointer-events:none;z-index:0;margin:-170px 0 0 -170px;left:-500px;top:-500px;width:340px;height:340px;';
-    var p = document.getElementById('ks-progress');
-    if (p) p.style.cssText = 'position:fixed;top:0;left:0;height:3px;z-index:1000;pointer-events:none;';
-    var t = document.getElementById('ks-toasts');
-    if (t) t.style.cssText = 'position:fixed;bottom:22px;right:22px;z-index:1001;pointer-events:none;';
-  };
-  kill();
-  setTimeout(kill, 50);
-  setTimeout(kill, 500);
 })();
 </script>
 </body>

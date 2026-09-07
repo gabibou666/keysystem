@@ -9,11 +9,14 @@
 <body>
 <nav>
   <div class="logo"><div class="logo-badge">🔑</div> KeySystem</div>
-  <div class="links">
+  <div class="links" id="navLinks">
     <a href="/getkey">Get a key</a>
     <a href="/robux">Pay with Robux</a>
     <a href="/changelog">Changelog</a>
   </div>
+  <button class="nav-hamburger" id="navHamburger" onclick="toggleNav()">
+    <span></span><span></span><span></span>
+  </button>
 </nav>
 
 <main>
@@ -23,9 +26,6 @@
     <div class="actions">
       <a class="btn pulse" href="/getkey">🔑 Get my key</a>
       <a class="btn secondary" href="/robux">💎 Pay with Robux</a>
-      <a class="btn secondary" href="#games">Supported games</a>
-      <a class="btn secondary" href="#activity">Live activity</a>
-      <a class="btn secondary" href="#loader">View loader</a>
     </div>
   </section>
 
@@ -35,10 +35,73 @@
     <div class="stat reveal d2"><div class="num" id="uptime">24/7</div><div class="lbl">uptime</div></div>
   </section>
 
+  <!-- HOW IT WORKS -->
+  <div class="steps-section" id="howItWorks">
+    <h2 class="reveal">How it works</h2>
+    <div class="steps-flow">
+      <div class="step-card reveal">
+        <div class="step-num">1</div>
+        <h3>Copy the loader</h3>
+        <p>One line — paste it into any executor. Works everywhere.</p>
+      </div>
+      <div class="step-card reveal d1">
+        <div class="step-num">2</div>
+        <h3>Get your key</h3>
+        <p>Watch one short ad (or pay with Robux). Takes 30 seconds.</p>
+      </div>
+      <div class="step-card reveal d2">
+        <div class="step-num">3</div>
+        <h3>Play</h3>
+        <p>Enter your key — the right script loads for your game automatically.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- YOUR KEY (visible immediately, not hidden below fold) -->
+  <section class="keypanel neon-frame reveal" id="keyCard" style="margin-top: 10px;">
+    <h2>🔑 Your key</h2>
+    <p class="sub">Saved in this browser — paste it into the loader.</p>
+    <div class="keybox">
+      <textarea id="keybox" rows="2" readonly placeholder="No key yet — click 'Get my key' above."></textarea>
+      <button class="btn small" onclick="copyKey()">Copy</button>
+    </div>
+    <div id="countdownWrap" class="countdown-wrap hidden">
+      <div class="countdown"><span id="countdown">--:--:--</span><span class="lbl">time remaining</span></div>
+      <button class="btn small" onclick="location.href='/getkey'">🔄 Renew (1 ad)</button>
+    </div>
+    <div id="status" class="status"></div>
+  </section>
+
+  <!-- Loader -->
+  <section class="keypanel reveal" id="loader" style="margin-top: 22px;">
+    <h2>📋 Loader</h2>
+    <p class="sub">One single line in your executor:</p>
+    <div class="codebox" id="loaderCode">-- loads below --</div>
+    <div style="margin-top: 14px;">
+      <button class="btn small" id="loaderCardBtn" onclick="copyLoader()">📋 Copy loader</button>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="grid" style="margin-top: 50px;">
+    <div class="card reveal">
+      <h3><span class="icon">🧩</span> All executors</h3>
+      <p>Synapse Z, Wave, Xeno, Delta, Codex, Fluxus, Solara, Ronin, MacSploit… The loader adapts automatically.</p>
+    </div>
+    <div class="card reveal d1">
+      <h3><span class="icon">🎮</span> Multi-game</h3>
+      <p>The same loader detects the current game and loads the right script for that PlaceId.</p>
+    </div>
+    <div class="card reveal d2">
+      <h3><span class="icon">🛡️</span> Anti-sharing</h3>
+      <p>Each key binds to your Roblox account. Shared key = rejected. All tracked live.</p>
+    </div>
+  </section>
+
   <!-- Supported games -->
   <div class="games-head" id="games">
     <h2 class="reveal">🎮 Supported games</h2>
-    <p class="sub reveal d1">Updated automatically every time a script is published for a game.</p>
+    <p class="sub reveal d1">Updated automatically every time a script is published.</p>
   </div>
   <section class="games-grid" id="gamesGrid">
     <div class="skeleton reveal"></div>
@@ -46,7 +109,7 @@
     <div class="skeleton reveal d2"></div>
   </section>
 
-  <!-- Live activity (anonymous counters) -->
+  <!-- Live activity -->
   <div class="activity-head" id="activity">
     <h2 class="reveal">⚡ Live activity</h2>
     <div class="activity-live reveal d1">
@@ -60,47 +123,6 @@
     <div class="stat reveal d2"><div class="num" id="execToday">0</div><div class="lbl">executions today</div></div>
     <div class="stat reveal d3"><div class="num" id="totalUsers">0</div><div class="lbl">total users</div></div>
   </section>
-
-  <section class="keypanel neon-frame reveal" id="keyCard">
-    <h2>Your key</h2>
-    <p class="sub">Saved in your browser — paste it into the loader.</p>
-    <div class="keybox">
-      <textarea id="keybox" rows="2" readonly placeholder="No key in this browser yet — click “Get my key”."></textarea>
-      <button class="btn small" onclick="copyKey()">Copy</button>
-    </div>
-    <div id="countdownWrap" class="countdown-wrap hidden">
-      <div class="countdown"><span id="countdown">--:--:--</span><span class="lbl">time remaining</span></div>
-      <button class="btn small" onclick="location.href='/getkey'">🔄 Renew (1 ad)</button>
-    </div>
-    <div id="status" class="status"></div>
-  </section>
-
-  <section class="grid">
-    <div class="card reveal">
-      <h3><span class="icon">🧩</span> All executors</h3>
-      <p>Synapse Z, Wave, Xeno, Delta, Codex, Fluxus, Solara, Ronin, MacSploit… The loader automatically adapts to your executor's available functions.</p>
-    </div>
-    <div class="card reveal d1">
-      <h3><span class="icon">🎮</span> Multi-game</h3>
-      <p>The same loader detects the current game and automatically loads the right script published for that PlaceId.</p>
-    </div>
-    <div class="card reveal d2">
-      <h3><span class="icon">🛡️</span> Anti-sharing</h3>
-      <p>Each key binds to the first Roblox account that uses it. Shared key = rejected. Executions and errors tracked live.</p>
-    </div>
-  </section>
-
-  <section class="keypanel reveal" id="loader">
-    <h2>Loader</h2>
-    <p class="sub">One single line in your executor:</p>
-    <div class="codebox" id="loaderCode">-- loads below --</div>
-    <div style="margin-top: 14px;">
-      <button class="btn small" id="loaderCardBtn" onclick="copyLoader()">📋 Copy loader</button>
-    </div>
-    <p class="sub" style="margin-top: 18px; margin-bottom: 0;">
-      1. Copy the line → 2. Paste it into your executor → 3. Enter your key → the script loads.
-    </p>
-  </section>
 </main>
 
 <footer>
@@ -110,6 +132,19 @@
 <script>
 const KEY_STORAGE = 'keysystem_key';
 const PUID_STORAGE = 'keysystem_pending_puid';
+
+// ===== Mobile nav toggle =====
+function toggleNav() {
+  document.getElementById('navLinks').classList.toggle('open');
+  document.getElementById('navHamburger').classList.toggle('open');
+}
+// Close nav on link click
+document.querySelectorAll('#navLinks a').forEach(a => {
+  a.addEventListener('click', () => {
+    document.getElementById('navLinks').classList.remove('open');
+    document.getElementById('navHamburger').classList.remove('open');
+  });
+});
 
 // ===== Reveal on scroll =====
 const io = new IntersectionObserver((entries) => {
@@ -185,7 +220,7 @@ async function loadGames() {
     const r = await fetch('/api/games/public');
     const d = await r.json();
     if (!d.games || !d.games.length) {
-      grid.innerHTML = '<p class="games-empty">No published scripts yet — the games will appear here as soon as one is published.</p>';
+      grid.innerHTML = '<p class="games-empty">No published scripts yet — games will appear here as soon as one is published.</p>';
       return;
     }
     grid.innerHTML = d.games.map((g, i) => `
@@ -206,7 +241,7 @@ async function loadGames() {
   }
 }
 
-// ===== Live activity (anonymous counters) =====
+// ===== Live activity =====
 async function loadActivity() {
   try {
     const r = await fetch('/api/activity/public');
@@ -267,7 +302,6 @@ function tickCountdown(target) {
   if (diff < 3600000) el.classList.add('urgent');
 }
 
-/* Feedback visuel Copy: le bouton devient "Copied ✓" 1.4s (classe .copied = flash violet) */
 function flashCopied(btn, baseLabel) {
   if (!btn) return;
   const old = baseLabel || btn.innerHTML;

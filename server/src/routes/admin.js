@@ -472,6 +472,115 @@ router.post('/patches/:id/reject', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
+// ---------- ROBUX REVENUE STATS ----------
+// Revenus Robux: totaux, par offre, par jour, dernieres ventes
+router.get('/robux-stats', requireAdmin, async (req, res) => {
+  try {
+    const priceMap = { day1: 50, week1: 250, month1: 750, lifetime: 2000 };
+
+    const [totalPurchases, totalReceipts, perOfferP, perOfferR, perDayP, perDayR, recentP, recentR] = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int c FROM robux_purchases`),
+      pool.query(`SELECT COUNT(*)::int c FROM robux_receipts`),
+      pool.query(
+        `SELECT offer_sku, COUNT(*)::int c FROM robux_purchases WHERE status = 'delivered' GROUP BY offer_sku ORDER BY c DESC`
+      ),
+      pool.query(
+        `SELECT offer_sku, COUNT(*)::int c FROM robux_receipts GROUP BY offer_sku ORDER BY c DESC`
+      ),
+      pool.query(
+        `SELECT to_char(date_trunc('day', verified_at), 'YYYY-MM-DD') d, COUNT(*)::int c
+         FROM robux_purchases WHERE status = 'delivered'
+         GROUP BY 1 ORDER BY 1`
+      ),
+      pool.query(
+        `SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') d, COUNT(*)::int c
+         FROM robux_receipts
+         GROUP BY 1 ORDER BY 1`
+      ),
+      pool.query(
+        `SELECT roblox_username, roblox_user_id, offer_sku, status, delivered_at, verified_at
+         FROM robux_purchases ORDER BY verified_at DESC LIMIT 20`
+      ),
+      pool.query(
+        `SELECT roblox_username, roblox_user_id, offer_sku, key_string, created_at
+         FROM robux_receipts ORDER BY created_at DESC LIMIT 20`
+      ),
+    ]);
+
+    // Merge purchases + receipts pour les stats
+    const mergeOffers = {};
+    for (const r of [...perOfferP.rows, ...perOfferR.rows]) {
+      mergeOffers[r.offer_sku] = (mergeOffers[r.offer_sku] || 0) + r.c;
+    }
+    const offersBreakdown = Object.entries(mergeOffers).map(([sku, count]) => ({
+      sku,
+      count,
+      priceR$: priceMap[sku] || 0,
+      revenue: (priceMap[sku] || 0) * count,
+    })).sort((a, b) => b.revenue - a.revenue);
+
+    // Merge par jour
+    const mergeDays = {};
+    for (const r of [...perDayP.rows, ...perDayR.rows]) {
+      mergeDays[r.d] = (mergeDays[r.d] || 0) + r.c;
+    }
+    const perDay = Object.entries(mergeDays).map(([d, c]) => ({ d, c })).sort((a, b) => a.d.localeCompare(b.d));
+
+    // Calculer revenu par jour
+    const priceBySku = priceMap;
+    const perDayRevenue = perDay.map(x => {
+      // Revenu estime basé sur la repartition proportionnelle
+      const totalUnits = Object.values(mergeOffers).reduce((a, b) => a + b, 0) || 1;
+      let rev = 0;
+      for (const [sku, count] of Object.entries(mergeOffers)) {
+        const ratio = count / totalUnits;
+        rev += (priceBySku[sku] || 0) * Math.round(x.c * ratio);
+      }
+      return { d: x.d, c: x.c, revenue: Math.round(rev) };
+    });
+
+    const totalUnits = offersBreakdown.reduce((a, b) => a + b.count, 0);
+    const totalRevenue = offersBreakdown.reduce((a, b) => a + b.revenue, 0);
+
+    // Recent sales merged (purchases + receipts)
+    const recentSales = [
+      ...recentP.rows.map(r => ({
+        username: r.roblox_username,
+        userId: r.roblox_user_id,
+        offer: r.offer_sku,
+        priceR$: priceMap[r.offer_sku] || 0,
+        status: r.status,
+        date: r.delivered_at || r.verified_at,
+        method: 'gamepass',
+      })),
+      ...recentR.rows.map(r => ({
+        username: r.roblox_username,
+        userId: r.roblox_user_id,
+        offer: r.offer_sku,
+        priceR$: priceMap[r.offer_sku] || 0,
+        status: 'delivered',
+        date: r.created_at,
+        method: 'webhook',
+      })),
+    ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 20);
+
+    res.json({
+      success: true,
+      totals: {
+        purchases: totalPurchases.rows[0].c + totalReceipts.rows[0].c,
+        revenueR$: totalRevenue,
+        uniqueBuyers: totalPurchases.rows[0].c + totalReceipts.rows[0].c,
+      },
+      perOffer: offersBreakdown,
+      perDay: perDayRevenue,
+      recentSales,
+    });
+  } catch (e) {
+    console.error('[admin/robux-stats]', e);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
+});
+
 // ---------- CHANGELOG (public data pour la page /changelog) ----------
 router.get('/changelog', async (req, res) => {
   const { rows } = await pool.query(

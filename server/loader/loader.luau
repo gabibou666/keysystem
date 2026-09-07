@@ -141,11 +141,11 @@ local function saveKey(key)
     pcall(function() writefile("keysystem_key.txt", key) end)
 end
 
--- ===== Tente WindUI (echoue proprement sur les executors limites) =====
+-- ===== Tente WindUI (self-host: ton domaine, pas de dependance GitHub) =====
 local WindUI
 do
     local ok, result = pcall(function()
-        return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+        return loadstring(game:HttpGet(SITE .. "/api/v1/windui"))()
     end)
     if ok and type(result) == "table" and result.CreateWindow then
         WindUI = result
