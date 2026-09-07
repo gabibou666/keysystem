@@ -48,6 +48,9 @@ app.use((req, res, next) => {
   next();
 });
 
+// Keepalive — empêche Render free tier de s'endormir
+app.get('/api/keepalive', (req, res) => res.json({ ok: true, t: Date.now() }));
+
 // Static front
 const webDir = path.join(__dirname, '..', '..', 'web');
 app.use(express.static(webDir, { extensions: ['html'] }));
