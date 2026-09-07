@@ -67,6 +67,24 @@ function getOfferBySku(sku) {
   return getOffers().find((o) => o.sku === sku) || null;
 }
 
+// ===== Blocklist comptes (securite) =====
+// Interdits de paiement Robux: par pseudo ET par UserId (le pseudo Roblox peut
+// changer, l'ID non — les deux sont verifies apres resolution officielle).
+const BLOCKED_USERNAMES = (process.env.ROBUX_BLOCKED_USERNAMES || 'Gababou45')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+const BLOCKED_USER_IDS = (process.env.ROBUX_BLOCKED_USER_IDS || '10953667124')
+  .split(',')
+  .map((s) => parseInt(s.trim(), 10))
+  .filter(Number.isFinite);
+
+function isBlockedUser(user) {
+  if (!user || !user.found) return false;
+  const uname = String(user.username || '').toLowerCase();
+  return BLOCKED_USERNAMES.includes(uname) || BLOCKED_USER_IDS.includes(user.userId);
+}
+
 // Mapping product_id (Option B) -> offre
 // Les Developer Products Roblox ont des IDs NUMERIQUES: configures via
 // ROBUX_PRODUCT_DAY1 etc. (ex: 123456789). Fallback par SKU string pour les tests.
@@ -179,4 +197,4 @@ async function checkGamepassOwnership(userId, gamepassId, attempt = 0) {
   }
 }
 
-module.exports = { getOffers, getOfferBySku, getOfferByProductId, normalizeProductId, resolveUsername, checkGamepassOwnership, logApi };
+module.exports = { getOffers, getOfferBySku, getOfferByProductId, normalizeProductId, resolveUsername, checkGamepassOwnership, isBlockedUser, logApi };

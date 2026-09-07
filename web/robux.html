@@ -143,7 +143,7 @@ async function verifyOnce(username, sku) {
   const r = await fetch('/api/robux/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, offer_sku: sku }),
+    body: JSON.stringify({ username, offer_sku: sku, key: localStorage.getItem(KEY_STORAGE) || undefined }),
   });
   return r.json();
 }
@@ -185,6 +185,11 @@ async function startVerify() {
     }
     if (d.status === 'not_found') {
       status.textContent = '❌ Roblox account not found — check the username.';
+      status.className = 'status err';
+      return;
+    }
+    if (d.status === 'blocked') {
+      status.textContent = '⛔ This account cannot use Robux payments.';
       status.className = 'status err';
       return;
     }
@@ -237,18 +242,26 @@ function deliverKey(d, wasUsed) {
   document.getElementById('verifyCard').classList.add('hidden');
   const card = document.getElementById('resultCard');
   card.classList.remove('hidden');
-  document.getElementById('resultTitle').textContent = wasUsed ? '✅ Your key (already delivered)' : '🎉 Key delivered!';
-  document.getElementById('resultSub').textContent = 'Bound to ' + (d.robloxUser || 'your Roblox account') + ' — paste it into the loader.';
+  document.getElementById('resultTitle').textContent = wasUsed
+    ? '✅ Your key (already delivered)'
+    : d.extended
+      ? '⏰ Time added to your key!'
+      : '🎉 Key delivered!';
+  document.getElementById('resultSub').textContent =
+    (d.extended ? 'Your existing key was extended' : 'Bound to') +
+    (d.robloxUser ? ' — ' + d.robloxUser : ' your Roblox account') +
+    '. Paste it into the loader.';
   const el = document.getElementById('newKey');
   el.textContent = d.key;
   // Sauvegarde locale + modal
   localStorage.setItem(KEY_STORAGE, d.key);
   document.getElementById('modalKey').textContent = d.key;
+  document.getElementById('modalTitle').textContent = d.extended ? '⏰ Time added!' : '💎 Key delivered!';
   if (d.expiresAt) {
     document.getElementById('modalExpires').textContent = 'Valid until ' + new Date(d.expiresAt).toLocaleString('en-US');
   }
   document.getElementById('keyModal').classList.add('open');
-  if (window.showToast) showToast('💎 Your Robux key is ready!');
+  if (window.showToast) showToast(d.extended ? '⏰ Time added to your key!' : '💎 Your Robux key is ready!');
 }
 
 function copyKey() {

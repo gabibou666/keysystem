@@ -68,6 +68,15 @@ router.post('/verify', verifyLimiter, async (req, res) => {
       return res.json({ success: false, status: 'not_found', error: 'Roblox account not found.' });
     }
 
+    // a2) Blocklist: comptes interdits de paiement (pseudo + UserId verifiables)
+    if (robux.isBlockedUser(user)) {
+      return res.status(403).json({
+        success: false,
+        status: 'blocked',
+        error: 'This account cannot use Robux payments.',
+      });
+    }
+
     // b) Ownership
     const own = await robux.checkGamepassOwnership(user.userId, offer.gamepassId);
     if (!own.owned) {
@@ -118,15 +127,61 @@ router.post('/verify', verifyLimiter, async (req, res) => {
     }
     const purchaseId = ins.rows[0].id;
 
-    // d) Livraison: cle liee au roblox_user_id (bound_user_id = l'acheteur,
-    //    la cle ne marchera que pour lui dans le loader)
-    const gen = crypto.generateKey();
-    const keyIns = await pool.query(
-      `INSERT INTO keys (kid, signature, bound_user_id, duration_hours, note, source, expires_at)
-       VALUES ($1, $2, $3, $4, $5, 'robux', now() + make_interval(hours => $4)) RETURNING id`,
-      [gen.kid, gen.signature, user.userId, offer.durationHours, `robux:${offer.sku}`]
+    // d) Livraison — ETEND la cle existante de l'utilisateur au lieu d'en creer
+    //    une nouvelle (les achats Robux s'empilent sur la meme cle).
+    //    1. Cle robux deja liée a ce compte? -> extend
+    //    2. Cle fournie par le front (localStorage) valide et liee a lui? -> extend
+    //    3. Sinon -> nouvelle cle (premiere commande)
+    let keyId = null;
+    let extended = false;
+
+    const existingRobuxKey = await pool.query(
+      `SELECT id FROM keys
+       WHERE bound_user_id = $1 AND source = 'robux' AND revoked = false
+       ORDER BY created_at DESC LIMIT 1`,
+      [user.userId]
     );
-    const keyId = keyIns.rows[0].id;
+
+    if (existingRobuxKey.rows[0]) {
+      keyId = existingRobuxKey.rows[0].id;
+      extended = true;
+    } else if (req.body?.key) {
+      // Cle du navigateur (localStorage): on l'etend seulement si elle est
+      // formellement valide ET pas liee a un autre compte
+      const parsed = crypto.verifyKeyFormat(String(req.body.key));
+      if (parsed) {
+        const cand = await pool.query(
+          'SELECT id FROM keys WHERE kid = $1 AND revoked = false AND (bound_user_id IS NULL OR bound_user_id = $2)',
+          [parsed.kid, user.userId]
+        );
+        if (cand.rows[0]) {
+          keyId = cand.rows[0].id;
+          extended = true;
+        }
+      }
+    }
+
+    if (extended) {
+      // ETEND: expiration = max(expiration actuelle, maintenant) + duree de l'offre.
+      // Une cle expiree repart de maintenant (pas de temps perdu).
+      await pool.query(
+        `UPDATE keys
+         SET expires_at = GREATEST(expires_at, now()) + make_interval(hours => $1),
+             duration_hours = duration_hours + $1,
+             note = $2
+         WHERE id = $3`,
+        [offer.durationHours, `robux:${offer.sku}`, keyId]
+      );
+    } else {
+      // Nouvelle cle, liee au roblox_user_id (bound_user_id = l'acheteur)
+      const gen = crypto.generateKey();
+      const keyIns = await pool.query(
+        `INSERT INTO keys (kid, signature, bound_user_id, duration_hours, note, source, expires_at)
+         VALUES ($1, $2, $3, $4, $5, 'robux', now() + make_interval(hours => $4)) RETURNING id`,
+        [gen.kid, gen.signature, user.userId, offer.durationHours, `robux:${offer.sku}`]
+      );
+      keyId = keyIns.rows[0].id;
+    }
 
     await pool.query(
       `UPDATE robux_purchases SET key_id = $1, status = 'delivered', delivered_at = now() WHERE id = $2`,
@@ -141,6 +196,7 @@ router.post('/verify', verifyLimiter, async (req, res) => {
       status: 'delivered',
       key: `${k.kid}.${k.signature}`,
       expiresAt: k.expires_at,
+      extended, // true = temps ajoute a la cle existante
       robloxUser: user.username,
       offer: offer.sku,
     });
