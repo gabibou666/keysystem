@@ -395,14 +395,30 @@ router.post('/script/publish', requireAdmin, async (req, res) => {
     removedVersions = oldIds.length;
   }
 
-  // 2. Builds inactifs restants du meme jeu (securite: il n'en reste qu'un — le nouveau)
+  // 2. Builds restants du meme jeu hors la version publiee (le DELETE est STRICTEMENT
+  //    exclusif de verRow.id: jamais toucher le build de la version qu'on publie)
   await pool.query(
-    `DELETE FROM script_builds WHERE version_id = $2 OR (place_id IS NOT DISTINCT FROM $1 AND version <> $3)`,
+    `DELETE FROM script_builds WHERE version_id <> $2 AND (place_id IS NOT DISTINCT FROM $1 AND version <> $3)`,
     [placeId, verRow.id, version]
   );
 
-  // 3. Active la version publiee
-  await pool.query('UPDATE script_builds SET active = true WHERE version = $1', [version]);
+  // 3. Active le build de la version publiee (garantit qu'il existe)
+  const activated = await pool.query(
+    `UPDATE script_builds SET active = true WHERE version = $1 RETURNING id`,
+    [version]
+  );
+  if (!activated.rows.length) {
+    // Filet de securite: version sans build (cas v3/v4 casses par l'ancien bug).
+    // On reconstruit depuis l'original chiffre via le pipeline.
+    const { rebuildVersionBuild } = require('../compat/pipeline-helpers');
+    const rebuilt = await rebuildVersionBuild(verRow.id);
+    if (!rebuilt) {
+      return res.status(409).json({
+        success: false,
+        error: 'Cette version n\'a pas de build — re-save le script puis publie.',
+      });
+    }
+  }
   await pool.query(
     'UPDATE script_versions SET published = true, published_at = now() WHERE version = $1',
     [version]
