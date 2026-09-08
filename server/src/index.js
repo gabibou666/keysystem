@@ -95,6 +95,34 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, error: 'Erreur interne' });
 });
 
+// ===== SELF-PING ANTI-SOMMEIL (Render free: spin-down apres 15 min sans trafic) =====
+// Le serveur se ping lui-meme via son URL publique toutes les 5 minutes:
+// la requete sort sur internet et revient par l'edge Render = trafic ENTRANT
+// => le timer de mise en veille est remis a zero en perpetuite.
+// Tant que le process tourne, le service ne peut plus jamais s'endormir.
+// (Le GitHub Actions keepalive reste en filet de securite pour REVEILLER le service
+//  si Render le redemarre/redeploie: le self-ping ne peut pas traverser un redemarrage.)
+const SELF_PING_URL = process.env.PUBLIC_URL
+  ? process.env.PUBLIC_URL.replace(/\/$/, '') + '/api/stats/public'
+  : null;
+
+if (SELF_PING_URL && !SELF_PING_URL.includes('localhost') && !SELF_PING_URL.includes('127.0.0.1')) {
+  setInterval(
+    async () => {
+      try {
+        const res = await fetch(SELF_PING_URL, { signal: AbortSignal.timeout(20000) });
+        console.log(`[self-ping] ${new Date().toISOString()} -> HTTP ${res.status}`);
+      } catch (e) {
+        console.log(`[self-ping] echec (${e.message}) — le filet GitHub Actions prendra le relais`);
+      }
+    },
+    5 * 60 * 1000
+  ).unref();
+  console.log(`[self-ping] anti-sleep actif vers ${SELF_PING_URL} (toutes les 5 min)`);
+} else {
+  console.log('[self-ping] desactive (PUBLIC_URL local ou non defini)');
+}
+
 app.listen(PORT, () => {
   console.log(`[server] KeySystem en ligne sur le port ${PORT}`);
   console.log(`[server] PUBLIC_URL = ${process.env.PUBLIC_URL || '(non defini)'}`);
