@@ -7,6 +7,8 @@ const path = require('path');
 const { requireDiscordUser } = require('./discord');
 const discordService = require('../services/discord');
 const tokens = require('../services/tokens');
+const wmService = require('../services/watermark');
+const { notifyDiscord } = require('../services/notify');
 const { getGameInfo, getUsersInfo } = require('../services/roblox');
 
 const router = express.Router();
@@ -54,12 +56,21 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
 
     // Ad limit: max 2 ad sessions per IP within 12 hours (anti-farm en masse)
     const ip = clientIp(req);
-    const recent = await pool.query(
-      `SELECT COUNT(*)::int AS c FROM ll_sessions
-       WHERE ip = $1 AND created_at > now() - interval '12 hours'`,
-      [ip]
-    );
-    if (recent.rows[0].c >= 2) {
+    const [recent, byOwner] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*)::int AS c FROM ll_sessions
+         WHERE ip = $1 AND created_at > now() - interval '12 hours'`,
+        [ip]
+      ),
+      // ANTI-PROXY: limite aussi par COMPTE DISCORD — les proxies changent l'IP,
+      // pas le compte. 4 sessions / 12h max par proprietaire Discord.
+      pool.query(
+        `SELECT COUNT(*)::int AS c FROM ll_sessions
+         WHERE owner_discord_id = $1 AND created_at > now() - interval '12 hours'`,
+        [req.discordId]
+      ),
+    ]);
+    if (recent.rows[0].c >= 2 || byOwner.rows[0].c >= 4) {
       return res.status(429).json({
         success: false,
         reason: 'ad_limit',
@@ -123,6 +134,16 @@ router.get('/lootlabs/postback', async (req, res) => {
       (typeof req.query.unique_id === 'string' && req.query.unique_id.slice(0, 128)) ||
       'auto-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
     const claimedUserIp = typeof req.query.ip === 'string' ? req.query.ip.slice(0, 64) : null;
+
+    // ANTI-FORGE durci: un checkpoint sans NI unique_id NI ip de l'utilisateur ne
+    // prouve rien (n'importe qui forgeant un postback pourrait le faire sans eux).
+    // On exige au moins un des deux temoins de conversion LootLabs.
+    if (!req.query.unique_id && !claimedUserIp) {
+      console.warn(`[postback] REJET: ni unique_id ni ip fournis (puid=${String(click_id).slice(0, 8)}...)`);
+      return res
+        .status(400)
+        .send('rejected: missing conversion witnesses (unique_id or ip required)');
+    }
 
     // --- Verification d'origine: le postback doit venir de l'infrastructure LootLabs ---
     // (doc: "A GET request will be sent there" — serveur LootLabs -> nous)
@@ -438,15 +459,23 @@ router.post('/v1/check', checkLimiter, async (req, res) => {
     }
     const activeBuild = buildQuery.rows[0];
 
-    // Log execution
+    // WATERMARK: nonce unique par exécution -> chaque dump servi est traçable.
+    // Le snippet beaconne sous le compte de QUI l'exécute -> un dump partagé
+    // est détecté (beacon d'un autre userId que l'acheteur) et le leak identifiable.
+    const wmNonce = crypto.randomToken(12);
+    const wmB64 = wmService.makeWatermark(wmNonce, uid);
+    const beacon = wmService.beaconSnippet(wmB64, process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`);
+    const watermarkedScript = beacon + '\n' + activeBuild.content;
+
+    // Log execution (avec nonce pour relier beacons -> exécution -> clé)
     await pool.query(
-      `INSERT INTO executions (key_id, user_id, executor, build_id, version, ip) VALUES ($1,$2,$3,$4,$5,$6)`,
-      [dbKey.id, uid, (executor || '').slice(0, 40), activeBuild.id, activeBuild.version, clientIp(req)]
+      `INSERT INTO executions (key_id, user_id, executor, build_id, version, ip, wm_nonce) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [dbKey.id, uid, (executor || '').slice(0, 40), activeBuild.id, activeBuild.version, clientIp(req), wmNonce]
     );
 
     res.json({
       success: true,
-      script: activeBuild.content,
+      script: watermarkedScript,
       version: activeBuild.version,
       expiresAt: dbKey.expires_at,
     });
@@ -457,24 +486,97 @@ router.post('/v1/check', checkLimiter, async (req, res) => {
 });
 
 // ---------- POST /api/v1/report ----------
-// Telemetrie loader: { userId, executor, version, error }
-router.post('/v1/report', rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req, res) => {
-  try {
-    const { userId, executor, version, error } = req.body || {};
-    await pool.query(
-      'INSERT INTO error_reports (user_id, executor, version, error_msg) VALUES ($1,$2,$3,$4)',
-      [
-        parseInt(userId, 10) || null,
-        (executor || '').slice(0, 40),
-        parseInt(version, 10) || null,
-        (error || '').slice(0, 500),
-      ]
-    );
-    res.json({ success: true });
-  } catch {
-    res.status(500).json({ success: false });
+// Telemetrie loader: { userId, executor, version, error } OU beacon { wm }
+router.post(
+  '/v1/report',
+  rateLimit({ windowMs: 60 * 1000, max: 40 }),
+  async (req, res) => {
+    try {
+      const { userId, executor, version, error, wm } = req.body || {};
+
+      // ===== Beacon watermark anti-partage =====
+      if (wm) {
+        const decoded = wmService.decodeWatermark(String(wm).slice(0, 300));
+        if (decoded) {
+          const ip = clientIp(req);
+          const uid = parseInt(userId, 10) || null;
+          await pool.query(
+            'INSERT INTO beacons (wm_nonce, user_id, executor, ip) VALUES ($1,$2,$3,$4)',
+            [decoded.nonce, uid, (executor || '').slice(0, 40), ip]
+          );
+
+          // Détection de partage: le watermark émis pour l'acheteur A beaconne
+          // sous un autre compte/IP -> le dump circule.
+          const exec2 = await pool.query(
+            `SELECT e.key_id, e.user_id AS owner_uid FROM executions e WHERE e.wm_nonce = $1 LIMIT 1`,
+            [decoded.nonce]
+          );
+          if (exec2.rows[0]) {
+            const keyId = exec2.rows[0].key_id;
+            const ownerUid = parseInt(exec2.rows[0].owner_uid, 10);
+            const suspectUid = uid;
+
+            // Cas 1: un AUTRE compte exécute le dump de l'acheteur => partage direct
+            const sharedWithOther = suspectUid && ownerUid && suspectUid !== ownerUid;
+            // Cas 2: le dump beaconne depuis >= 3 IP distinctes => redistribution
+            const ips = await pool.query(
+              `SELECT COUNT(DISTINCT ip)::int AS c FROM beacons WHERE wm_nonce = $1`,
+              [decoded.nonce]
+            );
+            const multiIp = ips.rows[0].c >= 3;
+
+            if (sharedWithOther || multiIp) {
+              const alerts = await pool.query(
+                `UPDATE keys SET share_alerts = share_alerts + 1
+                 WHERE id = $1 AND revoked = false RETURNING share_alerts`,
+                [keyId]
+              );
+              const count = alerts.rows[0] ? alerts.rows[0].share_alerts : 99;
+              if (count >= 3) {
+                // AUTO-REVOCATION: 3 alertes confirmées => la clé meurt
+                await pool.query('UPDATE keys SET revoked = true WHERE id = $1', [keyId]);
+                notifyDiscord({
+                  title: '🔒 Key auto-revoked (sharing detected)',
+                  color: 'warn',
+                  description: `Watermark \`${decoded.nonce}\` triggered **${count}** sharing alerts.
+Key **#${keyId}** (owner Roblox \`${ownerUid}\`) has been revoked automatically.`,
+                  fields: [
+                    { name: 'Distinct IPs', value: String(ips.rows[0].c) },
+                    { name: 'Last beacon', value: `user \`${suspectUid || '?'}'\` from \`${ip}\` · ${executor || '?'}` },
+                  ],
+                });
+              } else if (count === 1) {
+                // Premiere alerte: on notifie sans couper (peut etre un simple changement d'IP)
+                notifyDiscord({
+                  title: '⚠️ Possible key sharing detected',
+                  color: 'warn',
+                  description: `Watermark \`${decoded.nonce}\` (key #${keyId}, owner \`${ownerUid}\`) beaconed from a different context.`,
+                  fields: [{ name: 'Beacon', value: `user \`${suspectUid || '?'}'\` · IP \`${ip}\` · ${ips.rows[0].c} distinct IP(s)` }],
+                });
+              }
+            }
+          }
+        }
+        return res.json({ success: true });
+      }
+
+      // ===== Télémétrie classique =====
+      await pool.query(
+        'INSERT INTO error_reports (user_id, executor, version, error_msg) VALUES ($1,$2,$3,$4)',
+        [
+          parseInt(userId, 10) || null,
+          (executor || '').slice(0, 40),
+          parseInt(version, 10) || null,
+          (error || '').slice(0, 500),
+        ]
+      );
+      res.json({ success: true });
+    } catch (e) {
+      console.error('[v1/report]', e);
+      res.status(500).json({ success: false });
+    }
   }
-});
+);
 
 // ---------- GET /api/v1/windui ----------
 // Self-host de la lib WindUI (dist officiel, v1.6.66 figee): le loader ne depend

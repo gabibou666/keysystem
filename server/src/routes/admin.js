@@ -517,6 +517,42 @@ router.get('/robux-stats', requireAdmin, async (req, res) => {
   }
 });
 
+// ---------- DECODAGE WATERMARK (tracer un leak) ----------
+// POST /api/admin/watermark/decode { wm } -> acheteur, executions, beacons
+router.post('/watermark/decode', requireAdmin, async (req, res) => {
+  try {
+    const decoded = require('../services/watermark').decodeWatermark(String(req.body?.wm || '').slice(0, 300));
+    if (!decoded) return res.status(400).json({ success: false, error: 'Invalid watermark' });
+
+    const execs = await pool.query(
+      `SELECT e.key_id, e.user_id, e.executor, e.version, e.ip, e.created_at,
+              k.kid, k.revoked, k.share_alerts
+       FROM executions e LEFT JOIN keys k ON k.id = e.key_id
+       WHERE e.wm_nonce = $1`,
+      [decoded.nonce]
+    );
+    const beacons = await pool.query(
+      `SELECT user_id, executor, ip, created_at FROM beacons WHERE wm_nonce = $1 ORDER BY created_at DESC LIMIT 50`,
+      [decoded.nonce]
+    );
+
+    res.json({
+      success: true,
+      watermark: {
+        nonce: decoded.nonce,
+        issuedToUserId: decoded.userId,
+        issuedAt: decoded.issuedAt,
+      },
+      execution: execs.rows[0] || null,
+      beacons: beacons.rows,
+      distinctIps: [...new Set(beacons.rows.map((b) => b.ip))].length,
+    });
+  } catch (e) {
+    console.error('[watermark/decode]', e);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
+});
+
 // ---------- PATCHS IA ----------
 router.get('/patches/pending', requireAdmin, async (req, res) => {
   const { rows } = await pool.query(
