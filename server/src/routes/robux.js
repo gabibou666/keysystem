@@ -14,6 +14,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const crypto = require('../services/crypto');
 const robux = require('../services/robux');
+const { notifyDiscord } = require('../services/notify');
 const pool = require('../db');
 
 const router = express.Router();
@@ -191,6 +192,17 @@ router.post('/verify', verifyLimiter, async (req, res) => {
     const keyRow = await pool.query('SELECT kid, signature, expires_at FROM keys WHERE id = $1', [keyId]);
     const k = keyRow.rows[0];
 
+    // Notification Discord: vente confirmee (best effort, jamais bloquant)
+    notifyDiscord({
+      title: extended ? '⏰ Key extended (Robux)' : '💎 Robux sale delivered',
+      color: 'sale',
+      description: `**${user.username}** (Roblox ID \`${user.userId}\`) — offer **${offer.sku}** (${offer.priceR$} R$)`,
+      fields: [
+        { name: 'Mode', value: extended ? 'existing key extended' : 'new key created' },
+        { name: 'Valid until', value: new Date(k.expires_at).toLocaleString('en-US') },
+      ],
+    });
+
     res.json({
       success: true,
       status: 'delivered',
@@ -252,6 +264,14 @@ router.post('/webhook', webhookLimiter, async (req, res) => {
        ON CONFLICT (receipt_id) DO NOTHING`,
       [String(receipt_id).slice(0, 128), userId, String(username || '').slice(0, 32), robux.normalizeProductId(product_id), offer.sku, k.id, keyString]
     );
+
+    // Notification Discord (achat in-game Developer Product)
+    notifyDiscord({
+      title: '🛒 Robux receipt processed',
+      color: 'sale',
+      description: `**${String(username || userId)}** — product **${offer.sku}** (${offer.priceR$} R$)`,
+      fields: [{ name: 'Receipt', value: String(receipt_id).slice(0, 40) }],
+    });
 
     res.json({ success: true, key: keyString });
   } catch (e) {

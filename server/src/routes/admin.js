@@ -4,6 +4,8 @@ const pool = require('../db');
 const auth = require('../admin/auth');
 const { runPipeline, rebuildWithPatches } = require('../compat/pipeline');
 const { decryptAES, encryptAES } = require('../services/crypto');
+const { notifyDiscord } = require('../services/notify');
+const robuxOffers = require('../services/robux');
 
 const router = express.Router();
 
@@ -225,6 +227,12 @@ router.post('/bans', requireAdmin, async (req, res) => {
      ON CONFLICT (user_id) DO UPDATE SET reason = EXCLUDED.reason`,
     [userId, reason]
   );
+  notifyDiscord({
+    title: '⛔ User banned',
+    color: 'ban',
+    description: `Roblox ID \`${userId}\` banned by admin.`,
+    fields: [{ name: 'Reason', value: reason || '—' }],
+  });
   res.json({ success: true });
 });
 
@@ -424,6 +432,89 @@ router.post('/script/publish', requireAdmin, async (req, res) => {
     [version]
   );
   res.json({ success: true, removedOldVersions: removedVersions });
+});
+
+// ---------- STATS VENTES ROBUX (format attendu par l'onglet Revenue) ----------
+router.get('/robux-stats', requireAdmin, async (req, res) => {
+  try {
+    const offers = robuxOffers.getOffers();
+    const priceBySku = Object.fromEntries(offers.map((o) => [o.sku, o.priceR$]));
+    const nameBySku = Object.fromEntries(offers.map((o) => [o.sku, o.name]));
+
+    // Achats livres: purchases (gamepass) + receipts (webhook in-game)
+    const [purchTotals, purchPerDay, purchPerSku, recentPurch, recentReceipts] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*)::int c, COALESCE(SUM(
+           CASE offer_sku WHEN 'day1' THEN 50 WHEN 'week1' THEN 250
+             WHEN 'month1' THEN 750 WHEN 'lifetime' THEN 2000 ELSE 0 END
+         ), 0)::int robux
+         FROM robux_purchases WHERE status = 'delivered'`
+      ),
+      pool.query(
+        `SELECT to_char(date_trunc('day', verified_at), 'YYYY-MM-DD') d,
+                COUNT(*)::int cnt,
+                COALESCE(SUM(CASE offer_sku WHEN 'day1' THEN 50 WHEN 'week1' THEN 250
+                   WHEN 'month1' THEN 750 WHEN 'lifetime' THEN 2000 ELSE 0 END), 0)::int revenue
+         FROM robux_purchases WHERE status = 'delivered' AND verified_at > now() - interval '30 days'
+         GROUP BY 1 ORDER BY 1`
+      ),
+      pool.query(
+        `SELECT offer_sku sku, COUNT(*)::int count FROM robux_purchases
+         WHERE status = 'delivered' GROUP BY 1`
+      ),
+      pool.query(
+        `SELECT roblox_user_id "userId", roblox_username username, offer_sku offer, status,
+                verified_at date
+         FROM robux_purchases ORDER BY verified_at DESC LIMIT 50`
+      ),
+      pool.query(
+        `SELECT roblox_user_id "userId", roblox_username username, offer_sku offer, status,
+                created_at date
+         FROM robux_receipts ORDER BY created_at DESC LIMIT 50`
+      ),
+    ]);
+
+    // Fusionne purchases + receipts (historique recent, sans doublons receipt/purchase eventuels)
+    const seen = new Set();
+    const recentSales = [...recentPurch.rows, ...recentReceipts.rows]
+      .filter((r) => {
+        const id = r.userId + ':' + r.offer + ':' + new Date(r.date).toISOString().slice(0, 16);
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      })
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 50)
+      .map((r) => ({
+        userId: parseInt(r.userId, 10),
+        username: r.username,
+        offer: r.offer,
+        offerName: nameBySku[r.offer] || r.offer,
+        priceR$: priceBySku[r.offer] || 0,
+        method: recentReceipts.rows.includes(r) ? 'webhook' : 'gamepass',
+        status: r.status,
+        date: r.date,
+      }));
+
+    res.json({
+      success: true,
+      totals: {
+        revenueR$: purchTotals.rows[0].robux,
+        purchases: purchTotals.rows[0].c,
+      },
+      perDay: purchPerDay.rows.map((r) => ({ d: r.d, count: r.cnt, revenue: r.revenue })),
+      perOffer: purchPerSku.rows.map((r) => ({
+        sku: r.sku,
+        count: r.count,
+        revenue: (priceBySku[r.sku] || 0) * r.count,
+        priceR$: priceBySku[r.sku] || 0,
+      })),
+      recentSales,
+    });
+  } catch (e) {
+    console.error('[admin/robux-stats]', e);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
 });
 
 // ---------- PATCHS IA ----------
