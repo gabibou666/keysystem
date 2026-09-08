@@ -1,0 +1,23 @@
+name: Keep Render awake
+
+# Render free s'endort apres 15 min sans trafic entrant.
+# Ce workflow ping le site toutes les 10 minutes, 24/7, gratuitement
+# (GitHub Free: 2000 min Actions/mois incluses; ce job en consomme ~1400).
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # toutes les 10 minutes (UTC)
+  workflow_dispatch:          # bouton "Run workflow" dans l'onglet Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping KeySystem (empeche le spin-down Render)
+        run: |
+          URL="https://keysystem-vv8b.onrender.com/api/stats/public"
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 60 --retry 2 --retry-delay 5 "$URL")
+          echo "[$(date -u '+%Y-%m-%d %H:%M UTC')] keep-alive -> HTTP $code"
+          # Toujours reussir: un ping rate ne doit pas spammer d'emails d'echec
+          exit 0
