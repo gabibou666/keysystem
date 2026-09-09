@@ -327,11 +327,14 @@ router.get('/key/status', statusLimiter, async (req, res) => {
     const duration = session.tasks_required === 1 ? 12 : 24;
 
     if (session.key_id) {
-      // Renouvellement: meme kid, meme string cote client
+      // Renouvellement: meme kid, meme string cote client.
+      // Grave aussi le owner Discord de la session sur la clé (le renouveleur
+      // devient propriétaire visible — anti-usurpation: seul le owner du cookie peut etre ici).
       const upd = await pool.query(
-        `UPDATE keys SET expires_at = now() + make_interval(hours => $1), duration_hours = $1, renewed_count = renewed_count + 1
+        `UPDATE keys SET expires_at = now() + make_interval(hours => $1), duration_hours = $1,
+                renewed_count = renewed_count + 1, owner_discord_id = $3
          WHERE id = $2 AND revoked = false RETURNING kid, signature, expires_at`,
-        [duration, session.key_id]
+        [duration, session.key_id, session.owner_discord_id]
       );
       if (!upd.rows[0]) {
         return res.json({ success: false, status: 'revoked_key', error: 'Key was revoked.' });
@@ -346,11 +349,12 @@ router.get('/key/status', statusLimiter, async (req, res) => {
       });
     }
 
-    // Nouvelle cle
+    // Nouvelle cle: liee au owner Discord de la session (createur de la clé)
     const gen = crypto.generateKey();
     const ins = await pool.query(
-      `INSERT INTO keys (kid, signature, duration_hours, expires_at) VALUES ($1, $2, $3, now() + make_interval(hours => $3)) RETURNING id, kid, signature, expires_at`,
-      [gen.kid, gen.signature, duration]
+      `INSERT INTO keys (kid, signature, duration_hours, owner_discord_id, expires_at)
+       VALUES ($1, $2, $3, $4, now() + make_interval(hours => $3)) RETURNING id, kid, signature, expires_at`,
+      [gen.kid, gen.signature, duration, session.owner_discord_id]
     );
     const key = ins.rows[0];
     await pool.query('UPDATE ll_sessions SET key_id = $1 WHERE id = $2', [key.id, session.id]);
