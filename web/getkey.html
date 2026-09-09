@@ -230,6 +230,15 @@ async function discordLogout() {
       el.textContent = 'Discord sign-in failed — try again.';
       el.className = 'status err';
     }
+    return;
+  }
+  // Message d'erreur renvoye par la page de verification anti-adblock
+  const err = q.get('err');
+  if (err) {
+    history.replaceState({}, '', '/getkey');
+    const el = document.getElementById('loginError');
+    el.textContent = '❌ ' + err;
+    el.className = 'status err';
   }
 })();
 
@@ -291,45 +300,13 @@ async function start(duration) {
     status.className = 'status err';
     return;
   }
-  const status = document.getElementById('startStatus');
-  status.textContent = '';
-  status.className = 'status';
-  document.getElementById('choiceCard').style.opacity = '0.5';
-
-  let body = { duration };
+  // ANTI-ADBLOCK: passe par la page de verification.
+  // Elle detecte l'adblock (message blocant) et sinon demarre la session
+  // LootLabs instantanement, puis ramene l'utilisateur ici pour le resultat.
+  if (duration !== 12 && duration !== 24) return; // anti-URL forgee
   const existing = localStorage.getItem(KEY_STORAGE);
-  if (existing) body.key = existing;
-
-  try {
-    const r = await fetch('/api/key/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const d = await r.json();
-    if (!d.success) {
-      document.getElementById('choiceCard').style.opacity = '1';
-      if (d.reason === 'discord_required') {
-        discordOk = false;
-        status.textContent = '🔒 ' + (d.error || 'Sign in with Discord to get a key.');
-      } else if (d.reason === 'ad_limit') {
-        status.textContent = '⛔ ' + (d.error || 'Ad limit reached — 2 ads max every 12 hours.');
-      } else {
-        status.textContent = '❌ ' + (d.error || 'Unknown error');
-      }
-      status.className = 'status err';
-      return;
-    }
-    localStorage.setItem(PUID_STORAGE, d.puid);
-    window.open(d.lootUrl, '_blank');
-    showWaiting('⏳ Waiting for completion…', 'Complete the ' + d.tasksRequired + ' checkpoint(s) in the other tab.');
-    startPolling(d.puid);
-    setStep(3);
-  } catch (e) {
-    document.getElementById('choiceCard').style.opacity = '1';
-    status.textContent = 'Network error — try again.';
-    status.className = 'status err';
-  }
+  const renewing = existing ? '1' : '0';
+  location.href = '/verify?d=' + duration + '&k=' + renewing;
 }
 
 function showWaiting(title, sub, retryable = false) {
@@ -398,6 +375,13 @@ async function poll(puid) {
       localStorage.removeItem(PUID_STORAGE);
       showWaiting('✅ Already claimed', 'This session\'s key was already retrieved — get a new one below.', true);
       return;
+    }
+    // Statut inconnu / session morte / erreur serveur: on arrete le polling
+    if (!d.success && d.status !== 'pending' && d.status !== 'waiting') {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      localStorage.removeItem(PUID_STORAGE);
+      showWaiting('⚠️ Session error', (d.error || 'Something went wrong — start again below.'), true);
     }
   } catch {}
 }

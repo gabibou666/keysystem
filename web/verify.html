@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verification…</title>
+<link rel="stylesheet" href="/style.css">
+<script src="/ads.js"></script>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/" style="text-decoration:none;color:inherit"><div class="logo-badge">🔑</div> KeySystem</a>
+  <div class="links" id="navLinks">
+    <a href="/">Home</a>
+    <a href="/robux">Pay with Robux</a>
+    <a href="/changelog">Changelog</a>
+  </div>
+  <button class="nav-hamburger" id="navHamburger" onclick="toggleNav()">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<main>
+  <section class="hero-mini">
+    <h1 id="pageTitle">🔎 Verifying your browser…</h1>
+    <p id="pageSub">Quick check before the key system.</p>
+  </section>
+
+  <section class="keypanel" id="checkingPanel">
+    <div class="ks-spinner"></div>
+    <p class="sub" style="text-align:center;">Checking…</p>
+  </section>
+
+  <!-- BLOCANT: adblock detecte -->
+  <section class="keypanel hidden" id="blockedPanel">
+    <h2>🚫 Ad blocker detected</h2>
+    <p class="sub">
+      You can't access the key system while your ad blocker is active.<br>
+      The ads fund the keys — this site only works if they can load.
+    </p>
+    <div class="steps" style="margin-top: 22px; padding: 18px; border-radius: var(--radius); background: #13101ccc; border: 1px solid var(--stroke);">
+      <p style="color: var(--muted); font-size: 14px; line-height: 1.8;">
+        <b style="color: var(--text)">How to disable it:</b><br>
+        1. Click your ad blocker icon in the toolbar<br>
+        2. <b style="color: var(--text)">Pause on this site</b> or disable it for <span id="hostName" style="color: var(--accent)"></span><br>
+        3. This page re-checks automatically every 3 seconds — you'll be redirected as soon as it's off
+      </p>
+    </div>
+    <button class="btn" style="margin-top: 18px;" onclick="runCheck()">↻ Re-check now</button>
+  </section>
+
+  <!-- OK: redirection en cours -->
+  <section class="keypanel hidden" id="passPanel">
+    <div class="ks-check">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+    <h2 style="text-align:center;">✅ Verified!</h2>
+    <p class="sub" style="text-align:center;">Redirecting you to the ad page…</p>
+  </section>
+
+  <!-- Bait CSS: les regles ::before/-injection et display:none des filtres le neutralisent -->
+  <div id="adBait" class="ad-banner" style="height: 1px; width: 1px; position: absolute; left: -9999px;">
+    <span class="adsbox ad-banner" style="font-size:1px;">Advertisement</span>
+  </div>
+</main>
+
+<footer>
+  Powered by LootLabs · <a href="/">Home</a>
+</footer>
+
+<script>
+// ===== Parametres =====
+// d=12/24 (duree) + k=1 (renouvellement, cle existante) — transmis par getkey.html
+const q = new URLSearchParams(location.search);
+const duration = parseInt(q.get('d'), 10) || 12;
+const renewing = q.get('k') === '1';
+
+const KEY_STORAGE = 'keysystem_key';
+const PUID_STORAGE = 'keysystem_pending_puid';
+
+let sessionStarting = false; // garde anti-double-start (clic Re-check + tick 3s)
+
+// ===== Detection adblock (3 vecteurs) =====
+async function detectAdblock() {
+  // 1) Bait script: ads.js bloque par les listes => flag absent
+  if (!window.adblockDetectedBait) return true;
+
+  // 2) Bait div CSS: les filtres masquent/effacent les divs "pub"
+  const bait = document.getElementById('adBait');
+  if (bait) {
+    const cs = getComputedStyle(bait);
+    if (cs.display === 'none' || cs.visibility === 'hidden' || bait.offsetHeight === 0 || bait.offsetParent === null) return true;
+  }
+
+  // 3) Fetch du bait lui-meme (requests bloquees par uBlock/Brave...)
+  try {
+    await fetch('/ads.js?bait=' + Date.now(), { cache: 'no-store' });
+  } catch (e) {
+    return true;
+  }
+
+  return false;
+}
+
+// ===== Enchainement =====
+async function runCheck() {
+  if (sessionStarting) return; // une session est deja en cours de demarrage
+  try {
+    const blocked = await detectAdblock();
+
+    if (!blocked) {
+      // OK -> redirection instantanee vers le systeme de cles LootLabs
+      sessionStarting = true;
+      stopLoop();
+      document.getElementById('checkingPanel').classList.add('hidden');
+      document.getElementById('blockedPanel').classList.add('hidden');
+      document.getElementById('passPanel').classList.remove('hidden');
+      document.title = 'Verified!';
+      await startKeySession();
+      return;
+    }
+
+    // BLOQUE
+    document.getElementById('checkingPanel').classList.add('hidden');
+    document.getElementById('passPanel').classList.add('hidden');
+    document.getElementById('blockedPanel').classList.remove('hidden');
+    document.title = 'Ad blocker detected';
+  } catch (e) {
+    // Erreur inattendue: le prochain tick re-essaiera (self-healing)
+    console.warn('[verify]', e);
+  }
+}
+
+// Re-test automatique toutes les 3 s tant que l'adblock est actif
+let loopTimer = setInterval(runCheck, 3000);
+function stopLoop() { if (loopTimer) { clearInterval(loopTimer); loopTimer = null; } }
+
+// ===== Demarrage de la session LootLabs (meme logique que getkey.html) =====
+async function startKeySession() {
+  let body = { duration };
+  const existing = localStorage.getItem(KEY_STORAGE);
+  if (renewing && existing) body.key = existing;
+
+  try {
+    const r = await fetch('/api/key/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (!d.success) {
+      // Erreur metier (ad_limit, discord_required...): retour a getkey avec le message
+      const msg = encodeURIComponent(d.error || 'Session could not start.');
+      location.href = '/getkey?err=' + msg;
+      return;
+    }
+    localStorage.setItem(PUID_STORAGE, d.puid);
+    // Redirection DIRECTE (meme onglet) vers LootLabs:
+    // - c'est ce que demande le flux (redirige instantanement)
+    // - window.open() ici serait bloque par les popup-blockers (plus de user gesture)
+    // - au retour, /getkey/callback -> getkey.html reprend la session (PUID_STORAGE)
+    //   et affiche la cle des que LootLabs valide.
+    location.href = d.lootUrl;
+  } catch (e) {
+    location.href = '/getkey?err=' + encodeURIComponent('Network error — try again.');
+  }
+}
+
+// ===== Mobile nav =====
+function toggleNav() {
+  document.getElementById('navLinks').classList.toggle('open');
+  document.getElementById('navHamburger').classList.toggle('open');
+}
+document.querySelectorAll('#navLinks a').forEach(a => {
+  a.addEventListener('click', () => {
+    document.getElementById('navLinks').classList.remove('open');
+    document.getElementById('navHamburger').classList.remove('open');
+  });
+});
+
+// Go
+document.getElementById('hostName').textContent = location.hostname;
+runCheck();
+</script>
+<script src="/effects.js"></script>
+</body>
+</html>
