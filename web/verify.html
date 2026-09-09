@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Verification…</title>
 <link rel="stylesheet" href="/style.css">
-<script src="/ads.js"></script>
 </head>
 <body>
 <nav>
@@ -49,6 +48,16 @@
     <button class="btn" style="margin-top: 18px;" onclick="runCheck()">↻ Re-check now</button>
   </section>
 
+  <!-- ERREUR: session impossible (limite anti-farm, Discord, reseau...) -->
+  <section class="keypanel hidden" id="errorPanel">
+    <h2>⚠️ Can't start the key session</h2>
+    <p class="sub" id="errorText" style="color: var(--red);"></p>
+    <div style="display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap;">
+      <a class="btn small" href="/getkey">← Back to the key page</a>
+      <button class="btn small secondary" onclick="location.reload()">↻ Retry</button>
+    </div>
+  </section>
+
   <!-- OK: redirection en cours -->
   <section class="keypanel hidden" id="passPanel">
     <div class="ks-check">
@@ -58,10 +67,7 @@
     <p class="sub" style="text-align:center;">Redirecting you to the ad page…</p>
   </section>
 
-  <!-- Bait CSS: les regles ::before/-injection et display:none des filtres le neutralisent -->
-  <div id="adBait" class="ad-banner" style="height: 1px; width: 1px; position: absolute; left: -9999px;">
-    <span class="adsbox ad-banner" style="font-size:1px;">Advertisement</span>
-  </div>
+  <!-- NOTE: le bait div est injecte dynamiquement par le script (detectAdblock) -->
 </main>
 
 <footer>
@@ -78,33 +84,50 @@ const renewing = q.get('k') === '1';
 const KEY_STORAGE = 'keysystem_key';
 const PUID_STORAGE = 'keysystem_pending_puid';
 
-let sessionStarting = false; // garde anti-double-start (clic Re-check + tick 3s)
+let sessionStarting = false; // session en cours de demarrage (redirection imminente)
+let checkInFlight = false;   // garde synchrone anti-double-check
 
-// ===== Detection adblock (3 vecteurs) =====
+// ===== Detection adblock (signaux DYNAMIQUES: re-evalues a chaque cycle) =====
+// Le bait statique (script /ads.js en head) est bloquable une fois pour toutes:
+// si l'adblock l'a bloque au chargement, le flag reste absent pour toujours,
+// meme apres desactivation de l'adblock. On utilise donc des signaux RE-INJECTES
+// a chaque cycle: la detection se retablit sans recharger la page.
 async function detectAdblock() {
-  // 1) Bait script: ads.js bloque par les listes => flag absent
-  if (!window.adblockDetectedBait) return true;
+  // 1) Bait div CSS re-injecte: les filtres masquent les divs "pub" par regles CSS
+  const old = document.getElementById('adBait');
+  if (old) old.remove();
+  const bait = document.createElement('div');
+  bait.id = 'adBait';
+  bait.className = 'ad-banner';
+  bait.setAttribute('style', 'height: 1px; width: 1px; position: absolute; left: -9999px;');
+  bait.innerHTML = '<span class="adsbox" style="font-size:1px;">Advertisement</span>';
+  document.body.appendChild(bait);
+  const cs = getComputedStyle(bait);
+  if (cs.display === 'none' || cs.visibility === 'hidden' || bait.offsetHeight === 0 || bait.offsetParent === null) return true;
 
-  // 2) Bait div CSS: les filtres masquent/effacent les divs "pub"
-  const bait = document.getElementById('adBait');
-  if (bait) {
-    const cs = getComputedStyle(bait);
-    if (cs.display === 'none' || cs.visibility === 'hidden' || bait.offsetHeight === 0 || bait.offsetParent === null) return true;
-  }
-
-  // 3) Fetch du bait lui-meme (requests bloquees par uBlock/Brave...)
-  try {
-    await fetch('/ads.js?bait=' + Date.now(), { cache: 'no-store' });
-  } catch (e) {
-    return true;
-  }
+  // 2) Fetch du bait lui-meme (requests bloquees par uBlock/Brave...)
+  //    Timeout 5 s: un reseau lent/offline est "indetermine" => on ne bloque pas
+  const fetchBlocked = await new Promise((resolve) => {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    let timedOut = false;
+    const timer = controller
+      ? setTimeout(() => { timedOut = true; controller.abort(); }, 5000)
+      : null;
+    fetch('/ads.js?bait=' + Date.now(), { cache: 'no-store', signal: controller ? controller.signal : undefined })
+      .then(() => { if (timer) clearTimeout(timer); resolve(false); })
+      .catch(() => { if (timer) clearTimeout(timer); resolve(!timedOut); });
+  });
+  if (fetchBlocked) return true;
 
   return false;
 }
 
 // ===== Enchainement =====
 async function runCheck() {
-  if (sessionStarting) return; // une session est deja en cours de demarrage
+  // Garde SYNCHRONE avant tout await: empeche tick 3s + clic Re-check
+  // concurrents de doubler le POST /api/key/start (fetch lent / reseau lent)
+  if (sessionStarting || checkInFlight) return;
+  checkInFlight = true;
   try {
     const blocked = await detectAdblock();
 
@@ -128,6 +151,8 @@ async function runCheck() {
   } catch (e) {
     // Erreur inattendue: le prochain tick re-essaiera (self-healing)
     console.warn('[verify]', e);
+  } finally {
+    checkInFlight = false;
   }
 }
 
@@ -149,9 +174,10 @@ async function startKeySession() {
     });
     const d = await r.json();
     if (!d.success) {
-      // Erreur metier (ad_limit, discord_required...): retour a getkey avec le message
-      const msg = encodeURIComponent(d.error || 'Session could not start.');
-      location.href = '/getkey?err=' + msg;
+      // Erreur metier (ad_limit, discord_required...): panneau d'erreur VISIBLE
+      // (avant: redirection vers /getkey?err=... avec un message que personne
+      // ne remarquait => impression que "ca n'envoie pas sur LootLabs")
+      showError(d.error || 'Session could not start.');
       return;
     }
     localStorage.setItem(PUID_STORAGE, d.puid);
@@ -162,8 +188,20 @@ async function startKeySession() {
     //   et affiche la cle des que LootLabs valide.
     location.href = d.lootUrl;
   } catch (e) {
-    location.href = '/getkey?err=' + encodeURIComponent('Network error — try again.');
+    showError('Network error — check your connection and retry.');
   }
+}
+
+// Affiche le panneau d'erreur a la place du spinner
+function showError(msg) {
+  stopLoop();
+  sessionStarting = false; // permet un retry apres reload si le bug persiste
+  document.getElementById('checkingPanel').classList.add('hidden');
+  document.getElementById('blockedPanel').classList.add('hidden');
+  document.getElementById('passPanel').classList.add('hidden');
+  document.getElementById('errorPanel').classList.remove('hidden');
+  document.getElementById('errorText').textContent = msg;
+  document.title = 'Error';
 }
 
 // ===== Mobile nav =====

@@ -11,16 +11,23 @@
   var overlay = null;
   var overlayShown = false;
 
-  // ===== Detection (3 vecteurs, memes que /verify) =====
+  // ===== Detection (signaux DYNAMIQUES: re-evalues a chaque cycle) =====
+  // Le bait statique (script /ads.js) est bloquable une fois pour toutes:
+  // si l'adblock l'a bloque au chargement, le flag reste absent pour toujours,
+  // meme apres desactivation de l'adblock. On re-injecte donc le bait div
+  // a CHAQUE cycle: la detection se retablit sans recharger la page.
   function detectAdblock() {
-    // 1) Bait script: /ads.js bloque par les listes de filtres => flag absent
-    if (!window.adblockDetectedBait) return true;
-    // 2) Bait div CSS: les filtres masquent les divs "pub" par regles CSS
-    var bait = document.getElementById('adBait-global');
-    if (bait) {
-      var cs = getComputedStyle(bait);
-      if (cs.display === 'none' || cs.visibility === 'hidden' || bait.offsetHeight === 0 || bait.offsetParent === null) return true;
-    }
+    // Bait div CSS re-injecte: les filtres masquent les divs "pub" par regles CSS
+    var old = document.getElementById('adBait-global');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var bait = document.createElement('div');
+    bait.id = 'adBait-global';
+    bait.className = 'ad-banner';
+    bait.setAttribute('style', 'height: 1px; width: 1px; position: absolute; left: -9999px;');
+    bait.innerHTML = '<span class="adsbox" style="font-size:1px;">Advertisement</span>';
+    (document.body || document.documentElement).appendChild(bait);
+    var cs = getComputedStyle(bait);
+    if (cs.display === 'none' || cs.visibility === 'hidden' || bait.offsetHeight === 0 || bait.offsetParent === null) return true;
     return false;
   }
 
@@ -122,21 +129,11 @@
   }
 
   // ===== Demarrage =====
-  // Bait div injecte des que le DOM est pret
-  function injectBait() {
-    if (document.getElementById('adBait-global')) return;
-    var b = document.createElement('div');
-    b.id = 'adBait-global';
-    b.className = 'ad-banner';
-    b.setAttribute('style', 'height: 1px; width: 1px; position: absolute; left: -9999px;');
-    b.innerHTML = '<span class="adsbox" style="font-size:1px;">Advertisement</span>';
-    (document.body || document.documentElement).appendChild(b);
-  }
-
+  // Pas de bait statique: la detection est entierement dynamique (detectAdblock
+  // re-injecte le bait a chaque cycle) — recovery sans recharger la page.
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () { injectBait(); check(); });
+    document.addEventListener('DOMContentLoaded', check);
   } else {
-    injectBait();
     check();
   }
 
