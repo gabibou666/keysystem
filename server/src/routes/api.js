@@ -43,15 +43,18 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
     }
 
     let keyId = null;
-    // Renouvellement: une cle valide peut etre prolongee
+    // Renouvellement: une cle valide peut etre prolongee.
+    // Cle inconnue/invalide/revoquee => on l'IGNORE et on delivre une NOUVELLE cle:
+    // sinon une cle morte dans le localStorage bloquerait l'utilisateur a vie
+    // (chaque clic renverrait la meme cle morte). Cote securite, ignorer ne change
+    // rien: obtenir une cle passe toujours par une pub LootLabs completee, et les
+    // rate-limits (IP + compte Discord) s'appliquent pareil.
     if (req.body?.key) {
       const parsed = crypto.verifyKeyFormat(req.body.key);
-      if (!parsed) return res.status(400).json({ success: false, error: 'Invalid key.' });
-      const { rows } = await pool.query('SELECT id, revoked FROM keys WHERE kid = $1', [parsed.kid]);
-      if (!rows[0] || rows[0].revoked) {
-        return res.status(400).json({ success: false, error: 'Unknown or revoked key.' });
+      if (parsed) {
+        const { rows } = await pool.query('SELECT id, revoked FROM keys WHERE kid = $1', [parsed.kid]);
+        if (rows[0] && !rows[0].revoked) keyId = rows[0].id;
       }
-      keyId = rows[0].id;
     }
 
     // Ad limit: max 2 ad sessions per IP within 12 hours (anti-farm en masse)
