@@ -492,11 +492,12 @@ router.post('/v1/check', checkLimiter, async (req, res) => {
       [dbKey.id, uid, (executor || '').slice(0, 40), activeBuild.id, activeBuild.version, clientIp(req), wmNonce]
     );
 
+    // expiresAt ISO 8601 UTC (format exige par DateTime.fromIsoDate cote Luau)
     res.json({
       success: true,
       script: watermarkedScript,
       version: activeBuild.version,
-      expiresAt: dbKey.expires_at,
+      expiresAt: new Date(dbKey.expires_at).toISOString(),
     });
   } catch (e) {
     console.error('[v1/check]', e);
