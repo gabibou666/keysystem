@@ -192,20 +192,35 @@ function countUp(el, target, duration = 1200) {
 (function resumePending() {
   const puid = localStorage.getItem(PUID_STORAGE);
   if (!puid) return;
+  const stop = () => { clearInterval(iv); localStorage.removeItem(PUID_STORAGE); };
+  const handle = (d) => {
+    if (d.success && d.status === 'completed' && d.key) {
+      stop();
+      localStorage.setItem(KEY_STORAGE, d.key);
+      loadKeyInfo();
+      setStatus('🎉 Your key is ready! Copy it above.', 'ok');
+      showToast('🎉 Your key is ready!', 'ok');
+    } else if (!d.success && ['already_claimed', 'forbidden', 'token_expired', 'token_invalid', 'rejected', 'revoked_key'].includes(d.status)
+               || d.error === 'Unknown session') {
+      // Session definitivement morte: arreter de poller (l'onglet getkey a
+      // probablement deja delivre la cle) au lieu de boucler a vie.
+      stop();
+    }
+  };
   const iv = setInterval(async () => {
+    if (document.visibilityState !== 'visible') return; // onglet cache: pas de gaspillage
     try {
       const r = await fetch('/api/key/status?puid=' + encodeURIComponent(puid));
-      const d = await r.json();
-      if (d.success && d.status === 'completed' && d.key) {
-        clearInterval(iv);
-        localStorage.setItem(KEY_STORAGE, d.key);
-        localStorage.removeItem(PUID_STORAGE);
-        loadKeyInfo();
-        setStatus('🎉 Your key is ready! Copy it above.', 'ok');
-        showToast('🎉 Your key is ready!', 'ok');
-      }
+      handle(await r.json());
     } catch {}
-  }, 3000);
+  }, 2000);
+  // Poll immediat + au retour sur l'onglet (timers arriere-plan brides par le navigateur)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      const still = localStorage.getItem(PUID_STORAGE);
+      if (still) fetch('/api/key/status?puid=' + encodeURIComponent(still)).then(r => r.json()).then(handle).catch(() => {});
+    }
+  });
 })();
 
 function setStatus(text, cls) {

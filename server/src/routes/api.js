@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const rateLimit = require('express-rate-limit');
 const crypto = require('../services/crypto');
 const lootlabs = require('../services/lootlabs');
@@ -65,7 +65,7 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
          WHERE ip = $1 AND created_at > now() - interval '12 hours'`,
         [ip]
       ),
-      // ANTI-PROXY: limite aussi par COMPTE DISCORD — les proxies changent l'IP,
+      // ANTI-PROXY: limite aussi par COMPTE DISCORD â€” les proxies changent l'IP,
       // pas le compte. 4 sessions / 12h max par proprietaire Discord.
       pool.query(
         `SELECT COUNT(*)::int AS c FROM ll_sessions
@@ -120,10 +120,10 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
 // "Every time a user completes a task, a GET Request will be sent to your postback URL"
 // Protections cumulees ici:
 //   1. Origin: IP source du postback doit resoudre vers un domaine LootLabs (verif DNS)
-//      ou etre l'IP user annoncee (fallback template court) — le referer seul est spoofable
+//      ou etre l'IP user annoncee (fallback template court) â€” le referer seul est spoofable
 //   2. Delai minimum realiste: > 20s depuis started_at (un humain met du temps, un bot valide en secondes)
 //   3. Transaction atomique: FOR UPDATE + dedup unique_id (jamais deux fois le meme checkpoint)
-//   4. A la complétion: generation du TOKEN DE COMPLETION (JWT signe, usage unique, TTL 5 min)
+//   4. A la complÃ©tion: generation du TOKEN DE COMPLETION (JWT signe, usage unique, TTL 30 min)
 //      -> /key/status l'exigera pour delivrer la cle. Aucune delivrance sans lui.
 router.get('/lootlabs/postback', async (req, res) => {
   try {
@@ -149,7 +149,7 @@ router.get('/lootlabs/postback', async (req, res) => {
     }
 
     // --- Verification d'origine: le postback doit venir de l'infrastructure LootLabs ---
-    // (doc: "A GET request will be sent there" — serveur LootLabs -> nous)
+    // (doc: "A GET request will be sent there" â€” serveur LootLabs -> nous)
     const sourceIp = clientIp(req);
     const dns = require('dns').promises;
     let originOk = false;
@@ -167,7 +167,7 @@ router.get('/lootlabs/postback', async (req, res) => {
       } else {
         // Fallback accepte: CDN/proxy legitimes (Render est derriere Cloudflare, l'IP source
         // peut etre un edge). On accepte si l'IP USER annoncee par LootLabs correspond
-        // a une session recente activee par cette IP (cohérence metier).
+        // a une session recente activee par cette IP (cohÃ©rence metier).
         originNote = 'not_direct_infra';
       }
     } catch {
@@ -198,9 +198,9 @@ router.get('/lootlabs/postback', async (req, res) => {
       return res.status(429).send('rejected: completed too fast');
     }
 
-    // --- Cohérence IP metier: l'IP user annoncee doit matcher l'IP qui a cree la session
+    // --- CohÃ©rence IP metier: l'IP user annoncee doit matcher l'IP qui a cree la session
     //     (si le template du panel fournit ip=). Un attaquant qui forge un postback depuis
-    //     son serveur ne connaît pas l'IP de la victime. Silencieux pour les vrais users.
+    //     son serveur ne connaÃ®t pas l'IP de la victime. Silencieux pour les vrais users.
     if (claimedUserIp && session.ip && claimedUserIp !== session.ip) {
       console.warn(`[postback] REJET ip mismatch: annoncee=${claimedUserIp} session=${session.ip}`);
       return res.status(403).send('rejected: ip mismatch');
@@ -216,14 +216,14 @@ router.get('/lootlabs/postback', async (req, res) => {
 
     if (session.status === 'completed') return res.send('already ok');
     if (originNote === 'not_direct_infra') {
-      // On log pour audit mais on continue (CDN legitime possible) — la defense principale
+      // On log pour audit mais on continue (CDN legitime possible) â€” la defense principale
       // reste: delai minimum + dedup + token signe + IP metier.
       console.log(`[postback] origin note: ${originNote} (src=${sourceIp})`);
     }
 
     const done = session.tasks_done + 1;
     if (done >= session.tasks_required) {
-      // Complétion: genere le TOKEN signe a usage unique (TTL 5 min).
+      // ComplÃ©tion: genere le TOKEN signe a usage unique (TTL 30 min).
       // La cle ne sera delivree QUE via ce token + proprietaire verifie.
       const completionToken = tokens.issueCompletionToken({
         puid: click_id,
@@ -250,13 +250,13 @@ router.get('/lootlabs/postback', async (req, res) => {
 // Polling apres les pubs: la cle est delivree quand la session est complete.
 // ANTI-BYPASS (couches cumulees):
 //   1. Seul le PROPRIETAIRE de la session (owner_discord_id == cookie ks_user signe)
-//      peut recevoir la cle — un puid vole/ne fuite ne sert a rien.
-//   2. La delivrance exige le TOKEN DE COMPLETION (JWT signe, usage unique, TTL 5 min)
-//      genere par le postback — pas de token, pas de cle.
+//      peut recevoir la cle â€” un puid vole/ne fuite ne sert a rien.
+//   2. La delivrance exige le TOKEN DE COMPLETION (JWT signe, usage unique, TTL 30 min)
+//      genere par le postback â€” pas de token, pas de cle.
 //   3. Le token est brule (NULL) au premier usage reussi: impossible de rejouer.
-//   4. Rate-limite specifique (polling) — un script de polling en masse se bloque.
+//   4. Rate-limite specifique (polling) â€” un script de polling en masse se bloque.
 // Les utilisateurs legitimes ne voient AUCUNE difference (leur cookie+token sont valides).
-const statusLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true });
+const statusLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, standardHeaders: true });
 
 router.get('/key/status', statusLimiter, async (req, res) => {
   try {
@@ -288,7 +288,7 @@ router.get('/key/status', statusLimiter, async (req, res) => {
 
     // --- Verrou proprietaire: la session appartient a un Discord user ---
     // (toutes les sessions post-migration ont un owner; les anciennes sans owner
-    //  ne sont plus delivrables — securite avant compatibilite)
+    //  ne sont plus delivrables â€” securite avant compatibilite)
     const requesterDiscordId = discordService.verifyUserCookie(req.cookies && req.cookies[discordService.USER_COOKIE]);
     if (!session.owner_discord_id || !requesterDiscordId || requesterDiscordId !== session.owner_discord_id) {
       console.warn(`[key/status] REJET non-proprietaire (puid=${String(puid).slice(0, 8)}..., owner=${session.owner_discord_id ? 'set' : 'none'}, requester=${requesterDiscordId ? 'set' : 'none'})`);
@@ -316,23 +316,35 @@ router.get('/key/status', statusLimiter, async (req, res) => {
       return res.status(403).json({
         success: false,
         status: 'token_' + tokenCheck.reason,
-        error: 'Session expired — start a new one.',
+        error: 'Session expired â€” start a new one.',
       });
     }
 
     // --- Tout est valide: on BRULE le token (usage unique) et on delivre ---
-    await pool.query(
-      `UPDATE ll_sessions SET completion_token = NULL, status = 'claimed', claimed_at = now() WHERE id = $1`,
+    // CLAIM ATOMIQUE: le UPDATE ne passe QUE si la session est encore 'completed'
+    // avec son token. Deux polls concurrents (retour d'onglet: visibilitychange +
+    // focus + tick 2s) ne peuvent PAS delivrer deux fois â€” un seul gagne le claim,
+    // l'autre recoit already_claimed AVANT tout INSERT/UPDATE de cle.
+    const claim = await pool.query(
+      `UPDATE ll_sessions SET completion_token = NULL, status = 'claimed', claimed_at = now()
+       WHERE id = $1 AND status = 'completed' AND completion_token IS NOT NULL`,
       [session.id]
     );
+    if (claim.rowCount === 0) {
+      return res.status(409).json({
+        success: false,
+        status: 'already_claimed',
+        error: 'This session\'s key has already been claimed.',
+      });
+    }
 
     // Recupere la duree choisie au start de la session
     const duration = session.tasks_required === 1 ? 12 : 24;
 
     if (session.key_id) {
       // Renouvellement: meme kid, meme string cote client.
-      // Grave aussi le owner Discord de la session sur la clé (le renouveleur
-      // devient propriétaire visible — anti-usurpation: seul le owner du cookie peut etre ici).
+      // Grave aussi le owner Discord de la session sur la clÃ© (le renouveleur
+      // devient propriÃ©taire visible â€” anti-usurpation: seul le owner du cookie peut etre ici).
       const upd = await pool.query(
         `UPDATE keys SET expires_at = now() + make_interval(hours => $1), duration_hours = $1,
                 renewed_count = renewed_count + 1, owner_discord_id = $3
@@ -352,7 +364,7 @@ router.get('/key/status', statusLimiter, async (req, res) => {
       });
     }
 
-    // Nouvelle cle: liee au owner Discord de la session (createur de la clé)
+    // Nouvelle cle: liee au owner Discord de la session (createur de la clÃ©)
     const gen = crypto.generateKey();
     const ins = await pool.query(
       `INSERT INTO keys (kid, signature, duration_hours, owner_discord_id, expires_at)
@@ -466,15 +478,15 @@ router.post('/v1/check', checkLimiter, async (req, res) => {
     }
     const activeBuild = buildQuery.rows[0];
 
-    // WATERMARK: nonce unique par exécution -> chaque dump servi est traçable.
-    // Le snippet beaconne sous le compte de QUI l'exécute -> un dump partagé
-    // est détecté (beacon d'un autre userId que l'acheteur) et le leak identifiable.
+    // WATERMARK: nonce unique par exÃ©cution -> chaque dump servi est traÃ§able.
+    // Le snippet beaconne sous le compte de QUI l'exÃ©cute -> un dump partagÃ©
+    // est dÃ©tectÃ© (beacon d'un autre userId que l'acheteur) et le leak identifiable.
     const wmNonce = crypto.randomToken(12);
     const wmB64 = wmService.makeWatermark(wmNonce, uid);
     const beacon = wmService.beaconSnippet(wmB64, process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`);
     const watermarkedScript = beacon + '\n' + activeBuild.content;
 
-    // Log execution (avec nonce pour relier beacons -> exécution -> clé)
+    // Log execution (avec nonce pour relier beacons -> exÃ©cution -> clÃ©)
     await pool.query(
       `INSERT INTO executions (key_id, user_id, executor, build_id, version, ip, wm_nonce) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
       [dbKey.id, uid, (executor || '').slice(0, 40), activeBuild.id, activeBuild.version, clientIp(req), wmNonce]
@@ -512,7 +524,7 @@ router.post(
             [decoded.nonce, uid, (executor || '').slice(0, 40), ip]
           );
 
-          // Détection de partage: le watermark émis pour l'acheteur A beaconne
+          // DÃ©tection de partage: le watermark Ã©mis pour l'acheteur A beaconne
           // sous un autre compte/IP -> le dump circule.
           const exec2 = await pool.query(
             `SELECT e.key_id, e.user_id AS owner_uid FROM executions e WHERE e.wm_nonce = $1 LIMIT 1`,
@@ -523,7 +535,7 @@ router.post(
             const ownerUid = parseInt(exec2.rows[0].owner_uid, 10);
             const suspectUid = uid;
 
-            // Cas 1: un AUTRE compte exécute le dump de l'acheteur => partage direct
+            // Cas 1: un AUTRE compte exÃ©cute le dump de l'acheteur => partage direct
             const sharedWithOther = suspectUid && ownerUid && suspectUid !== ownerUid;
             // Cas 2: le dump beaconne depuis >= 3 IP distinctes => redistribution
             const ips = await pool.query(
@@ -540,25 +552,25 @@ router.post(
               );
               const count = alerts.rows[0] ? alerts.rows[0].share_alerts : 99;
               if (count >= 3) {
-                // AUTO-REVOCATION: 3 alertes confirmées => la clé meurt
+                // AUTO-REVOCATION: 3 alertes confirmÃ©es => la clÃ© meurt
                 await pool.query('UPDATE keys SET revoked = true WHERE id = $1', [keyId]);
                 notifyDiscord({
-                  title: '🔒 Key auto-revoked (sharing detected)',
+                  title: 'ðŸ”’ Key auto-revoked (sharing detected)',
                   color: 'warn',
                   description: `Watermark \`${decoded.nonce}\` triggered **${count}** sharing alerts.
 Key **#${keyId}** (owner Roblox \`${ownerUid}\`) has been revoked automatically.`,
                   fields: [
                     { name: 'Distinct IPs', value: String(ips.rows[0].c) },
-                    { name: 'Last beacon', value: `user \`${suspectUid || '?'}'\` from \`${ip}\` · ${executor || '?'}` },
+                    { name: 'Last beacon', value: `user \`${suspectUid || '?'}'\` from \`${ip}\` Â· ${executor || '?'}` },
                   ],
                 });
               } else if (count === 1) {
                 // Premiere alerte: on notifie sans couper (peut etre un simple changement d'IP)
                 notifyDiscord({
-                  title: '⚠️ Possible key sharing detected',
+                  title: 'âš ï¸ Possible key sharing detected',
                   color: 'warn',
                   description: `Watermark \`${decoded.nonce}\` (key #${keyId}, owner \`${ownerUid}\`) beaconed from a different context.`,
-                  fields: [{ name: 'Beacon', value: `user \`${suspectUid || '?'}'\` · IP \`${ip}\` · ${ips.rows[0].c} distinct IP(s)` }],
+                  fields: [{ name: 'Beacon', value: `user \`${suspectUid || '?'}'\` Â· IP \`${ip}\` Â· ${ips.rows[0].c} distinct IP(s)` }],
                 });
               }
             }
@@ -567,7 +579,7 @@ Key **#${keyId}** (owner Roblox \`${ownerUid}\`) has been revoked automatically.
         return res.json({ success: true });
       }
 
-      // ===== Télémétrie classique =====
+      // ===== TÃ©lÃ©mÃ©trie classique =====
       await pool.query(
         'INSERT INTO error_reports (user_id, executor, version, error_msg) VALUES ($1,$2,$3,$4)',
         [

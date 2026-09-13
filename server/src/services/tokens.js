@@ -1,15 +1,19 @@
-// Tokens signés anti-bypass (jsonwebtoken — npmjs.com/package/jsonwebtoken)
+// Tokens signés anti-Bypass (jsonwebtoken — npmjs.com/package/jsonwebtoken)
 // Principe: le checkpoint complété (postback) genere un JWT:
 //   - signe avec HMAC_SECRET (secret serveur, jamais expose)
-//   - TTL court (5 min)
+//   - TTL 30 min (voir COMPLETION_TTL_SEC)
 //   - claims lies: puid + owner (Discord) + IP
-//   - a usage unique: le status le consomme (jti verifie en DB via completion_token)
+//   - a usage unique: le status le consomme (claim atomique en DB)
 // Sans ce token, /api/key/status refuse de delivrer la cle.
 
 const jwt = require('jsonwebtoken');
 
 const SECRET = process.env.HMAC_SECRET;
-const COMPLETION_TTL_SEC = 5 * 60; // 5 minutes (brief: 2-5 min)
+// TTL 30 minutes: assez long pour que l'utilisateur finisse sa pub et revienne
+// (les pages de reward LootLabs font trainer), assez court pour rester a
+// usage unique et non rejouable. Un token expire = session a recommencer,
+// ce qui generait des tickets support inutiles a 5 min.
+const COMPLETION_TTL_SEC = 30 * 60; // 30 minutes
 
 // Genere le token de completion d'un checkpoint (appele au postback, cote serveur uniquement)
 function issueCompletionToken({ puid, ownerDiscordId, ip, tasksDone, tasksRequired }) {

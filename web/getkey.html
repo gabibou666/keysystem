@@ -329,13 +329,32 @@ function showWaiting(title, sub, retryable = false) {
 
 function startPolling(puid) {
   if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(() => poll(puid), 3000);
+  poll(puid); // PREMIER poll immediat: en revenant de la pub, la reponse part tout de suite
+  pollTimer = setInterval(() => poll(puid), 2000);
 }
 
+// INSTANT: poll des que l'onglet redevient visible/actif.
+// Les timers d'onglets en arriere-plan sont brides par le navigateur (~1/min),
+// donc au retour sur l'onglet on force un poll immediat.
+function pollNowIfPending() {
+  if (pollTimer === null) return; // polling termine: cle deja delivree
+  const puid = localStorage.getItem(PUID_STORAGE);
+  if (puid) poll(puid);
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') pollNowIfPending();
+});
+window.addEventListener('focus', pollNowIfPending);
+
+let pollInFlight = false; // anti double-poll simultane (retour d'onglet: visibilitychange + focus + tick)
+
 async function poll(puid) {
+  if (pollInFlight) return;
+  pollInFlight = true;
   try {
     const r = await fetch('/api/key/status?puid=' + encodeURIComponent(puid));
     const d = await r.json();
+    if (pollTimer === null) return; // livraison/arrêt déjà survenu: réponse tardive jetée
 
     if (d.success && d.status === 'completed' && d.key) {
       clearInterval(pollTimer);
@@ -376,14 +395,22 @@ async function poll(puid) {
       showWaiting('✅ Already claimed', 'This session\'s key was already retrieved — get a new one below.', true);
       return;
     }
-    // Statut inconnu / session morte / erreur serveur: on arrete le polling
-    if (!d.success && d.status !== 'pending' && d.status !== 'waiting') {
+    // Statut DEFINITIFMENT mort (session inconnue): on arrete et on nettoie.
+    if (d.error === 'Unknown session' || d.status === 'revoked_key') {
       clearInterval(pollTimer);
       pollTimer = null;
       localStorage.removeItem(PUID_STORAGE);
       showWaiting('⚠️ Session error', (d.error || 'Something went wrong — start again below.'), true);
+      return;
     }
-  } catch {}
+    // 500 transitoire / reseau: PAS d'arret — le tick suivant reessaie.
+    // (Avant: une erreur passagere tuait la session et vidait PUID_STORAGE,
+    //  l'utilisateur devait recommencer une pub pour rien.)
+  } catch {
+    // Erreur reseau (offline, 429 rate-limit): on continue, tick suivant.
+  } finally {
+    pollInFlight = false;
+  }
 }
 
 function flashCopied(btn) {
