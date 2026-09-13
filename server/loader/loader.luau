@@ -131,12 +131,83 @@ local function formatRemaining(expiresAt)
     return m .. "m"
 end
 
+-- ===== ANTI-DUMP & INTEGRITY CHECK =====
+-- Détecte les crochets (hookfunction/hookmetamethod) sur loadstring/request
+-- et les outils d'espionnage (SimpleSpy, Hydroxide, Dex Explorer)
+local function detectDumperEnvironment()
+    -- 1) Détection des outils d'espionnage / dumpers connus dans l'arborescence GUI
+    local knownSpies = {
+        "SimpleSpy", "SimpleSpyV2", "SimpleSpyV3", "Hydroxide", "TurtleSpy",
+        "DarkDex", "Dex", "DexExplorer", "SynapseDex", "RemoteSpy"
+    }
+    local function checkGuiContainer(cont)
+        if not cont then return nil end
+        for _, name in ipairs(knownSpies) do
+            local ok, found = pcall(function() return cont:FindFirstChild(name) end)
+            if ok and found then return name end
+        end
+        return nil
+    end
+
+    local spy = nil
+    pcall(function()
+        spy = checkGuiContainer(game:GetService("CoreGui"))
+        if not spy and type(gethui) == "function" then
+            spy = checkGuiContainer(gethui())
+        end
+    end)
+    if spy then return "spy_gui:" .. tostring(spy) end
+
+    -- 2) Détection de hook sur loadstring
+    if type(loadstring) ~= "function" then
+        return "tampered_loadstring_missing"
+    end
+    if type(isfunctionhooked) == "function" then
+        local ok, hooked = pcall(function() return isfunctionhooked(loadstring) end)
+        if ok and hooked then return "hooked_loadstring" end
+    end
+    local okInfo, src = pcall(function() return debug.info(loadstring, "s") end)
+    if okInfo and type(src) == "string" and src ~= "[C]" and not src:find("loadstring") then
+        return "custom_lua_loadstring"
+    end
+
+    -- 3) Détection de hook sur request
+    if type(isfunctionhooked) == "function" and type(request) == "function" then
+        local ok, hooked = pcall(function() return isfunctionhooked(request) end)
+        if ok and hooked then return "hooked_request" end
+    end
+
+    return nil
+end
+
+local function reportSecurityViolation(reason)
+    pcall(function()
+        request({
+            Url = SITE .. "/api/v1/report",
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = game:GetService("HttpService"):JSONEncode({
+                userId = lp.UserId,
+                executor = execName,
+                error = "security_tamper: " .. tostring(reason),
+            }),
+        })
+    end)
+end
+
 -- Verifie la cle contre le backend; si valide, charge le script et retourne (true, message, details)
 local function performCheck(key)
     if not key or #key < 10 then
         return false, "Invalid key."
     end
     key = key:gsub("%s+", "")
+
+    -- Contrôle d'intégrité anti-dump préalable
+    local preTamper = detectDumperEnvironment()
+    if preTamper then
+        reportSecurityViolation(preTamper)
+        return false, "Security violation: Tamper detected (" .. tostring(preTamper) .. ")."
+    end
 
     local data = httpJson(SITE .. "/api/v1/check", "POST", {
         key = key,
@@ -147,6 +218,14 @@ local function performCheck(key)
     })
 
     if data.success and data.script then
+        -- Double vérification anti-dump juste avant le décodage et l'exécution
+        local postTamper = detectDumperEnvironment()
+        if postTamper then
+            data.script = nil
+            reportSecurityViolation(postTamper)
+            return false, "Security violation: Execution intercepted."
+        end
+
         local fn, loadErr = loadstring(data.script)
         if not fn then
             pcall(function()

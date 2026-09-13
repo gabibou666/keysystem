@@ -165,6 +165,8 @@ async function startKeySession() {
   let body = { duration };
   const existing = localStorage.getItem(KEY_STORAGE);
   if (renewing && existing) body.key = existing;
+  const ref = localStorage.getItem('keysystem_ref');
+  if (ref) body.ref = ref;
 
   try {
     const r = await fetch('/api/key/start', {

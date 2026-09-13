@@ -107,6 +107,17 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
       });
     }
 
+    // Parrainage: si un parrain (ref) est passé et valide (Discord ID distinct)
+    const refBy = typeof req.body?.ref === 'string' ? req.body.ref.trim() : null;
+    if (refBy && refBy !== req.discordId && /^\d{17,20}$/.test(refBy)) {
+      await pool.query(
+        `INSERT INTO referrals (referrer_discord_id, referred_discord_id, referred_ip, status)
+         VALUES ($1, $2, $3, 'pending')
+         ON CONFLICT (referred_discord_id) DO NOTHING`,
+        [refBy, req.discordId, ip]
+      ).catch(() => {});
+    }
+
     // La session est liee au proprietaire Discord: le status ne delivrera
     // la cle qu'a CE proprietaire (cookie signe ks_user).
     await pool.query(
@@ -414,6 +425,13 @@ router.get('/key/status', statusLimiter, async (req, res) => {
     const key = ins.rows[0];
     await pool.query('UPDATE ll_sessions SET key_id = $1 WHERE id = $2', [key.id, session.id]);
 
+    // Parrainage: valide le statut si ce compte Discord avait été parrainé
+    await pool.query(
+      `UPDATE referrals SET status = 'completed', completed_at = now()
+       WHERE referred_discord_id = $1 AND status = 'pending'`,
+      [session.owner_discord_id]
+    ).catch(() => {});
+
     res.json({
       success: true,
       status: 'completed',
@@ -437,7 +455,7 @@ router.get('/key/info', infoLimiter, async (req, res) => {
     if (!parsed) return res.json({ success: false, error: 'Invalid format' });
 
     const { rows } = await pool.query(
-      'SELECT kid, expires_at, revoked, bound_user_id FROM keys WHERE kid = $1',
+      'SELECT kid, expires_at, revoked, bound_user_id, bound_hwid, hwid_last_reset FROM keys WHERE kid = $1',
       [parsed.kid]
     );
     const key = rows[0];
@@ -451,10 +469,220 @@ router.get('/key/info', infoLimiter, async (req, res) => {
       expiresAt: key.expires_at,
       expired,
       bound: !!key.bound_user_id,
+      hwidBound: !!key.bound_hwid,
     });
   } catch (e) {
     console.error('[key/info]', e);
     res.status(500).json({ success: false, error: 'Server error.' });
+  }
+});
+
+// ---------- POST /api/key/reset-hwid ----------
+// Permet à l'utilisateur Discord de réinitialiser le lien HWID de son appareil (cooldown 24h)
+router.post('/key/reset-hwid', async (req, res) => {
+  try {
+    const requesterDiscordId = discordService.verifyUserCookie(req.cookies && req.cookies[discordService.USER_COOKIE]);
+    if (!requesterDiscordId) {
+      return res.status(401).json({ success: false, error: 'Please sign in with Discord first.' });
+    }
+
+    // Recherche la clé active du compte Discord
+    const { rows } = await pool.query(
+      `SELECT * FROM keys
+       WHERE owner_discord_id = $1 AND revoked = false AND expires_at > now()
+       ORDER BY id DESC LIMIT 1`,
+      [requesterDiscordId]
+    );
+    const key = rows[0];
+    if (!key) {
+      return res.status(404).json({ success: false, error: 'No active key found for your Discord account.' });
+    }
+
+    if (!key.bound_hwid) {
+      return res.json({
+        success: true,
+        message: 'Your key is already unbound. Launch it on your new device to bind it.',
+      });
+    }
+
+    const COOLDOWN_MS = 24 * 60 * 60 * 1000;
+    if (key.hwid_last_reset) {
+      const elapsed = Date.now() - new Date(key.hwid_last_reset).getTime();
+      if (elapsed < COOLDOWN_MS) {
+        const remainingMs = COOLDOWN_MS - elapsed;
+        const remainingH = Math.floor(remainingMs / (60 * 60 * 1000));
+        const remainingM = Math.ceil((remainingMs % (60 * 60 * 1000)) / (60 * 1000));
+        return res.status(429).json({
+          success: false,
+          error: `Cooldown active: next HWID reset available in ${remainingH}h ${remainingM}m.`,
+          remainingMs,
+        });
+      }
+    }
+
+    await pool.query(
+      `UPDATE keys SET bound_hwid = NULL, hwid_last_reset = now() WHERE id = $1`,
+      [key.id]
+    );
+
+    res.json({
+      success: true,
+      message: '✅ HWID successfully reset! You can now launch the script on your new PC/device.',
+    });
+  } catch (e) {
+    console.error('[key/reset-hwid]', e);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// ---------- GET /api/key/hwid-status ----------
+// Statut HWID et cooldown pour l'affichage web
+router.get('/key/hwid-status', async (req, res) => {
+  try {
+    const requesterDiscordId = discordService.verifyUserCookie(req.cookies && req.cookies[discordService.USER_COOKIE]);
+    if (!requesterDiscordId) {
+      return res.json({ success: false, loggedIn: false });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT bound_hwid, hwid_last_reset, expires_at FROM keys
+       WHERE owner_discord_id = $1 AND revoked = false AND expires_at > now()
+       ORDER BY id DESC LIMIT 1`,
+      [requesterDiscordId]
+    );
+    const key = rows[0];
+    if (!key) {
+      return res.json({ success: true, loggedIn: true, hasKey: false });
+    }
+
+    const COOLDOWN_MS = 24 * 60 * 60 * 1000;
+    let canReset = true;
+    let remainingMs = 0;
+    if (key.hwid_last_reset) {
+      const elapsed = Date.now() - new Date(key.hwid_last_reset).getTime();
+      if (elapsed < COOLDOWN_MS) {
+        canReset = false;
+        remainingMs = COOLDOWN_MS - elapsed;
+      }
+    }
+
+    res.json({
+      success: true,
+      loggedIn: true,
+      hasKey: true,
+      isBound: !!key.bound_hwid,
+      canReset,
+      remainingMs,
+    });
+  } catch (e) {
+    console.error('[key/hwid-status]', e);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// ---------- GET /api/referrals/stats ----------
+// Statistiques de parrainage de l'utilisateur connecté
+router.get('/referrals/stats', async (req, res) => {
+  try {
+    const requesterDiscordId = discordService.verifyUserCookie(req.cookies && req.cookies[discordService.USER_COOKIE]);
+    if (!requesterDiscordId) {
+      return res.json({ success: false, loggedIn: false });
+    }
+
+    const [refs, rewards] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE status = 'completed')::int AS completed
+         FROM referrals WHERE referrer_discord_id = $1`,
+        [requesterDiscordId]
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS claimed FROM referral_rewards WHERE discord_id = $1`,
+        [requesterDiscordId]
+      ),
+    ]);
+
+    const totalReferred = refs.rows[0].total || 0;
+    const completedReferred = refs.rows[0].completed || 0;
+    const claimedRewards = rewards.rows[0].claimed || 0;
+    const earnedRewards = Math.floor(completedReferred / 2);
+    const availableRewards = Math.max(0, earnedRewards - claimedRewards);
+
+    res.json({
+      success: true,
+      loggedIn: true,
+      discordId: requesterDiscordId,
+      totalReferred,
+      completedReferred,
+      claimedRewards,
+      availableRewards,
+      progressToNext: completedReferred % 2,
+    });
+  } catch (e) {
+    console.error('[referrals/stats]', e);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// ---------- POST /api/referrals/claim ----------
+// Réclamation d'une clé VIP 24h sans pub contre 2 parrainages complétés
+router.post('/referrals/claim', async (req, res) => {
+  try {
+    const requesterDiscordId = discordService.verifyUserCookie(req.cookies && req.cookies[discordService.USER_COOKIE]);
+    if (!requesterDiscordId) {
+      return res.status(401).json({ success: false, error: 'Please sign in with Discord first.' });
+    }
+
+    const [refs, rewards] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*) FILTER (WHERE status = 'completed')::int AS completed
+         FROM referrals WHERE referrer_discord_id = $1`,
+        [requesterDiscordId]
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS claimed FROM referral_rewards WHERE discord_id = $1`,
+        [requesterDiscordId]
+      ),
+    ]);
+
+    const completedReferred = refs.rows[0].completed || 0;
+    const claimedRewards = rewards.rows[0].claimed || 0;
+    const earnedRewards = Math.floor(completedReferred / 2);
+    const availableRewards = Math.max(0, earnedRewards - claimedRewards);
+
+    if (availableRewards <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No rewards available. Invite 2 friends who get a key to unlock a free 24h VIP Key!',
+      });
+    }
+
+    const gen = crypto.generateKey();
+    const duration = 24;
+    const expiresAt = new Date(Date.now() + duration * 60 * 60 * 1000);
+
+    const ins = await pool.query(
+      `INSERT INTO keys (kid, signature, duration_hours, owner_discord_id, expires_at, source, note)
+       VALUES ($1, $2, $3, $4, $5, 'referral', 'Reward for 2 friends referred')
+       RETURNING id, kid, signature, expires_at`,
+      [gen.kid, gen.signature, duration, requesterDiscordId, expiresAt]
+    );
+    const newKey = ins.rows[0];
+
+    await pool.query(
+      `INSERT INTO referral_rewards (discord_id, reward_type, key_id) VALUES ($1, 'key_24h_vip', $2)`,
+      [requesterDiscordId, newKey.id]
+    );
+
+    res.json({
+      success: true,
+      key: `${newKey.kid}.${newKey.signature}`,
+      expiresAt: newKey.expires_at,
+      message: '🎉 24h VIP Key claimed successfully! No ads needed.',
+    });
+  } catch (e) {
+    console.error('[referrals/claim]', e);
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 

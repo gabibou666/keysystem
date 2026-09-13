@@ -52,6 +52,10 @@
       <button class="btn small" onclick="copyCurrentKey()">📋 Copy</button>
     </div>
     <div id="currentKeyStatus" class="status"></div>
+    <div style="margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <button class="btn small secondary" id="btnResetHwid" onclick="resetHwid()" style="display:none;">🔄 Reset HWID (switch device)</button>
+      <span id="hwidStatusText" style="font-size: 13px; color: var(--color-muted);"></span>
+    </div>
   </section>
 
   <!-- AD: Leaderboard 728x90 -->
@@ -114,6 +118,47 @@
       🔄 Expired key? Clicking above automatically renews your existing key.
     </p>
     <div id="startStatus" class="status" style="text-align:center; margin-top: 14px;"></div>
+  </section>
+
+  <!-- Bonus: Referral Program -->
+  <section class="keypanel neon-frame" id="referralCard" style="margin-top: 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+      <h2>👥 Invite Friends · Earn Free VIP Keys</h2>
+      <span class="badge-pill" style="background:#10b98122; color:#34d399; border:1px solid #10b98155;">Zero Ads</span>
+    </div>
+    <p class="sub">Share your personal link. Every <b>2 friends</b> who get a key unlocks a <b>24h VIP Key with NO ads</b>!</p>
+    
+    <div id="refLoggedOut" class="status">
+      <span>🔒 Sign in with Discord above (Step 1) to get your invite link and track your free VIP keys.</span>
+    </div>
+
+    <div id="refLoggedIn" class="hidden">
+      <div style="display:flex; gap: 10px; margin-top: 14px; flex-wrap:wrap;">
+        <input type="text" id="refLinkInput" readonly style="flex:1; min-width: 200px; background:rgba(0,0,0,0.4); border:1px solid var(--color-border); border-radius:var(--radius-sm); padding:10px 14px; color:#c084fc; font-size:13px; font-family:monospace;" />
+        <button class="btn small" onclick="copyRefLink()">📋 Copy Link</button>
+      </div>
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-top: 18px;">
+        <div class="card" style="padding: 14px; text-align:center;">
+          <div style="font-size: 24px; font-weight: 800; color:#fff;" id="refTotalCount">0</div>
+          <p style="font-size: 12px; color: var(--color-muted); margin-top: 4px;">Friends Clicked</p>
+        </div>
+        <div class="card" style="padding: 14px; text-align:center;">
+          <div style="font-size: 24px; font-weight: 800; color:#a855f7;" id="refCompletedCount">0</div>
+          <p style="font-size: 12px; color: var(--color-muted); margin-top: 4px;">Keys Completed</p>
+        </div>
+        <div class="card" style="padding: 14px; text-align:center;">
+          <div style="font-size: 24px; font-weight: 800; color:#10b981;" id="refRewardsAvailable">0</div>
+          <p style="font-size: 12px; color: var(--color-muted); margin-top: 4px;">VIP Keys Ready</p>
+        </div>
+      </div>
+
+      <div style="margin-top: 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <p id="refProgressText" style="font-size: 13px; color: var(--color-muted); margin:0;">0 / 2 friends towards your next VIP key.</p>
+        <button class="btn small" id="btnClaimRef" onclick="claimReferralReward()" disabled style="background: linear-gradient(135deg, #10b981, #059669); border:none;">🎁 Claim 24h VIP Key</button>
+      </div>
+      <div id="refClaimStatus" class="status" style="margin-top: 8px;"></div>
+    </div>
   </section>
 
   <!-- AD: In-content 728x90 -->
@@ -230,6 +275,10 @@ async function discordLogout() {
 
 (function loginBanner() {
   const q = new URLSearchParams(location.search);
+  const ref = q.get('ref');
+  if (ref && /^\d{17,20}$/.test(ref)) {
+    localStorage.setItem('keysystem_ref', ref);
+  }
   const login = q.get('login');
   if (login) {
     history.replaceState({}, '', '/getkey');
@@ -259,6 +308,127 @@ async function discordLogout() {
   }
 })();
 
+// ===== HWID Management =====
+async function loadHwidStatus() {
+  try {
+    const r = await fetch('/api/key/hwid-status');
+    const d = await r.json();
+    const btn = document.getElementById('btnResetHwid');
+    const st = document.getElementById('hwidStatusText');
+    if (!btn || !st) return;
+    if (!d.loggedIn || !d.hasKey) {
+      btn.style.display = 'none';
+      st.textContent = '';
+      return;
+    }
+    btn.style.display = 'inline-flex';
+    if (!d.isBound) {
+      st.textContent = 'Device not locked yet — will bind on in-game launch.';
+      st.style.color = '#34d399';
+      btn.disabled = true;
+    } else if (d.canReset) {
+      st.textContent = 'Device bound. 1 reset available.';
+      st.style.color = '#c084fc';
+      btn.disabled = false;
+    } else {
+      const h = Math.floor(d.remainingMs / 3600000);
+      const m = Math.ceil((d.remainingMs % 3600000) / 60000);
+      st.textContent = `Cooldown active — next reset in ${h}h ${m}m`;
+      st.style.color = 'var(--color-muted)';
+      btn.disabled = true;
+    }
+  } catch {}
+}
+
+async function resetHwid() {
+  const btn = document.getElementById('btnResetHwid');
+  const st = document.getElementById('hwidStatusText');
+  if (btn) btn.disabled = true;
+  if (st) { st.textContent = 'Resetting device link...'; st.style.color = '#c084fc'; }
+  try {
+    const r = await fetch('/api/key/reset-hwid', { method: 'POST' });
+    const d = await r.json();
+    if (d.success) {
+      showToast('✅ HWID reset! Launch script on your new device.');
+      loadHwidStatus();
+    } else {
+      if (st) { st.textContent = d.error || 'Failed to reset HWID'; st.style.color = 'var(--red)'; }
+      if (btn) btn.disabled = false;
+    }
+  } catch {
+    if (st) st.textContent = 'Network error.';
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ===== Referral System =====
+async function loadReferralStats() {
+  try {
+    const r = await fetch('/api/referrals/stats');
+    const d = await r.json();
+    const out = document.getElementById('refLoggedOut');
+    const logged = document.getElementById('refLoggedIn');
+    if (!out || !logged) return;
+    if (!d.loggedIn) {
+      out.classList.remove('hidden');
+      logged.classList.add('hidden');
+      return;
+    }
+    out.classList.add('hidden');
+    logged.classList.remove('hidden');
+
+    const origin = location.origin;
+    const refLink = `${origin}/getkey?ref=${d.discordId}`;
+    document.getElementById('refLinkInput').value = refLink;
+
+    document.getElementById('refTotalCount').textContent = d.totalReferred || 0;
+    document.getElementById('refCompletedCount').textContent = d.completedReferred || 0;
+    document.getElementById('refRewardsAvailable').textContent = d.availableRewards || 0;
+
+    const prog = document.getElementById('refProgressText');
+    const needed = 2 - (d.progressToNext || 0);
+    prog.textContent = d.availableRewards > 0 
+      ? `🎉 You have ${d.availableRewards} VIP key(s) ready to claim!`
+      : `${d.progressToNext || 0} / 2 friends completed. ${needed} more needed for a VIP key.`;
+
+    const claimBtn = document.getElementById('btnClaimRef');
+    if (claimBtn) claimBtn.disabled = (d.availableRewards || 0) <= 0;
+  } catch {}
+}
+
+function copyRefLink() {
+  const input = document.getElementById('refLinkInput');
+  if (input && input.value) {
+    navigator.clipboard.writeText(input.value);
+    showToast('🔗 Referral link copied to clipboard!');
+  }
+}
+
+async function claimReferralReward() {
+  const btn = document.getElementById('btnClaimRef');
+  const st = document.getElementById('refClaimStatus');
+  if (btn) btn.disabled = true;
+  if (st) { st.textContent = 'Claiming your 24h VIP Key...'; st.className = 'status'; }
+  try {
+    const r = await fetch('/api/referrals/claim', { method: 'POST' });
+    const d = await r.json();
+    if (d.success && d.key) {
+      localStorage.setItem(KEY_STORAGE, d.key);
+      showModal(d.key, false, d.expiresAt);
+      loadCurrentKey();
+      loadReferralStats();
+      if (st) { st.textContent = '🎉 24h VIP Key claimed and saved!'; st.className = 'status ok'; }
+      showToast('🎉 VIP Key successfully claimed!');
+    } else {
+      if (st) { st.textContent = d.error || 'Could not claim VIP key.'; st.className = 'status err'; }
+      if (btn) btn.disabled = false;
+    }
+  } catch {
+    if (st) { st.textContent = 'Network error.'; st.className = 'status err'; }
+    if (btn) btn.disabled = false;
+  }
+}
+
 // ===== Current key card =====
 async function loadCurrentKey() {
   const key = localStorage.getItem(KEY_STORAGE);
@@ -282,6 +452,7 @@ async function loadCurrentKey() {
       st.textContent = '✅ Valid — ' + h + 'h ' + m + 'm remaining';
       st.className = 'status ok';
     }
+    loadHwidStatus();
   } catch {
     document.getElementById('currentKeyStatus').textContent = 'Could not verify your key right now.';
   }
@@ -499,6 +670,8 @@ function resumePendingSession() {
 
 loadCurrentKey();
 loadDiscordStatus();
+loadHwidStatus();
+loadReferralStats();
 </script>
 <script src="/effects.js"></script>
 <script src="/guard.js"></script>
