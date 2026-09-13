@@ -62,14 +62,14 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
     const [recent, byOwner] = await Promise.all([
       pool.query(
         `SELECT COUNT(*)::int AS c FROM ll_sessions
-         WHERE ip = $1 AND status IN ('completed', 'claimed') AND created_at > now() - interval '12 hours'`,
+         WHERE ip = $1 AND status IN ('completed', 'claimed') AND ad_limit_reset = false AND created_at > now() - interval '12 hours'`,
         [ip]
       ),
       // ANTI-PROXY: limite aussi par COMPTE DISCORD — les proxies changent l'IP,
       // pas le compte. 4 sessions complétées / 12h max par proprietaire Discord.
       pool.query(
         `SELECT COUNT(*)::int AS c FROM ll_sessions
-         WHERE owner_discord_id = $1 AND status IN ('completed', 'claimed') AND created_at > now() - interval '12 hours'`,
+         WHERE owner_discord_id = $1 AND status IN ('completed', 'claimed') AND ad_limit_reset = false AND created_at > now() - interval '12 hours'`,
         [req.discordId]
       ),
     ]);

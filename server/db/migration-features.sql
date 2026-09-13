@@ -1,5 +1,6 @@
--- Migration : Reset HWID + Système de Parrainage
+-- Migration : Reset HWID + Système de Parrainage + Ad Limit Reset
 ALTER TABLE keys ADD COLUMN IF NOT EXISTS hwid_last_reset TIMESTAMP WITH TIME ZONE;
+ALTER TABLE ll_sessions ADD COLUMN IF NOT EXISTS ad_limit_reset BOOLEAN DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS referrals (
   id SERIAL PRIMARY KEY,

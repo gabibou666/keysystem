@@ -752,4 +752,104 @@ router.post('/antiddos/unban', requireAdmin, (req, res) => {
   res.json({ success: true, unbanned: removed });
 });
 
+// ---------- GESTION DES UTILISATEURS & RESET LIMITE DE PUBS ----------
+router.get('/users', requireAdmin, async (req, res) => {
+  try {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    let query;
+    let params = [];
+    if (q) {
+      query = `
+        SELECT 
+          d.discord_id,
+          d.username,
+          d.avatar,
+          d.last_seen,
+          COUNT(s.id) FILTER (WHERE s.status IN ('completed', 'claimed') AND s.ad_limit_reset = false AND s.created_at > now() - interval '12 hours')::int AS ads_last_12h,
+          COUNT(s.id)::int AS total_sessions,
+          MAX(s.created_at) AS last_session_at,
+          (SELECT s2.ip FROM ll_sessions s2 WHERE s2.owner_discord_id = d.discord_id ORDER BY s2.id DESC LIMIT 1) AS last_ip,
+          (SELECT k.kid FROM keys k WHERE k.owner_discord_id = d.discord_id AND k.revoked = false AND k.expires_at > now() ORDER BY k.id DESC LIMIT 1) AS active_key_kid
+        FROM discord_joins d
+        LEFT JOIN ll_sessions s ON s.owner_discord_id = d.discord_id
+        WHERE d.username ILIKE $1 OR d.discord_id ILIKE $1
+        GROUP BY d.discord_id, d.username, d.avatar, d.last_seen
+        ORDER BY ads_last_12h DESC, last_session_at DESC NULLS LAST
+        LIMIT 100
+      `;
+      params = [`%${q}%`];
+    } else {
+      query = `
+        SELECT 
+          d.discord_id,
+          d.username,
+          d.avatar,
+          d.last_seen,
+          COUNT(s.id) FILTER (WHERE s.status IN ('completed', 'claimed') AND s.ad_limit_reset = false AND s.created_at > now() - interval '12 hours')::int AS ads_last_12h,
+          COUNT(s.id)::int AS total_sessions,
+          MAX(s.created_at) AS last_session_at,
+          (SELECT s2.ip FROM ll_sessions s2 WHERE s2.owner_discord_id = d.discord_id ORDER BY s2.id DESC LIMIT 1) AS last_ip,
+          (SELECT k.kid FROM keys k WHERE k.owner_discord_id = d.discord_id AND k.revoked = false AND k.expires_at > now() ORDER BY k.id DESC LIMIT 1) AS active_key_kid
+        FROM discord_joins d
+        LEFT JOIN ll_sessions s ON s.owner_discord_id = d.discord_id
+        GROUP BY d.discord_id, d.username, d.avatar, d.last_seen
+        ORDER BY ads_last_12h DESC, last_session_at DESC NULLS LAST
+        LIMIT 100
+      `;
+    }
+    const { rows } = await pool.query(query, params);
+    res.json({ success: true, users: rows });
+  } catch (e) {
+    console.error('[admin/users]', e);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+router.post('/users/:discordId/reset-limit', requireAdmin, async (req, res) => {
+  try {
+    const { discordId } = req.params;
+    if (!discordId) {
+      return res.status(400).json({ success: false, error: 'discordId required' });
+    }
+
+    // Récupère les IPs récentes utilisées par cet utilisateur dans les 12h
+    const ipsRes = await pool.query(
+      `SELECT DISTINCT ip FROM ll_sessions
+       WHERE owner_discord_id = $1 AND created_at > now() - interval '12 hours'`,
+      [discordId]
+    );
+    const ips = ipsRes.rows.map((r) => r.ip).filter(Boolean);
+
+    let updateRes;
+    if (ips.length > 0) {
+      updateRes = await pool.query(
+        `UPDATE ll_sessions
+         SET ad_limit_reset = true
+         WHERE (owner_discord_id = $1 OR ip = ANY($2::text[]))
+           AND created_at > now() - interval '12 hours'`,
+        [discordId, ips]
+      );
+    } else {
+      updateRes = await pool.query(
+        `UPDATE ll_sessions
+         SET ad_limit_reset = true
+         WHERE owner_discord_id = $1
+           AND created_at > now() - interval '12 hours'`,
+        [discordId]
+      );
+    }
+
+    console.log(`[admin] Limite réinitialisée pour Discord ID ${discordId} (${updateRes.rowCount} session(s) reset)`);
+
+    res.json({
+      success: true,
+      message: `Limite de 2 pubs réinitialisée avec succès (${updateRes.rowCount} session(s) effacée(s))`,
+      resetSessionsCount: updateRes.rowCount,
+    });
+  } catch (e) {
+    console.error('[admin/users/reset-limit]', e);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 module.exports = router;

@@ -323,6 +323,7 @@ body { background: var(--admin-bg); color: var(--admin-text); min-height: 100vh;
   <button class="tab active" data-tab="dashboard" onclick="showTab('dashboard')">Dashboard</button>
   <button class="tab" data-tab="revenue" onclick="showTab('revenue')">Revenue</button>
   <button class="tab" data-tab="keys" onclick="showTab('keys')">Keys</button>
+  <button class="tab" data-tab="users" onclick="showTab('users')">Users & Ads</button>
   <button class="tab" data-tab="bans" onclick="showTab('bans')">Bans</button>
   <button class="tab" data-tab="script" onclick="showTab('script')">Script</button>
   <button class="tab" data-tab="patches" onclick="showTab('patches')">Patches</button>
@@ -407,6 +408,61 @@ body { background: var(--admin-bg); color: var(--admin-text); min-height: 100vh;
       <table class="admin-table" id="keysTable">
         <thead><tr><th>Key</th><th>UserId</th><th>Expires</th><th>Source</th><th>Note</th><th>Execs</th><th>Status</th><th></th></tr></thead>
         <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== USERS & AD LIMIT TAB ==================== -->
+<section id="tab-users" class="hidden">
+  <div class="admin-panel fade-up">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; margin-bottom: 18px;">
+      <div>
+        <h3 style="margin:0;"><span class="icon">👥</span> Utilisateurs Discord & Limite de Pubs (12h)</h3>
+        <p style="color:var(--admin-muted); font-size:13px; margin:4px 0 0;">
+          Consultez tous les utilisateurs Discord et réinitialisez leur limite de 2 pubs/12h en 1 clic.
+        </p>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <input type="text" id="userSearchInput" class="admin-input" placeholder="🔍 Rechercher pseudo ou ID..." style="width: 250px;" oninput="debounceUserSearch()" />
+        <button class="admin-btn ghost" onclick="loadUsers()">↻ Rafraîchir</button>
+      </div>
+    </div>
+
+    <div class="stat-grid" style="margin-bottom: 20px;">
+      <div class="admin-stat">
+        <div class="stat-icon">👤</div>
+        <div class="num" id="statTotalDiscordUsers">-</div>
+        <div class="lbl">Comptes Discord enregistrés</div>
+      </div>
+      <div class="admin-stat">
+        <div class="stat-icon">🚫</div>
+        <div class="num" id="statBlockedUsers" style="color:var(--admin-err);">-</div>
+        <div class="lbl">À la limite de pubs (≥ 2 / 12h)</div>
+      </div>
+      <div class="admin-stat">
+        <div class="stat-icon">⚡</div>
+        <div class="num" id="statActiveKeyUsers" style="color:var(--admin-ok);">-</div>
+        <div class="lbl">Avec clé valide en cours</div>
+      </div>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table class="admin-table" id="usersTable">
+        <thead>
+          <tr>
+            <th>Utilisateur Discord</th>
+            <th>Discord ID</th>
+            <th>Pubs (12h en cours)</th>
+            <th>Total Sessions</th>
+            <th>Dernière IP</th>
+            <th>Clé Active</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="usersTableBody">
+          <tr><td colspan="7" style="text-align:center; padding:30px; color:var(--admin-muted);">Chargement des utilisateurs...</td></tr>
+        </tbody>
       </table>
     </div>
   </div>
@@ -536,6 +592,7 @@ function showTab(name) {
   if (name === 'dashboard') loadDashboard();
   if (name === 'revenue') loadRevenue();
   if (name === 'keys') loadKeys();
+  if (name === 'users') loadUsers();
   if (name === 'bans') loadBans();
   if (name === 'script') loadVersions();
   if (name === 'patches') loadPatches();
@@ -760,6 +817,109 @@ async function showKeyDetail(id) {
       </div>`;
     openModal('detailModal');
   } catch {}
+}
+
+// ==================== USERS & AD LIMIT ====================
+let userSearchTimer = null;
+function debounceUserSearch() {
+  clearTimeout(userSearchTimer);
+  userSearchTimer = setTimeout(loadUsers, 300);
+}
+
+async function loadUsers() {
+  const q = document.getElementById('userSearchInput')?.value.trim() || '';
+  const tbody = document.getElementById('usersTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--admin-muted);">Chargement des utilisateurs en cours...</td></tr>';
+
+  try {
+    const data = await api('/users' + (q ? '?q=' + encodeURIComponent(q) : ''));
+    if (!data.success) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--admin-err);">${esc(data.error || 'Erreur')}</td></tr>`;
+      return;
+    }
+
+    const users = data.users || [];
+    let blockedCount = 0;
+    let activeKeysCount = 0;
+
+    users.forEach(u => {
+      if ((u.ads_last_12h || 0) >= 2) blockedCount++;
+      if (u.active_key_kid) activeKeysCount++;
+    });
+
+    const statTotal = document.getElementById('statTotalDiscordUsers');
+    const statBlocked = document.getElementById('statBlockedUsers');
+    const statActive = document.getElementById('statActiveKeyUsers');
+    if (statTotal) statTotal.textContent = users.length;
+    if (statBlocked) statBlocked.textContent = blockedCount;
+    if (statActive) statActive.textContent = activeKeysCount;
+
+    if (users.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--admin-muted);">Aucun utilisateur trouvé.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = users.map(u => {
+      const avatarUrl = u.avatar 
+        ? (u.avatar.startsWith('a_') 
+            ? `https://cdn.discordapp.com/avatars/${u.discord_id}/${u.avatar}.gif?size=64`
+            : `https://cdn.discordapp.com/avatars/${u.discord_id}/${u.avatar}.png?size=64`)
+        : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+      const ads = u.ads_last_12h || 0;
+      let adsBadge = '';
+      if (ads >= 2) {
+        adsBadge = `<span class="badge red" style="background:#be185d26; color:#f472b6; border:1px solid #be185d55;">${ads} / 2 (Limite 🔴)</span>`;
+      } else if (ads === 1) {
+        adsBadge = `<span class="badge yellow" style="background:#eab30826; color:#facc15; border:1px solid #eab30855;">1 / 2 (En cours)</span>`;
+      } else {
+        adsBadge = `<span class="badge green" style="background:#10b98126; color:#34d399; border:1px solid #10b98155;">0 / 2 (Disponible)</span>`;
+      }
+
+      const activeKey = u.active_key_kid 
+        ? `<span style="color:#c084fc; font-family:monospace; font-size:12px;">🔑 ${esc(u.active_key_kid.slice(0, 10))}...</span>`
+        : `<span style="color:var(--admin-muted); font-size:12px;">Aucune</span>`;
+
+      return `<tr>
+        <td>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <img src="${avatarUrl}" style="width:32px; height:32px; border-radius:50%; object-fit:cover; border:1px solid var(--admin-border);" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'" />
+            <b>${esc(u.username || 'Inconnu')}</b>
+          </div>
+        </td>
+        <td><code style="font-size:12px; color:var(--admin-muted);">${esc(u.discord_id)}</code></td>
+        <td>${adsBadge}</td>
+        <td><b>${u.total_sessions || 0}</b></td>
+        <td><span style="font-size:12px; font-family:monospace; color:var(--admin-muted);">${esc(u.last_ip || '-')}</span></td>
+        <td>${activeKey}</td>
+        <td>
+          <button class="admin-btn small ${ads >= 2 ? 'green' : 'ghost'}" onclick="resetUserAdLimit('${esc(u.discord_id)}', '${esc(u.username)}')">
+            🔄 Reset limite (0/2)
+          </button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--admin-err);">Erreur de chargement: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function resetUserAdLimit(discordId, username) {
+  if (!confirm(`Réinitialiser la limite de 2 pubs pour ${username || discordId} ?\nCet utilisateur pourra immédiatement relancer des sessions de clés.`)) {
+    return;
+  }
+  try {
+    const data = await api(`/users/${encodeURIComponent(discordId)}/reset-limit`, { method: 'POST' });
+    if (data.success) {
+      alert(`✅ ${data.message}`);
+      loadUsers();
+    } else {
+      alert(`❌ Erreur: ${data.error || 'Échec de la réinitialisation'}`);
+    }
+  } catch (e) {
+    alert(`❌ Erreur: ${e.message}`);
+  }
 }
 
 // ==================== BANS ====================
