@@ -9,6 +9,7 @@ const COLORS = {
   key: 0x8b5cf6,       // violet clair: cle delivree
   ban: 0xf472b6,       // rouge-violet: ban
   warn: 0xe879f9,      // fuchsia: alerte securite
+  ddos: 0xef4444,      // rouge vif: alerte anti-ddos
   info: 0x71717a,      // gris: info
 };
 

@@ -48,6 +48,10 @@ const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', 1);
 
+// ===== PROTECTION ANTI-DDOS & AUTO-JAIL (Premier rempart d'interception) =====
+const { antiDdosMiddleware } = require('./services/antiddos');
+app.use(antiDdosMiddleware);
+
 app.use(
   helmet({
     contentSecurityPolicy: {

@@ -738,4 +738,18 @@ router.get('/changelog', async (req, res) => {
   res.json({ success: true, versions: rows });
 });
 
+// ---------- ANTI-DDOS (Gestion et Statistiques) ----------
+const antiddos = require('../services/antiddos');
+
+router.get('/antiddos', requireAdmin, (req, res) => {
+  res.json({ success: true, stats: antiddos.getStats() });
+});
+
+router.post('/antiddos/unban', requireAdmin, (req, res) => {
+  const { ip } = req.body;
+  if (!ip) return res.status(400).json({ success: false, error: 'IP requise' });
+  const removed = antiddos.unbanIP(ip);
+  res.json({ success: true, unbanned: removed });
+});
+
 module.exports = router;
