@@ -119,6 +119,18 @@ input, textarea, select { cursor: text; }
 
 /* ===== HERO ===== */
 .hero { text-align: center; padding: 90px 20px 50px; max-width: 800px; margin: 0 auto; }
+/* Badge live au-dessus du titre */
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 16px; border-radius: 999px;
+  background: #8b5cf612; border: 1px solid #8b5cf639;
+  color: var(--color-glow); font-size: 13px; font-weight: 600;
+  margin-bottom: 18px;
+  backdrop-filter: blur(10px);
+}
+.hero-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-glow); box-shadow: 0 0 10px var(--color-glow); animation: pulseDot 1.6s ease infinite; }
+.hero-badge b { color: var(--color-glow-2); }
+@keyframes pulseDot { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(.82); } }
 /* Titre: dégradé violet + scanlines CRT rétro-futuristes (2 couches clip) */
 .hero h1 {
   font-size: 46px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1;
@@ -131,6 +143,18 @@ input, textarea, select { cursor: text; }
 }
 .hero p { color: var(--color-muted); font-size: 17px; margin-top: 16px; line-height: 1.6; }
 .hero .actions { margin-top: 32px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+/* Bandeau de confiance sous les CTA: compteurs separes par points */
+.hero-trust {
+  margin-top: 34px; display: flex; align-items: center; justify-content: center;
+  gap: 22px; flex-wrap: wrap;
+}
+.trust-item { display: flex; align-items: baseline; gap: 8px; color: var(--color-muted-2); font-size: 13px; }
+.trust-num {
+  font-size: 20px; font-weight: 700;
+  background: linear-gradient(135deg, #fff, #c084fc);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.trust-sep { width: 4px; height: 4px; border-radius: 50%; background: #ffffff2e; }
 
 /* ============================================================
    BOUTONS — hover glow / active press / disabled / shine
@@ -482,6 +506,53 @@ footer a:hover::after { transform: scaleX(1); }
 }
 .step-card h3 { font-size: 16px; margin-bottom: 8px; }
 .step-card p { color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+/* Etiquette detail sous chaque etape (duree, info) */
+.step-tag {
+  display: inline-block; margin-top: 14px; padding: 5px 12px;
+  border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: #8b5cf614; border: 1px solid #8b5cf639; color: var(--color-glow);
+}
+
+/* ===== FAQ (details/summary natifs, stylés) ===== */
+.faq-list {
+  max-width: 760px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: 12px; padding: 0 24px;
+}
+.faq-item {
+  background: linear-gradient(180deg, var(--color-card) 0%, #0e0c15 100%);
+  border: 1px solid var(--color-border-violet);
+  border-radius: var(--radius);
+  padding: 0 22px;
+  transition: border-color var(--dur-2) ease, box-shadow var(--dur-2) ease;
+}
+.faq-item:hover { border-color: #8b5cf673; }
+.faq-item[open] {
+  border-color: #8b5cf673;
+  box-shadow: 0 8px 32px #7c3aed22, inset 0 1px 0 #ffffff0d;
+}
+.faq-item summary {
+  cursor: pointer; padding: 18px 0;
+  font-size: 15px; font-weight: 600; color: var(--color-text);
+  list-style: none; position: relative; user-select: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after {
+  content: '+';
+  flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: 8px;
+  display: grid; place-items: center;
+  background: #8b5cf616; border: 1px solid #8b5cf63d;
+  color: var(--color-glow); font-size: 17px; font-weight: 600;
+  transition: transform var(--dur-2) var(--ease), background var(--dur-2) ease;
+}
+.faq-item[open] summary::after { content: '−'; transform: rotate(180deg); background: #8b5cf62b; }
+.faq-item p {
+  color: var(--color-muted); font-size: 14px; line-height: 1.75;
+  padding: 0 0 20px;
+}
+.faq-item p b { color: var(--color-glow-2); font-weight: 600; }
+.faq-item p a { color: var(--color-glow); text-decoration: underline; text-underline-offset: 3px; }
 
 /* ===== STEP PROGRESS BAR (getkey/robux) ===== */
 .progress-bar {
