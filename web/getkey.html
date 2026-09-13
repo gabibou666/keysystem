@@ -49,7 +49,10 @@
     <p class="sub">You already have a key saved — copy it or choose a duration below to renew.</p>
     <div class="keybox">
       <textarea id="currentKey" rows="2" readonly placeholder="No key yet."></textarea>
-      <button class="btn small" onclick="copyCurrentKey()">📋 Copy</button>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <button class="btn small" onclick="copyCurrentKey()">📋 Copy</button>
+        <button class="btn small" onclick="copyLuauScriptFromKey(document.getElementById('currentKey').value)" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9); border:none; font-size:12px; padding: 6px 10px;">⚡ Script</button>
+      </div>
     </div>
     <div id="currentKeyStatus" class="status"></div>
     <div style="margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -177,6 +180,7 @@
     <div id="newKey" class="codebox hidden" style="color: var(--accent);"></div>
     <div id="resultActions" class="hidden" style="margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
       <button class="btn small" onclick="copyKey()">📋 Copy key</button>
+      <button class="btn small" onclick="copyLuauScriptFromKey(document.getElementById('newKey').textContent)" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9); border:none;">⚡ Copy Luau script</button>
       <a class="btn small secondary" href="/">← Back home</a>
     </div>
     <div class="steps" id="waitSteps" style="margin-top: 22px; padding: 18px; border-radius: var(--radius); background: #13101ccc; border: 1px solid var(--stroke);">
@@ -200,11 +204,12 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
     </div>
     <h2 id="modalTitle">Key obtained!</h2>
-    <p class="modal-sub" id="modalSub">Copy it into the loader — it's also saved in your browser.</p>
+    <p class="modal-sub" id="modalSub">Auto-saves to your device on launch — fast-boots instantly next time!</p>
     <div class="keycode" id="modalKey">...</div>
     <p class="expires" id="modalExpires"></p>
-    <div class="modal-actions">
+    <div class="modal-actions" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
       <button class="btn small" onclick="copyModalKey()">📋 Copy key</button>
+      <button class="btn small" onclick="copyLuauScriptFromKey(document.getElementById('modalKey').textContent)" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9); border:none;">⚡ Copy Luau script</button>
       <button class="btn small secondary" onclick="closeModal()">Close</button>
     </div>
   </div>
@@ -461,6 +466,18 @@ async function loadCurrentKey() {
 function copyCurrentKey() {
   const v = document.getElementById('currentKey').value;
   if (v) { navigator.clipboard.writeText(v); showToast('🔑 Key copied to clipboard!'); }
+}
+
+function copyLuauScriptFromKey(rawKey) {
+  let key = rawKey || localStorage.getItem(KEY_STORAGE);
+  if (!key) return;
+  key = key.trim();
+  const script = `getgenv().Key = "${key}"\nloadstring(game:HttpGet("${location.origin}/api/v1/loader"))()`;
+  navigator.clipboard.writeText(script).then(() => {
+    showToast('⚡ Luau script with key copied! Paste directly into your executor.');
+  }).catch(() => {
+    prompt('Copy this script into your executor:', script);
+  });
 }
 
 // ===== Modal =====

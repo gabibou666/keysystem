@@ -298,17 +298,85 @@ local function copyGetKeyLink()
     end
 end
 
--- Cle sauvegardee si writefile dispo
+-- =========================================================================
+-- AUTO-SAVE KEY & FAST-BOOT (GESTION DE LA PERSISTANCE & LANCEMENT SANS UI)
+-- =========================================================================
+local KEY_FILE = "keysystem_key.txt"
+
 local function loadSavedKey()
-    local saved
-    pcall(function() saved = readfile("keysystem_key.txt") end)
-    if type(saved) == "string" then
+    local saved = nil
+    -- 1) Priorité aux variables d'environnement globales de l'exécuteur
+    pcall(function()
+        if getgenv and type(getgenv().Key) == "string" and #getgenv().Key >= 10 then
+            saved = getgenv().Key:gsub("%s+", "")
+        end
+    end)
+    if saved and #saved >= 10 then return saved end
+
+    pcall(function()
+        if type(_G.Key) == "string" and #_G.Key >= 10 then
+            saved = _G.Key:gsub("%s+", "")
+        end
+    end)
+    if saved and #saved >= 10 then return saved end
+
+    -- 2) Lecture du fichier workspace local de l'exécuteur
+    pcall(function()
+        if type(isfile) == "function" and isfile(KEY_FILE) then
+            saved = readfile(KEY_FILE)
+        elseif type(readfile) == "function" then
+            saved = readfile(KEY_FILE)
+        end
+    end)
+    if type(saved) == "string" and #saved >= 10 then
         return saved:gsub("%s+", "")
     end
     return nil
 end
+
 local function saveKey(key)
-    pcall(function() writefile("keysystem_key.txt", key:gsub("%s+", "")) end)
+    if type(key) ~= "string" or #key < 10 then return end
+    key = key:gsub("%s+", "")
+    pcall(function()
+        if getgenv then getgenv().Key = key end
+        _G.Key = key
+    end)
+    pcall(function()
+        if type(writefile) == "function" then
+            writefile(KEY_FILE, key)
+        end
+    end)
+end
+
+local function clearSavedKey()
+    pcall(function()
+        if getgenv then getgenv().Key = nil end
+        _G.Key = nil
+    end)
+    pcall(function()
+        if type(delfile) == "function" and type(isfile) == "function" and isfile(KEY_FILE) then
+            delfile(KEY_FILE)
+        elseif type(writefile) == "function" then
+            writefile(KEY_FILE, "")
+        end
+    end)
+end
+
+-- ===== FAST-BOOT SILENCIEUX =====
+-- Si une clé sauvegardée valide existe, teste silencieusement et charge le script en < 1s
+-- SANS ouvrir de fenêtre GUI ni télécharger la librairie UI !
+local existingKey = loadSavedKey()
+if existingKey and #existingKey >= 10 then
+    notify("🔑 Key System", "Saved key found — verifying...", 2.5)
+    local okFast, msgFast = performCheck(existingKey)
+    if okFast then
+        saveKey(existingKey)
+        notify("⚡ Key System", msgFast or "Script loaded successfully!", 5)
+        return -- Exécution terminée avec succès, aucun GUI requis !
+    else
+        clearSavedKey()
+        notify("⚠️ Key System", "Saved key expired or invalid — opening menu...", 4)
+    end
 end
 
 -- ===== Tente WindUI avec FALLBACK PROGRESSIF =====
@@ -349,6 +417,14 @@ if WindUI then
                 local ok, msg = performCheck(key)
                 if ok and key and #key >= 10 then
                     saveKey(key)
+                    pcall(function()
+                        WindUI:Notify({
+                            Title = "Key System",
+                            Content = "Key verified & auto-saved to device!",
+                            Icon = "check-check",
+                            Duration = 5,
+                        })
+                    end)
                 elseif not ok then
                     -- WindUI n'affiche que "Invalid key." — on complete avec le
                     -- message DETAILLE (expired/banned/rate_limited/bound...) en notif
@@ -388,8 +464,8 @@ else
 
     local scaleFactor = isMobile and 1.2 or 1
     local main = Instance.new("Frame")
-    main.Size = UDim2.new(0, 460 * scaleFactor, 0, 390 * scaleFactor)
-    main.Position = UDim2.new(0.5, -230 * scaleFactor, 0.5, -195 * scaleFactor)
+    main.Size = UDim2.new(0, 460 * scaleFactor, 0, 400 * scaleFactor)
+    main.Position = UDim2.new(0.5, -230 * scaleFactor, 0.5, -200 * scaleFactor)
     main.BackgroundColor3 = Color3.fromRGB(12, 10, 18)
     main.BorderSizePixel = 0
     main.Active = true
@@ -536,13 +612,42 @@ else
         return btn
     end
 
-    local getBtn = mkBtn("🌐  Get Key  (Copy Link)", Color3.fromRGB(124, 58, 237), Color3.fromRGB(192, 132, 252), 124)
-    local checkBtn = mkBtn("⚡  Verify & Launch Script", Color3.fromRGB(139, 92, 246), Color3.fromRGB(216, 180, 254), 172)
+    local getBtn = mkBtn("🌐  Get Key  (Copy Link)", Color3.fromRGB(124, 58, 237), Color3.fromRGB(192, 132, 252), 122)
+    local checkBtn = mkBtn("⚡  Verify & Launch Script", Color3.fromRGB(139, 92, 246), Color3.fromRGB(216, 180, 254), 168)
+
+    -- Bandeau Auto-Save & Effacement de clé
+    local autoSaveBar = Instance.new("Frame")
+    autoSaveBar.Size = UDim2.new(1, -36, 0, 20 * scaleFactor)
+    autoSaveBar.Position = UDim2.new(0, 18, 0, 214 * scaleFactor)
+    autoSaveBar.BackgroundTransparency = 1
+    autoSaveBar.Parent = main
+
+    local autoSaveLabel = Instance.new("TextLabel")
+    autoSaveLabel.Size = UDim2.new(0.65, 0, 1, 0)
+    autoSaveLabel.Position = UDim2.new(0, 0, 0, 0)
+    autoSaveLabel.BackgroundTransparency = 1
+    autoSaveLabel.TextColor3 = Color3.fromRGB(167, 139, 250)
+    autoSaveLabel.TextSize = 11 * scaleFactor
+    autoSaveLabel.Font = Enum.Font.Gotham
+    autoSaveLabel.TextXAlignment = Enum.TextXAlignment.Left
+    autoSaveLabel.Text = "💾 Auto-Save: Active (fast-boot)"
+    autoSaveLabel.Parent = autoSaveBar
+
+    local clearSavedBtn = Instance.new("TextButton")
+    clearSavedBtn.Size = UDim2.new(0.35, 0, 1, 0)
+    clearSavedBtn.Position = UDim2.new(0.65, 0, 0, 0)
+    clearSavedBtn.BackgroundTransparency = 1
+    clearSavedBtn.TextColor3 = Color3.fromRGB(244, 63, 94)
+    clearSavedBtn.TextSize = 11 * scaleFactor
+    clearSavedBtn.Font = Enum.Font.GothamSemibold
+    clearSavedBtn.TextXAlignment = Enum.TextXAlignment.Right
+    clearSavedBtn.Text = "🗑️ Clear key"
+    clearSavedBtn.Parent = autoSaveBar
 
     -- Panneau de statut / Guide integre
     local statusCard = Instance.new("Frame")
-    statusCard.Size = UDim2.new(1, -36, 0, 126 * scaleFactor)
-    statusCard.Position = UDim2.new(0, 18, 0, 222 * scaleFactor)
+    statusCard.Size = UDim2.new(1, -36, 0, 118 * scaleFactor)
+    statusCard.Position = UDim2.new(0, 18, 0, 238 * scaleFactor)
     statusCard.BackgroundColor3 = Color3.fromRGB(16, 13, 25)
     statusCard.BorderSizePixel = 0
     statusCard.Parent = main
@@ -611,13 +716,19 @@ else
 
         if ok then
             saveKey(key)
-            setStatus(msg, Color3.fromRGB(46, 160, 83))
-            task.wait(3) -- laisse le temps de lire "Script loaded (vX) — key valid for 2d 5h"
+            setStatus(msg .. "\n\n💾 Key auto-saved! Next launch will fast-boot silently.", Color3.fromRGB(46, 160, 83))
+            task.wait(2.5) -- laisse le temps de lire "Script loaded (vX) — key valid for 2d 5h"
             screenGui:Destroy()
         else
             setStatus(msg .. "\n\nIf your key is expired, get a new one on the website.", Color3.fromRGB(241, 100, 100))
         end
     end
+
+    clearSavedBtn.MouseButton1Click:Connect(function()
+        clearSavedKey()
+        keyBox.Text = ""
+        setStatus("🗑️ Saved key deleted from this device.\nPaste a new key above or click 'Get Key'.", Color3.fromRGB(244, 63, 94))
+    end)
 
     checkBtn.MouseButton1Click:Connect(doCheck)
     keyBox.FocusLost:Connect(function(enter)
