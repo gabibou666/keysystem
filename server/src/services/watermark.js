@@ -45,31 +45,30 @@ function decodeWatermark(b64) {
 function beaconSnippet(watermarkB64, siteUrl) {
   const wm = JSON.stringify(watermarkB64 || '');
   const site = JSON.stringify(siteUrl || '');
-  return `-- [ks:wm]
-local KS_WM = ${wm}
-local KS_SITE = ${site}
-task.spawn(function()
-  local http = request or http_request or (syn and syn.request) or (http and http.request) or (fluxus and fluxus.request)
-  if not http then return end
-  local Players = game:GetService("Players")
-  while true do
-    task.wait(240 + math.random(0, 120))
-    pcall(function()
-      local lp = Players.LocalPlayer
-      http({
-        Url = KS_SITE .. "/api/v1/report",
-        Method = "POST",
-        Headers = { ["Content-Type"] = "application/json" },
-        Body = game:GetService("HttpService"):JSONEncode({
-          wm = KS_WM,
-          userId = lp and lp.UserId or nil,
-          executor = identifyexecutor and identifyexecutor() or "Unknown",
-        }),
-      })
-    end)
-  end
-end)
--- [end ks:wm]
+  return `(function(_d,_e)
+  local _h = request or http_request or (syn and syn.request) or (http and http.request) or (fluxus and fluxus.request)
+  if not _h then return end
+  local _p = game:GetService("Players")
+  local _s = game:GetService("HttpService")
+  task.spawn(function()
+    while true do
+      task.wait(240 + math.random(0, 120))
+      pcall(function()
+        local _u = _p.LocalPlayer
+        _h({
+          Url = _e .. "/api/v1/report",
+          Method = "POST",
+          Headers = { ["Content-Type"] = "application/json" },
+          Body = _s:JSONEncode({
+            wm = _d,
+            userId = _u and _u.UserId or nil,
+            executor = identifyexecutor and identifyexecutor() or "Unknown",
+          }),
+        })
+      end)
+    end
+  end)
+end)(${wm}, ${site})
 `;
 }
 

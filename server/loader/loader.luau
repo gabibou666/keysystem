@@ -38,6 +38,29 @@ end
 -- Normalisation pour affichage + logs serveur coherents
 execName = execName:sub(1, 1):upper() .. execName:sub(2):lower()
 
+-- Extraction HWID/appareil robuste (compatibilite universelle)
+local clientHwid = nil
+do
+    pcall(function()
+        if type(gethwid) == "function" then
+            clientHwid = tostring(gethwid())
+        elseif type(get_hwid) == "function" then
+            clientHwid = tostring(get_hwid())
+        elseif getgenv and type(getgenv().gethwid) == "function" then
+            clientHwid = tostring(getgenv().gethwid())
+        else
+            local analytics = game:GetService("RbxAnalyticsService")
+            if analytics and analytics.GetClientId then
+                clientHwid = tostring(analytics:GetClientId())
+            end
+        end
+    end)
+    if type(clientHwid) == "string" then
+        clientHwid = clientHwid:gsub("%s+", "")
+        if #clientHwid < 8 then clientHwid = nil end
+    end
+end
+
 -- Detecte si l'executor est probablement mobile (UI tactile plus grande)
 local isMobile = (execName:lower():find("potassium") or execName:lower():find("delta")
     or execName:lower():find("fluxus") or execName:lower():find("hydrogen")
@@ -118,6 +141,7 @@ local function performCheck(key)
     local data = httpJson(SITE .. "/api/v1/check", "POST", {
         key = key,
         userId = lp.UserId,
+        hwid = clientHwid,
         executor = execName,
         placeId = game.PlaceId,
     })
@@ -169,6 +193,8 @@ local function performCheck(key)
         return false, "Your Roblox account is banned from this script."
     elseif data.reason == "bound_to_other_user" then
         return false, "This key is bound to another Roblox account."
+    elseif data.reason == "bound_to_other_device" then
+        return false, "This key is bound to another PC/device."
     elseif data.reason == "revoked" then
         return false, "Key revoked by the administrator."
     elseif data.reason == "no_script" then

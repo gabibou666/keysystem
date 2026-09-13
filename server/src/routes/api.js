@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const rateLimit = require('express-rate-limit');
 const crypto = require('../services/crypto');
 const lootlabs = require('../services/lootlabs');
@@ -132,6 +132,18 @@ router.get('/lootlabs/postback', async (req, res) => {
       return res.status(400).send('missing click_id');
     }
 
+    // --- Verification du secret partagé LootLabs (anti-forge absolu) ---
+    // Si LOOTLABS_POSTBACK_SECRET est défini dans .env, il DOIT être présent dans l'URL (&secret=...)
+    // configurée dans le panel LootLabs. Rejette toute tentative manuelle/bot externe.
+    const expectedSecret = process.env.LOOTLABS_POSTBACK_SECRET;
+    if (expectedSecret) {
+      const providedSecret = req.query.secret || req.headers['x-postback-secret'];
+      if (!providedSecret || providedSecret !== expectedSecret) {
+        console.warn(`[postback] REJET secret invalide/absent (puid=${String(click_id).slice(0, 8)}...)`);
+        return res.status(403).send('rejected: invalid postback secret');
+      }
+    }
+
     // unique_id optionnel: fallback genere si le template du panel ne l'inclut pas
     const unique_id =
       (typeof req.query.unique_id === 'string' && req.query.unique_id.slice(0, 128)) ||
@@ -149,7 +161,7 @@ router.get('/lootlabs/postback', async (req, res) => {
     }
 
     // --- Verification d'origine: le postback doit venir de l'infrastructure LootLabs ---
-    // (doc: "A GET request will be sent there" â€” serveur LootLabs -> nous)
+    // (doc: "A GET request will be sent there" — serveur LootLabs -> nous)
     const sourceIp = clientIp(req);
     const dns = require('dns').promises;
     let originOk = false;
@@ -167,7 +179,7 @@ router.get('/lootlabs/postback', async (req, res) => {
       } else {
         // Fallback accepte: CDN/proxy legitimes (Render est derriere Cloudflare, l'IP source
         // peut etre un edge). On accepte si l'IP USER annoncee par LootLabs correspond
-        // a une session recente activee par cette IP (cohÃ©rence metier).
+        // a une session recente activee par cette IP (cohérence metier).
         originNote = 'not_direct_infra';
       }
     } catch {
@@ -186,11 +198,13 @@ router.get('/lootlabs/postback', async (req, res) => {
     const session = sess.rows[0];
     if (!session) return res.status(404).send('session not found');
 
-    // --- Delai minimum realiste: un humain complete en > 20s, un bypass script en secondes ---
-    const MIN_SECONDS = 20;
+    // --- Delai minimum dynamique et réaliste: 1 pub (12h) = 25s, 2 pubs (24h) = 55s ---
+    // Un bypass automatique termine en secondes, un humain met >25s par tâche
+    const tasks = session.tasks_required || 1;
+    const MIN_SECONDS = tasks >= 2 ? 55 : 25;
     const elapsedSec = (Date.now() - new Date(session.started_at).getTime()) / 1000;
     if (elapsedSec < MIN_SECONDS) {
-      console.warn(`[postback] REJET delai ${elapsedSec.toFixed(1)}s < ${MIN_SECONDS}s (puid=${click_id.slice(0, 8)}...)`);
+      console.warn(`[postback] REJET delai ${elapsedSec.toFixed(1)}s < ${MIN_SECONDS}s requis pour ${tasks} tâche(s) (puid=${click_id.slice(0, 8)}...)`);
       await pool.query(
         `UPDATE ll_sessions SET status = 'rejected_too_fast' WHERE id = $1 AND status = 'pending'`,
         [session.id]
@@ -422,7 +436,8 @@ router.get('/key/info', infoLimiter, async (req, res) => {
 // Loader: { key, userId, executor, placeId } -> { script } si OK
 router.post('/v1/check', checkLimiter, async (req, res) => {
   try {
-    const { key, userId, executor } = req.body || {};
+    const { key, userId, executor, hwid } = req.body || {};
+    const cleanHwid = typeof hwid === 'string' && hwid.trim().length >= 8 ? hwid.trim().slice(0, 128) : null;
     const placeId = parseInt(req.body?.placeId, 10) || null;
     const parsed = crypto.verifyKeyFormat(key || '');
     if (!parsed) {
@@ -444,8 +459,15 @@ router.post('/v1/check', checkLimiter, async (req, res) => {
     if (dbKey.bound_user_id !== null && String(dbKey.bound_user_id) !== String(uid)) {
       return res.json({ success: false, reason: 'bound_to_other_user' });
     }
-    if (!dbKey.bound_user_id) {
-      await pool.query('UPDATE keys SET bound_user_id = $1 WHERE id = $2', [uid, dbKey.id]);
+    // Liaison au premier HWID (appareil/machine unique)
+    if (cleanHwid && dbKey.bound_hwid && dbKey.bound_hwid !== cleanHwid) {
+      return res.json({ success: false, reason: 'bound_to_other_device' });
+    }
+    if (!dbKey.bound_user_id || (!dbKey.bound_hwid && cleanHwid)) {
+      await pool.query(
+        'UPDATE keys SET bound_user_id = COALESCE(bound_user_id, $1), bound_hwid = COALESCE(bound_hwid, $2) WHERE id = $3',
+        [uid, cleanHwid, dbKey.id]
+      );
     }
 
     // Expiration
@@ -486,10 +508,10 @@ router.post('/v1/check', checkLimiter, async (req, res) => {
     const beacon = wmService.beaconSnippet(wmB64, process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`);
     const watermarkedScript = beacon + '\n' + activeBuild.content;
 
-    // Log execution (avec nonce pour relier beacons -> exÃ©cution -> clÃ©)
+    // Log execution (avec nonce pour relier beacons -> exécution -> clé, et HWID si dispo)
     await pool.query(
-      `INSERT INTO executions (key_id, user_id, executor, build_id, version, ip, wm_nonce) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [dbKey.id, uid, (executor || '').slice(0, 40), activeBuild.id, activeBuild.version, clientIp(req), wmNonce]
+      `INSERT INTO executions (key_id, user_id, executor, build_id, version, ip, wm_nonce, hwid) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [dbKey.id, uid, (executor || '').slice(0, 40), activeBuild.id, activeBuild.version, clientIp(req), wmNonce, cleanHwid]
     );
 
     // expiresAt ISO 8601 UTC (format exige par DateTime.fromIsoDate cote Luau)

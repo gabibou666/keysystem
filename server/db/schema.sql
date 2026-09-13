@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS keys (
   kid           TEXT UNIQUE NOT NULL,            -- id de cle (partie publique avant le point)
   signature     TEXT NOT NULL,                  -- signature HMAC (partie apres le point)
   bound_user_id BIGINT,                         -- UserId Roblox lie au premier check
+  bound_hwid    TEXT,                           -- HWID/ClientId lie au premier check
   duration_hours INT NOT NULL DEFAULT 12,       -- duree du renouvellement courant
   expires_at    TIMESTAMPTZ NOT NULL,
   renewed_count INT NOT NULL DEFAULT 0,
@@ -54,6 +55,7 @@ CREATE TABLE IF NOT EXISTS executions (
   build_id   INT,
   version    INT,
   ip         TEXT,
+  hwid       TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_executions_created ON executions(created_at);

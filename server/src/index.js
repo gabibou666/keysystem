@@ -8,6 +8,40 @@ const adminRoutes = require('./routes/admin');
 const discordRoutes = require('./routes/discord');
 const robuxRoutes = require('./routes/robux');
 const { startPurgeScheduler } = require('./services/purge');
+const { auditRecentSessions } = require('./services/lootlabs-verify');
+const { notifyDiscord } = require('./services/notify');
+
+function startLootlabsAuditScheduler() {
+  if (!process.env.LOOTLABS_API_KEY) {
+    console.log('[audit-lootlabs] LOOTLABS_API_KEY non defini — audit automatique inactif');
+    return;
+  }
+  // Premier audit apres 2 minutes de demarrage
+  setTimeout(async () => {
+    try {
+      const res = await auditRecentSessions(notifyDiscord);
+      if (res && res.checked > 0) {
+        console.log(`[audit-lootlabs] Demarrage: ${res.checked} session(s) verifiee(s), ${res.verified} avec revenu, ${res.suspicious} suspecte(s)`);
+      }
+    } catch (e) {
+      console.warn('[audit-lootlabs] echec demarrage:', e.message);
+    }
+  }, 2 * 60 * 1000).unref();
+
+  // Audit recurrent toutes les 2 heures
+  setInterval(async () => {
+    try {
+      const res = await auditRecentSessions(notifyDiscord);
+      if (res && res.checked > 0) {
+        console.log(`[audit-lootlabs] Recurrent: ${res.checked} session(s) verifiee(s), ${res.verified} avec revenu, ${res.suspicious} suspecte(s)`);
+      }
+    } catch (e) {
+      console.warn('[audit-lootlabs] echec recurrent:', e.message);
+    }
+  }, 2 * 60 * 60 * 1000).unref();
+
+  console.log('[audit-lootlabs] Scheduler actif (toutes les 2 heures)');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -133,4 +167,7 @@ app.listen(PORT, () => {
   console.log(`[server] KeySystem en ligne sur le port ${PORT}`);
   console.log(`[server] PUBLIC_URL = ${process.env.PUBLIC_URL || '(non defini)'}`);
   startPurgeScheduler();
+  startLootlabsAuditScheduler();
 });
+
+module.exports = app;
