@@ -43,12 +43,11 @@ function decodeWatermark(b64) {
 // au serveur à intervalles réguliers. Le serveur décode et relie l'usage au
 // propriétaire — un dump partagé beaconne SOUS LE COMPTE du spectateur -> traçable.
 function beaconSnippet(watermarkB64, siteUrl) {
-  const wm = JSON.stringify(watermarkB64);
-  const site = JSON.stringify(siteUrl);
-  return `
--- [ks:wm]
-local KS_WM = "${wm}"
-local KS_SITE = "${site}"
+  const wm = JSON.stringify(watermarkB64 || '');
+  const site = JSON.stringify(siteUrl || '');
+  return `-- [ks:wm]
+local KS_WM = ${wm}
+local KS_SITE = ${site}
 task.spawn(function()
   local http = request or http_request or (syn and syn.request) or (http and http.request) or (fluxus and fluxus.request)
   if not http then return end
