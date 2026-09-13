@@ -105,24 +105,45 @@ router.get('/stats', requireAdmin, async (req, res) => {
 
 // ---------- CLES ----------
 router.get('/keys', requireAdmin, async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
-  const { rows } = await pool.query(
-    `SELECT k.id, k.kid, k.bound_user_id, k.duration_hours, k.note, k.source, k.expires_at, k.renewed_count, k.revoked, k.created_at,
-            (SELECT COUNT(*)::int FROM executions e WHERE e.key_id = k.id) AS execs
-     FROM keys k ORDER BY k.created_at DESC LIMIT $1`,
-    [limit]
-  );
-  res.json({ success: true, keys: rows });
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    // Compteur execs via LEFT JOIN sur agregat pre-calcule: 1 passe au lieu
+    // d'une sous-requete par cle (N+1) qui etouffe des que la base grossit.
+    const { rows } = await pool.query(
+      `SELECT k.id, k.kid, k.bound_user_id, k.duration_hours, k.note, k.source, k.expires_at, k.renewed_count, k.revoked, k.created_at,
+              COALESCE(e.execs, 0) AS execs
+       FROM keys k
+       LEFT JOIN (
+         SELECT key_id, COUNT(*)::int AS execs FROM executions GROUP BY key_id
+       ) e ON e.key_id = k.id
+       ORDER BY k.created_at DESC LIMIT $1`,
+      [limit]
+    );
+    res.json({ success: true, keys: rows });
+  } catch (e) {
+    console.error('[admin/keys]', e);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
 });
 
 router.post('/keys/:id/revoke', requireAdmin, async (req, res) => {
-  await pool.query('UPDATE keys SET revoked = true WHERE id = $1', [req.params.id]);
-  res.json({ success: true });
+  try {
+    await pool.query('UPDATE keys SET revoked = true WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[admin/revoke]', e);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
 });
 
 router.post('/keys/:id/unrevoke', requireAdmin, async (req, res) => {
-  await pool.query('UPDATE keys SET revoked = false WHERE id = $1', [req.params.id]);
-  res.json({ success: true });
+  try {
+    await pool.query('UPDATE keys SET revoked = false WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[admin/unrevoke]', e);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
 });
 
 // ---------- CREATION DE CLES MANUELLES ----------

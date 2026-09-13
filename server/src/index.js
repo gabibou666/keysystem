@@ -7,6 +7,7 @@ const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
 const discordRoutes = require('./routes/discord');
 const robuxRoutes = require('./routes/robux');
+const { startPurgeScheduler } = require('./services/purge');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -131,4 +132,5 @@ if (SELF_PING_URL && !SELF_PING_URL.includes('localhost') && !SELF_PING_URL.incl
 app.listen(PORT, () => {
   console.log(`[server] KeySystem en ligne sur le port ${PORT}`);
   console.log(`[server] PUBLIC_URL = ${process.env.PUBLIC_URL || '(non defini)'}`);
+  startPurgeScheduler();
 });
