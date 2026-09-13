@@ -416,6 +416,14 @@ async function poll(puid) {
       return;
     }
 
+    if (d.status === 'pending' && typeof d.tasksDone === 'number' && typeof d.tasksRequired === 'number' && d.tasksRequired > 1) {
+      const remaining = d.tasksRequired - d.tasksDone;
+      if (d.tasksDone > 0) {
+        document.getElementById('resultTitle').textContent = `⏳ Checkpoint ${d.tasksDone}/${d.tasksRequired} complete!`;
+        document.getElementById('resultSub').textContent = `Complete the next checkpoint (${remaining} remaining) on LootLabs to obtain your key.`;
+      }
+    }
+
     if (d.status === 'rejected' || d.status === 'token_expired' || d.status === 'token_invalid') {
       clearInterval(pollTimer);
       pollTimer = null;

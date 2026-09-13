@@ -205,13 +205,12 @@ router.get('/lootlabs/postback', async (req, res) => {
     const session = sess.rows[0];
     if (!session) return res.status(404).send('session not found');
 
-    // --- Delai minimum dynamique et réaliste: 1 pub (12h) = 25s, 2 pubs (24h) = 55s ---
-    // Un bypass automatique termine en secondes, un humain met >25s par tâche
-    const tasks = session.tasks_required || 1;
-    const MIN_SECONDS = tasks >= 2 ? 55 : 25;
+    // --- Delai anti-bot: un bypass automatique/script valide en < 2-3 secondes.
+    // Un humain sur mobile ou PC met au minimum 4 secondes pour charger et valider.
+    const MIN_SECONDS = 4;
     const elapsedSec = (Date.now() - new Date(session.started_at).getTime()) / 1000;
     if (elapsedSec < MIN_SECONDS) {
-      console.warn(`[postback] REJET delai ${elapsedSec.toFixed(1)}s < ${MIN_SECONDS}s requis pour ${tasks} tâche(s) (puid=${click_id.slice(0, 8)}...)`);
+      console.warn(`[postback] REJET robot instantané: ${elapsedSec.toFixed(1)}s < ${MIN_SECONDS}s requis (puid=${click_id.slice(0, 8)}...)`);
       await pool.query(
         `UPDATE ll_sessions SET status = 'rejected_too_fast' WHERE id = $1 AND status = 'pending'`,
         [session.id]
@@ -219,12 +218,13 @@ router.get('/lootlabs/postback', async (req, res) => {
       return res.status(429).send('rejected: completed too fast');
     }
 
-    // --- CohÃ©rence IP metier: l'IP user annoncee doit matcher l'IP qui a cree la session
-    //     (si le template du panel fournit ip=). Un attaquant qui forge un postback depuis
-    //     son serveur ne connaÃ®t pas l'IP de la victime. Silencieux pour les vrais users.
+    // --- Suivi IP (audit / mobile 4G tolerance) ---
+    // Sur mobile 4G/CGNAT, l'IP de navigation et l'IP vue par LootLabs peuvent
+    // différer légèrement (plage opérateur). La sécurité absolue repose sur le puid
+    // cryptographique (256 bits non devinable), le secret postback optionnel, et le fait
+    // que la clé n'est délivrée qu'au cookie Discord propriétaire vérifié.
     if (claimedUserIp && session.ip && claimedUserIp !== session.ip) {
-      console.warn(`[postback] REJET ip mismatch: annoncee=${claimedUserIp} session=${session.ip}`);
-      return res.status(403).send('rejected: ip mismatch');
+      console.log(`[postback] Variation IP mobile/opérateur (session=${session.ip}, lootlabs=${claimedUserIp}) - acceptée`);
     }
 
     // Trace le postback (audit: IP source + note origine)
@@ -290,7 +290,7 @@ router.get('/key/status', statusLimiter, async (req, res) => {
     if (!session) return res.status(404).json({ success: false, error: 'Unknown session' });
 
     if (session.status === 'rejected_too_fast') {
-      return res.json({ success: true, status: 'rejected', reason: 'too_fast' });
+      return res.status(429).json({ success: false, status: 'rejected', error: 'Verification completed too fast (bot detected). Please restart a session.' });
     }
 
     // Session deja delivree (token brule): rejeu impossible, message clair.

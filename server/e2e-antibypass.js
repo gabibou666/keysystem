@@ -54,7 +54,7 @@ async function main() {
   const d2 = await a2.json();
   check('session completee, cookie d un autre -> refuse 403 forbidden', a2.status === 403 && d2.status === 'forbidden');
 
-  // ==== ATTAQUE 3: postback immediate (< 25s pour 1 tache) = bot ====
+  // ==== ATTAQUE 3: postback immédiat (< 4s) = bot script ====
   const fastPuid = crypto.randomToken(32);
   await pool.query(
     `INSERT INTO ll_sessions (puid, tasks_required, ip, owner_discord_id, started_at)
@@ -63,18 +63,18 @@ async function main() {
   );
   const a3 = await fetch(`${BASE}/api/lootlabs/postback?click_id=${fastPuid}&unique_id=fast-${Date.now()}${postbackSecretParam}`);
   const sess3 = await pool.query('SELECT status FROM ll_sessions WHERE puid = $1', [fastPuid]);
-  check('postback < 25s (1 tache) -> rejete (429 + status rejected_too_fast)', a3.status === 429 && sess3.rows[0].status === 'rejected_too_fast');
+  check('postback < 4s (bot instantane) -> rejete (429 + status rejected_too_fast)', a3.status === 429 && sess3.rows[0].status === 'rejected_too_fast');
 
-  // ==== ATTAQUE 4: postback 2 taches (24h) trop rapide (< 55s) ====
+  // ==== ATTAQUE 4: postback bot quasi-instantané (1s) ====
   const fast2Puid = crypto.randomToken(32);
   await pool.query(
     `INSERT INTO ll_sessions (puid, tasks_required, ip, owner_discord_id, started_at)
-     VALUES ($1, 2, '203.0.113.52', $2, now() - interval '35 seconds')`,
+     VALUES ($1, 2, '203.0.113.52', $2, now() - interval '1 second')`,
     [fast2Puid, OWNER]
   );
   const a3bis = await fetch(`${BASE}/api/lootlabs/postback?click_id=${fast2Puid}&unique_id=fast2-${Date.now()}${postbackSecretParam}`);
   const sess3bis = await pool.query('SELECT status FROM ll_sessions WHERE puid = $1', [fast2Puid]);
-  check('postback < 55s pour 2 taches (24h) -> rejete 429', a3bis.status === 429 && sess3bis.rows[0].status === 'rejected_too_fast');
+  check('postback bot 1s -> rejete 429', a3bis.status === 429 && sess3bis.rows[0].status === 'rejected_too_fast');
 
   // ==== ATTAQUE 5: postback legitime (>25s) MAIS puid inconnu ====
   const a4 = await fetch(`${BASE}/api/lootlabs/postback?click_id=unknown-puid-xyz&unique_id=x-${Date.now()}${postbackSecretParam}`);
@@ -118,7 +118,7 @@ async function main() {
   const verif2 = tokens.verifyCompletionToken(tampered);
   check('token falsifie -> invalide', !verif2.valid);
 
-  // ==== ATTAQUE 9: IP mismatch dans le postback (template avec ip=) ====
+  // ==== TEST 9: Tolérance IP mobile/CGNAT dans le postback ====
   const ipPuid = crypto.randomToken(32);
   await pool.query(
     `INSERT INTO ll_sessions (puid, tasks_required, ip, owner_discord_id, started_at)
@@ -126,7 +126,7 @@ async function main() {
     [ipPuid, OWNER]
   );
   const a8 = await fetch(`${BASE}/api/lootlabs/postback?click_id=${ipPuid}&unique_id=ip-${Date.now()}&ip=1.2.3.4${postbackSecretParam}`);
-  check('postback avec IP user differente -> refuse (403)', a8.status === 403);
+  check('postback avec variation IP mobile -> accepte (audit log)', a8.status === 200);
 
   // ==== ATTAQUE 10: Vérification HWID in-game (/api/v1/check) ====
   if (d6.key) {
