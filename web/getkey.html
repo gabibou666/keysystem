@@ -142,6 +142,9 @@
         3. Your key will appear as soon as it's validated
       </p>
     </div>
+    <div id="waitCancel" style="margin-top: 18px; text-align: center;">
+      <button class="btn small secondary" onclick="cancelPendingSession()" style="font-size: 12.5px;">✕ Cancel waiting & choose a duration</button>
+    </div>
   </section>
 </main>
 
@@ -324,8 +327,22 @@ async function start(duration) {
   location.href = '/verify?d=' + duration + '&k=' + renewing;
 }
 
+function cancelPendingSession() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+  localStorage.removeItem(PUID_STORAGE);
+  localStorage.removeItem(PUID_STORAGE + '_time');
+  document.getElementById('result').classList.add('hidden');
+  document.getElementById('choiceCard').classList.remove('hidden');
+  setStep(discordOk ? 2 : 1);
+  const st = document.getElementById('startStatus');
+  if (st) { st.textContent = ''; st.className = 'status'; }
+  if (window.showToast) showToast('Session reset. You can choose a duration below.');
+}
+
 function showWaiting(title, sub, retryable = false) {
-  document.getElementById('choiceCard').classList.add('hidden');
   document.getElementById('result').classList.remove('hidden');
   document.getElementById('waitState').classList.remove('hidden');
   document.getElementById('resultTitle').textContent = title;
@@ -333,12 +350,19 @@ function showWaiting(title, sub, retryable = false) {
   document.getElementById('newKey').classList.add('hidden');
   document.getElementById('resultActions').classList.add('hidden');
   document.getElementById('waitSteps').classList.remove('hidden');
+  const cancelWrap = document.getElementById('waitCancel');
+  if (cancelWrap) cancelWrap.classList.remove('hidden');
   document.querySelector('#waitState .ks-spinner').classList.remove('hidden');
   if (retryable) {
     document.getElementById('waitState').classList.add('hidden');
+    if (cancelWrap) cancelWrap.classList.add('hidden');
+    document.getElementById('choiceCard').classList.remove('hidden');
     const actions = document.getElementById('resultActions');
-    actions.innerHTML = '<a class="btn small secondary" href="/getkey">↻ Try again</a>';
+    actions.innerHTML = '<button class="btn small" onclick="cancelPendingSession()">↻ Choose duration (12h / 24h)</button>';
     actions.classList.remove('hidden');
+    setStep(discordOk ? 2 : 1);
+  } else {
+    document.getElementById('choiceCard').classList.add('hidden');
   }
 }
 
@@ -376,7 +400,10 @@ async function poll(puid) {
       pollTimer = null;
       localStorage.setItem(KEY_STORAGE, d.key);
       localStorage.removeItem(PUID_STORAGE);
+      localStorage.removeItem(PUID_STORAGE + '_time');
       document.getElementById('waitState').classList.add('hidden');
+      const cancelWrap = document.getElementById('waitCancel');
+      if (cancelWrap) cancelWrap.classList.add('hidden');
       document.getElementById('resultTitle').textContent = d.renewed ? '✅ Key renewed!' : '🎉 Key obtained!';
       document.getElementById('resultSub').textContent = 'Paste it into the loader — it\'s also saved in your browser.';
       const el = document.getElementById('newKey');
@@ -393,13 +420,15 @@ async function poll(puid) {
       clearInterval(pollTimer);
       pollTimer = null;
       localStorage.removeItem(PUID_STORAGE);
-      showWaiting('⚠️ Session expired', 'The verification took too long or was rejected — start again below.', true);
+      localStorage.removeItem(PUID_STORAGE + '_time');
+      showWaiting('⚠️ Session expired', 'The verification took too long or was reset — pick a duration below.', true);
       return;
     }
     if (d.status === 'forbidden') {
       clearInterval(pollTimer);
       pollTimer = null;
       localStorage.removeItem(PUID_STORAGE);
+      localStorage.removeItem(PUID_STORAGE + '_time');
       showWaiting('🔒 Session mismatch', 'This session doesn\'t belong to this browser — sign in again and retry.', true);
       return;
     }
@@ -407,20 +436,20 @@ async function poll(puid) {
       clearInterval(pollTimer);
       pollTimer = null;
       localStorage.removeItem(PUID_STORAGE);
-      showWaiting('✅ Already claimed', 'This session\'s key was already retrieved — get a new one below.', true);
+      localStorage.removeItem(PUID_STORAGE + '_time');
+      showWaiting('✅ Already claimed', 'This session\'s key was already retrieved — pick a duration below.', true);
       return;
     }
-    // Statut DEFINITIFMENT mort (session inconnue): on arrete et on nettoie.
+    // Statut DEFINITIVMENT mort (session inconnue): on arrete et on nettoie.
     if (d.error === 'Unknown session' || d.status === 'revoked_key') {
       clearInterval(pollTimer);
       pollTimer = null;
       localStorage.removeItem(PUID_STORAGE);
-      showWaiting('⚠️ Session error', (d.error || 'Something went wrong — start again below.'), true);
+      localStorage.removeItem(PUID_STORAGE + '_time');
+      showWaiting('⚠️ Session reset', (d.error || 'Previous session finished — pick a duration below.'), true);
       return;
     }
     // 500 transitoire / reseau: PAS d'arret — le tick suivant reessaie.
-    // (Avant: une erreur passagere tuait la session et vidait PUID_STORAGE,
-    //  l'utilisateur devait recommencer une pub pour rien.)
   } catch {
     // Erreur reseau (offline, 429 rate-limit): on continue, tick suivant.
   } finally {
@@ -449,6 +478,12 @@ resumePendingSession();
 function resumePendingSession() {
   const puid = localStorage.getItem(PUID_STORAGE);
   if (!puid) return;
+  const storedTime = parseInt(localStorage.getItem(PUID_STORAGE + '_time') || '0', 10);
+  if (storedTime && Date.now() - storedTime > 15 * 60 * 1000) {
+    localStorage.removeItem(PUID_STORAGE);
+    localStorage.removeItem(PUID_STORAGE + '_time');
+    return;
+  }
   setStep(3);
   showWaiting('⏳ Verifying your session…', 'Your key will pop up as soon as it\'s validated.');
   startPolling(puid);

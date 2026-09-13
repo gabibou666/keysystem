@@ -57,19 +57,19 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
       }
     }
 
-    // Ad limit: max 2 ad sessions per IP within 12 hours (anti-farm en masse)
+    // Ad limit: max 2 cles obtenues par IP par 12h (ne bloque PAS sur les sessions inachevées/abandonnées)
     const ip = clientIp(req);
     const [recent, byOwner] = await Promise.all([
       pool.query(
         `SELECT COUNT(*)::int AS c FROM ll_sessions
-         WHERE ip = $1 AND created_at > now() - interval '12 hours'`,
+         WHERE ip = $1 AND status IN ('completed', 'claimed') AND created_at > now() - interval '12 hours'`,
         [ip]
       ),
-      // ANTI-PROXY: limite aussi par COMPTE DISCORD â€” les proxies changent l'IP,
-      // pas le compte. 4 sessions / 12h max par proprietaire Discord.
+      // ANTI-PROXY: limite aussi par COMPTE DISCORD — les proxies changent l'IP,
+      // pas le compte. 4 sessions complétées / 12h max par proprietaire Discord.
       pool.query(
         `SELECT COUNT(*)::int AS c FROM ll_sessions
-         WHERE owner_discord_id = $1 AND created_at > now() - interval '12 hours'`,
+         WHERE owner_discord_id = $1 AND status IN ('completed', 'claimed') AND created_at > now() - interval '12 hours'`,
         [req.discordId]
       ),
     ]);
@@ -77,9 +77,16 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
       return res.status(429).json({
         success: false,
         reason: 'ad_limit',
-        error: 'Ad limit reached (2 ads max every 12 hours). Come back later.',
+        error: 'Ad limit reached (2 keys max every 12 hours). Come back later.',
       });
     }
+
+    // Invalide les anciennes sessions inachevées de cet utilisateur pour éviter tout conflit
+    await pool.query(
+      `UPDATE ll_sessions SET status = 'expired'
+       WHERE owner_discord_id = $1 AND status = 'pending'`,
+      [req.discordId]
+    ).catch(() => {});
 
     // puid 32 bytes (64 hex): non devinable, non enumerable
     const puid = crypto.randomToken(32);
@@ -293,6 +300,25 @@ router.get('/key/status', statusLimiter, async (req, res) => {
         success: false,
         status: 'already_claimed',
         error: 'This session\'s key has already been claimed.',
+      });
+    }
+
+    if (session.status === 'expired') {
+      return res.status(410).json({
+        success: false,
+        status: 'token_expired',
+        error: 'This session has expired. Please select a duration below.',
+      });
+    }
+
+    // Auto-expiration après 15 minutes pour ne pas bloquer l'utilisateur indéfiniment
+    const ageMs = Date.now() - new Date(session.created_at).getTime();
+    if (session.status === 'pending' && ageMs > 15 * 60 * 1000) {
+      await pool.query("UPDATE ll_sessions SET status = 'expired' WHERE id = $1", [session.id]).catch(() => {});
+      return res.status(410).json({
+        success: false,
+        status: 'token_expired',
+        error: 'Session timed out after 15 minutes. Please select a duration below.',
       });
     }
 
