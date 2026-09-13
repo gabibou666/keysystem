@@ -23,24 +23,29 @@
   <section class="hero">
     <div class="hero-badge reveal in"><span class="dot"></span> <b id="heroOnline">0</b> users online right now</div>
     <h1>The gateway to your script</h1>
-    <p>One key, one ad, and your script loads — on any executor, in the right game, automatically.</p>
+    <p>One key, one short link, and your script executes instantly — on any executor, for any supported game.</p>
     <div class="actions">
-      <a class="btn pulse" href="/getkey">🔑 Get my key</a>
+      <a class="btn pulse" href="/getkey">🔑 Get a Free Key</a>
       <a class="btn secondary" href="/robux">💎 Pay with Robux</a>
-    </div>
-    <div class="hero-trust reveal d1">
-      <div class="trust-item"><span class="trust-num" id="trustExecs">…</span><span>executions</span></div>
-      <div class="trust-sep"></div>
-      <div class="trust-item"><span class="trust-num" id="trustUsers">…</span><span>users</span></div>
-      <div class="trust-sep"></div>
-      <div class="trust-item"><span class="trust-num">24/7</span><span>uptime</span></div>
     </div>
   </section>
 
+  <!-- UNIFIED STATS STRIP -->
   <section class="stats">
-    <div class="stat reveal live"><div class="num" id="execCount">…</div><div class="lbl">executions</div></div>
-    <div class="stat reveal d1"><div class="num" id="userCount">…</div><div class="lbl">users</div></div>
-    <div class="stat reveal d2"><div class="num" id="uptime">24/7</div><div class="lbl">uptime</div></div>
+    <div class="stat reveal live">
+      <div class="num" id="execCount">…</div>
+      <div class="lbl">executions</div>
+      <span id="trustExecs" class="hidden"></span>
+    </div>
+    <div class="stat reveal d1">
+      <div class="num" id="userCount">…</div>
+      <div class="lbl">users</div>
+      <span id="trustUsers" class="hidden"></span>
+    </div>
+    <div class="stat reveal d2">
+      <div class="num" id="uptime">24/7</div>
+      <div class="lbl">uptime</div>
+    </div>
   </section>
 
   <!-- AD: Leaderboard 728x90 -->
@@ -49,55 +54,68 @@
     <script src="https://www.highrevenueformat.com/77389bd3deefc49e2ab9e702f1a05cbb/invoke.js"></script>
   </div>
 
-  <!-- HOW IT WORKS -->
+  <!-- HOW IT WORKS (Logical Order) -->
   <div class="steps-section" id="howItWorks">
     <h2 class="reveal">How it works</h2>
     <div class="steps-flow">
       <div class="step-card reveal">
         <div class="step-num">1</div>
-        <h3>Copy the loader</h3>
-        <p>One line — paste it into any executor. Works everywhere.</p>
-        <div class="step-tag">⏱ 5 seconds</div>
+        <h3>Get your key</h3>
+        <p>Sign in with Discord, complete a quick link or pay with Robux.</p>
+        <div class="step-tag">⏱ ~1 min · 12h or 24h key</div>
       </div>
       <div class="step-card reveal d1">
         <div class="step-num">2</div>
-        <h3>Get your key</h3>
-        <p>Sign in with Discord, watch one short ad (or pay with Robux).</p>
-        <div class="step-tag">⏱ ~1 minute · 12h or 24h key</div>
+        <h3>Copy the loader</h3>
+        <p>One line of code — paste it into your favorite Roblox executor.</p>
+        <div class="step-tag">⚡ Works on all executors</div>
       </div>
       <div class="step-card reveal d2">
         <div class="step-num">3</div>
-        <h3>Play</h3>
-        <p>Paste your key — the right script loads for your game automatically.</p>
-        <div class="step-tag">🎮 Auto game detection</div>
+        <h3>Paste & Play</h3>
+        <p>Submit your key — the right script loads automatically for your game.</p>
+        <div class="step-tag">🎮 Instant game detection</div>
       </div>
     </div>
   </div>
 
-  <!-- YOUR KEY (visible immediately, not hidden below fold) -->
-  <section class="keypanel neon-frame reveal" id="keyCard" style="margin-top: 10px;">
-    <h2>🔑 Your key</h2>
-    <p class="sub">Saved in this browser — paste it into the loader.</p>
-    <div class="keybox">
-      <textarea id="keybox" rows="2" readonly placeholder="No key yet — click 'Get my key' above."></textarea>
-      <button class="btn small" onclick="copyKey()">Copy</button>
-    </div>
-    <div id="countdownWrap" class="countdown-wrap hidden">
-      <div class="countdown"><span id="countdown">--:--:--</span><span class="lbl">time remaining</span></div>
-      <button class="btn small" onclick="location.href='/getkey'">🔄 Renew</button>
-    </div>
-    <div id="status" class="status"></div>
-  </section>
+  <!-- INTERACTIVE HUB: LOADER & KEY SIDE-BY-SIDE -->
+  <div class="hub-grid">
+    <!-- Loader Card -->
+    <section class="keypanel hub-card reveal" id="loader">
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+          <h2>📋 The Loader</h2>
+          <span class="badge-pill badge-popular">Universal</span>
+        </div>
+        <p class="sub">Run this one line in any executor (Delta, Potassium, Wave, etc.):</p>
+        <div class="codebox" id="loaderCode">-- loading script... --</div>
+      </div>
+      <div style="margin-top: 18px;">
+        <button class="btn small" id="loaderCardBtn" onclick="copyLoader()" style="width: 100%; justify-content: center;">📋 Copy Loader Script</button>
+      </div>
+    </section>
 
-  <!-- Loader -->
-  <section class="keypanel reveal" id="loader" style="margin-top: 22px;">
-    <h2>📋 Loader</h2>
-    <p class="sub">One single line in your executor:</p>
-    <div class="codebox" id="loaderCode">-- loads below --</div>
-    <div style="margin-top: 14px;">
-      <button class="btn small" id="loaderCardBtn" onclick="copyLoader()">📋 Copy loader</button>
-    </div>
-  </section>
+    <!-- Key Card -->
+    <section class="keypanel hub-card neon-frame reveal" id="keyCard">
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+          <h2>🔑 Your Key</h2>
+          <span class="badge-pill" style="background:#8b5cf622; color:#c084fc; border:1px solid #8b5cf655;">Saved</span>
+        </div>
+        <p class="sub">Saved in your browser — paste it in the in-game GUI:</p>
+        <div class="keybox">
+          <textarea id="keybox" rows="2" readonly placeholder="No key yet — click 'Get a Free Key' above."></textarea>
+          <button class="btn small" onclick="copyKey()">Copy</button>
+        </div>
+        <div id="countdownWrap" class="countdown-wrap hidden">
+          <div class="countdown"><span id="countdown">--:--:--</span><span class="lbl">time remaining</span></div>
+          <button class="btn small secondary" onclick="location.href='/getkey'">🔄 Renew</button>
+        </div>
+      </div>
+      <div id="status" class="status" style="margin-top: 10px;"></div>
+    </section>
+  </div>
 
   <!-- Features -->
   <section class="grid" style="margin-top: 50px;">

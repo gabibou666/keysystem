@@ -311,22 +311,37 @@ else
     local main = Instance.new("Frame")
     main.Size = UDim2.new(0, 460 * scaleFactor, 0, 390 * scaleFactor)
     main.Position = UDim2.new(0.5, -230 * scaleFactor, 0.5, -195 * scaleFactor)
-    main.BackgroundColor3 = Color3.fromRGB(24, 20, 33)
+    main.BackgroundColor3 = Color3.fromRGB(12, 10, 18)
     main.BorderSizePixel = 0
     main.Active = true
     main.Parent = screenGui
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 12)
+    corner.CornerRadius = UDim.new(0, 14)
     corner.Parent = main
 
+    local mainStroke = Instance.new("UIStroke")
+    mainStroke.Color = Color3.fromRGB(139, 92, 246)
+    mainStroke.Transparency = 0.55
+    mainStroke.Thickness = 1.5
+    mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    mainStroke.Parent = main
+
+    -- Top neon accent gradient
     local accent = Instance.new("Frame")
-    accent.Size = UDim2.new(1, 0, 0, 4)
-    accent.BackgroundColor3 = Color3.fromRGB(139, 92, 246)
+    accent.Size = UDim2.new(1, 0, 0, 3)
+    accent.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     accent.BorderSizePixel = 0
     accent.Parent = main
     local ac = Instance.new("UICorner")
-    ac.CornerRadius = UDim.new(0, 4)
+    ac.CornerRadius = UDim.new(0, 3)
     ac.Parent = accent
+    local ag = Instance.new("UIGradient")
+    ag.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(124, 58, 237)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(192, 132, 252)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(139, 92, 246))
+    }
+    ag.Parent = accent
 
     -- Drag
     do
@@ -350,54 +365,58 @@ else
     end
 
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -60, 0, 42)
-    title.Position = UDim2.new(0, 18, 0, 12)
+    title.Size = UDim2.new(1, -60, 0, 26)
+    title.Position = UDim2.new(0, 18, 0, 14)
     title.BackgroundTransparency = 1
-    title.TextColor3 = Color3.fromRGB(240, 240, 245)
-    title.TextSize = 20 * scaleFactor
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextSize = 18 * scaleFactor
     title.Font = Enum.Font.GothamBold
     title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Text = "🔑 Key System"
+    title.Text = "🔑  KEY SYSTEM"
     title.Parent = main
 
-    -- Sous-titre: executor + mode (DETAIL)
     local subLabel = Instance.new("TextLabel")
-    subLabel.Size = UDim2.new(1, -36, 0, 18)
-    subLabel.Position = UDim2.new(0, 18, 0, 44)
+    subLabel.Size = UDim2.new(1, -60, 0, 18)
+    subLabel.Position = UDim2.new(0, 18, 0, 42)
     subLabel.BackgroundTransparency = 1
-    subLabel.TextColor3 = Color3.fromRGB(139, 92, 246)
-    subLabel.TextSize = 13 * scaleFactor
-    subLabel.Font = Enum.Font.Gotham
+    subLabel.TextColor3 = Color3.fromRGB(192, 132, 252)
+    subLabel.TextSize = 12 * scaleFactor
+    subLabel.Font = Enum.Font.GothamSemibold
     subLabel.TextXAlignment = Enum.TextXAlignment.Left
-    subLabel.Text = "Executor: " .. execName .. " · Lite UI"
+    subLabel.Text = "⚡ " .. execName .. "  •  Secure Hub Loader"
     subLabel.Parent = main
 
     local closeBtn = Instance.new("TextButton")
-    closeBtn.Size = UDim2.new(0, 32, 0, 32)
-    closeBtn.Position = UDim2.new(1, -42, 0, 16)
-    closeBtn.BackgroundColor3 = Color3.fromRGB(45, 40, 58)
+    closeBtn.Size = UDim2.new(0, 30, 0, 30)
+    closeBtn.Position = UDim2.new(1, -40, 0, 14)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(22, 17, 34)
     closeBtn.Text = "✕"
-    closeBtn.TextSize = 14
-    closeBtn.TextColor3 = Color3.fromRGB(230, 230, 235)
-    closeBtn.Font = Enum.Font.Gotham
+    closeBtn.TextSize = 13
+    closeBtn.TextColor3 = Color3.fromRGB(200, 190, 225)
+    closeBtn.Font = Enum.Font.GothamBold
     closeBtn.Parent = main
     local cc = Instance.new("UICorner")
-    cc.CornerRadius = UDim.new(0, 9)
+    cc.CornerRadius = UDim.new(0, 8)
     cc.Parent = closeBtn
+    local closeStroke = Instance.new("UIStroke")
+    closeStroke.Color = Color3.fromRGB(139, 92, 246)
+    closeStroke.Transparency = 0.7
+    closeStroke.Thickness = 1
+    closeStroke.Parent = closeBtn
     closeBtn.MouseButton1Click:Connect(function()
         screenGui:Destroy()
     end)
 
     local keyBox = Instance.new("TextBox")
     keyBox.Size = UDim2.new(1, -36, 0, 42 * scaleFactor)
-    keyBox.Position = UDim2.new(0, 18, 0, 74 * scaleFactor)
-    keyBox.BackgroundColor3 = Color3.fromRGB(32, 27, 43)
+    keyBox.Position = UDim2.new(0, 18, 0, 72 * scaleFactor)
+    keyBox.BackgroundColor3 = Color3.fromRGB(16, 13, 25)
     keyBox.BorderSizePixel = 0
     keyBox.PlaceholderText = "Paste your key here..."
     keyBox.Text = loadSavedKey() or ""
-    keyBox.TextSize = 14 * scaleFactor
-    keyBox.TextColor3 = Color3.fromRGB(235, 235, 240)
-    keyBox.PlaceholderColor3 = Color3.fromRGB(110, 110, 120)
+    keyBox.TextSize = 13.5 * scaleFactor
+    keyBox.TextColor3 = Color3.fromRGB(245, 240, 255)
+    keyBox.PlaceholderColor3 = Color3.fromRGB(120, 110, 140)
     keyBox.Font = Enum.Font.Code
     keyBox.ClearTextOnFocus = false
     keyBox.TextXAlignment = Enum.TextXAlignment.Left
@@ -406,53 +425,80 @@ else
     kc.CornerRadius = UDim.new(0, 9)
     kc.Parent = keyBox
     local kp = Instance.new("UIPadding")
-    kp.PaddingLeft = UDim.new(0, 12)
+    kp.PaddingLeft = UDim.new(0, 14)
     kp.Parent = keyBox
+    local keyStroke = Instance.new("UIStroke")
+    keyStroke.Color = Color3.fromRGB(139, 92, 246)
+    keyStroke.Transparency = 0.55
+    keyStroke.Thickness = 1
+    keyStroke.Parent = keyBox
 
-    local function mkBtn(text, color, posY)
+    local function mkBtn(text, color, strokeColor, posY)
         local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(1, -36, 0, 42 * scaleFactor)
+        btn.Size = UDim2.new(1, -36, 0, 40 * scaleFactor)
         btn.Position = UDim2.new(0, 18, 0, posY * scaleFactor)
         btn.BackgroundColor3 = color
         btn.BorderSizePixel = 0
         btn.Text = text
-        btn.TextSize = 15 * scaleFactor
+        btn.TextSize = 14 * scaleFactor
         btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.Font = Enum.Font.GothamSemibold
+        btn.Font = Enum.Font.GothamBold
         btn.Parent = main
         local b = Instance.new("UICorner")
         b.CornerRadius = UDim.new(0, 9)
         b.Parent = btn
+        if strokeColor then
+            local s = Instance.new("UIStroke")
+            s.Color = strokeColor
+            s.Transparency = 0.5
+            s.Thickness = 1
+            s.Parent = btn
+        end
         return btn
     end
 
-    local getBtn = mkBtn("🌐 Get a key — copy the website link", Color3.fromRGB(88, 101, 242), 126)
-    local checkBtn = mkBtn("✅ Verify key", Color3.fromRGB(46, 160, 83), 176)
+    local getBtn = mkBtn("🌐  Get Key  (Copy Link)", Color3.fromRGB(124, 58, 237), Color3.fromRGB(192, 132, 252), 124)
+    local checkBtn = mkBtn("⚡  Verify & Launch Script", Color3.fromRGB(139, 92, 246), Color3.fromRGB(216, 180, 254), 172)
 
-    -- Zone de statut DETAILLEE (multi-lignes)
+    -- Panneau de statut / Guide integre
+    local statusCard = Instance.new("Frame")
+    statusCard.Size = UDim2.new(1, -36, 0, 126 * scaleFactor)
+    statusCard.Position = UDim2.new(0, 18, 0, 222 * scaleFactor)
+    statusCard.BackgroundColor3 = Color3.fromRGB(16, 13, 25)
+    statusCard.BorderSizePixel = 0
+    statusCard.Parent = main
+    local sc = Instance.new("UICorner")
+    sc.CornerRadius = UDim.new(0, 9)
+    sc.Parent = statusCard
+    local sStroke = Instance.new("UIStroke")
+    sStroke.Color = Color3.fromRGB(139, 92, 246)
+    sStroke.Transparency = 0.75
+    sStroke.Thickness = 1
+    sStroke.Parent = statusCard
+
     local status = Instance.new("TextLabel")
-    status.Size = UDim2.new(1, -36, 0, 130 * scaleFactor)
-    status.Position = UDim2.new(0, 18, 0, 234 * scaleFactor)
+    status.Size = UDim2.new(1, -20, 1, -16)
+    status.Position = UDim2.new(0, 10, 0, 8)
     status.BackgroundTransparency = 1
-    status.TextColor3 = Color3.fromRGB(150, 150, 160)
-    status.TextSize = 13 * scaleFactor
+    status.TextColor3 = Color3.fromRGB(175, 170, 195)
+    status.TextSize = 12 * scaleFactor
     status.Font = Enum.Font.Gotham
     status.TextWrapped = true
     status.TextXAlignment = Enum.TextXAlignment.Left
     status.TextYAlignment = Enum.TextYAlignment.Top
-    status.Text = "How to use:\n1. Get a key → open the link in your browser\n2. Watch the ad (30s) → copy your key\n3. Paste it above → Verify key\n\nKey expires 12h/24h after delivery."
-    status.Parent = main
+    status.Text = "How to use:\n• 1. Click 'Get Key' to copy the website link\n• 2. Complete the short checkpoint (30s)\n• 3. Paste your key above and click 'Verify & Launch'\n\nKey is valid for 12h or 24h once activated."
+    status.Parent = statusCard
 
-    -- Lien affiche EN CLAIR (pas seulement copie: certains mobiles n'ont pas setclipboard)
+    -- Domaine affiche en clair
     local linkLabel = Instance.new("TextLabel")
     linkLabel.Size = UDim2.new(1, -36, 0, 16 * scaleFactor)
-    linkLabel.Position = UDim2.new(0, 18, 0, 366 * scaleFactor)
+    linkLabel.Position = UDim2.new(0, 18, 0, 360 * scaleFactor)
     linkLabel.BackgroundTransparency = 1
-    linkLabel.TextColor3 = Color3.fromRGB(100, 100, 115)
-    linkLabel.TextSize = 12 * scaleFactor
-    linkLabel.Font = Enum.Font.Gotham
+    linkLabel.TextColor3 = Color3.fromRGB(139, 92, 246)
+    linkLabel.TextSize = 11.5 * scaleFactor
+    linkLabel.Font = Enum.Font.GothamSemibold
     linkLabel.TextXAlignment = Enum.TextXAlignment.Center
-    linkLabel.Text = SITE:gsub("^https?://", "")
+    linkLabel.Text = "🔒 " .. SITE:gsub("^https?://", "")
     linkLabel.Parent = main
 
     local function setStatus(text, color)
@@ -482,7 +528,7 @@ else
 
         local ok, msg = performCheck(key)
         checking = false
-        checkBtn.Text = "✅ Verify key"
+        checkBtn.Text = "⚡  Verify & Launch Script"
 
         if ok then
             saveKey(key)

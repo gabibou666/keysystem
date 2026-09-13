@@ -40,6 +40,20 @@
     </div>
   </div>
 
+  <!-- Active key notice (shown only when a key exists in browser) -->
+  <section class="keypanel neon-frame hidden" id="currentKeyCard" style="margin-bottom: 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+      <h2>🔑 Your active key</h2>
+      <span class="badge-pill" style="background:#8b5cf622; color:#c084fc; border:1px solid #8b5cf655;">Saved in browser</span>
+    </div>
+    <p class="sub">You already have a key saved — copy it or choose a duration below to renew.</p>
+    <div class="keybox">
+      <textarea id="currentKey" rows="2" readonly placeholder="No key yet."></textarea>
+      <button class="btn small" onclick="copyCurrentKey()">📋 Copy</button>
+    </div>
+    <div id="currentKeyStatus" class="status"></div>
+  </section>
+
   <!-- AD: Leaderboard 728x90 -->
   <div class="ad-banner leaderboard" id="ad-leaderboard-getkey">
     <script>atOptions = { key: '77389bd3deefc49e2ab9e702f1a05cbb', format: 'iframe', height: 90, width: 728, params: {} };</script>
@@ -48,7 +62,10 @@
 
   <!-- Step 1: Discord -->
   <section class="keypanel" id="discordCard">
-    <h2>Step 1 · Sign in with Discord</h2>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+      <h2>Step 1 · Sign in with Discord</h2>
+      <span class="badge-pill" style="background:#5865f222; color:#a5b4fc; border:1px solid #5865f255;">Required</span>
+    </div>
     <p class="sub" id="discordSub">One click — links your key to your account and adds you to our Discord server automatically. No farming, no bots.</p>
     <div id="discordLoggedOut">
       <a class="btn" href="/api/discord/login" style="text-decoration:none">
@@ -67,44 +84,36 @@
     </div>
   </section>
 
-  <!-- Current key -->
-  <section class="keypanel" id="currentKeyCard" style="margin-top: 0;">
-    <h2>🔑 Your current key</h2>
-    <p class="sub">Saved in this browser.</p>
-    <div class="keybox">
-      <textarea id="currentKey" rows="2" readonly placeholder="No key yet — get one below."></textarea>
-      <button class="btn small" onclick="copyCurrentKey()">Copy</button>
-    </div>
-    <div id="currentKeyStatus" class="status"></div>
-  </section>
-
   <!-- Step 2: Duration -->
   <section class="keypanel" id="choiceCard">
     <h2>Step 2 · Choose your duration</h2>
-    <p class="sub">The longer the key, the more checkpoints (short ads).</p>
+    <p class="sub">Select your key validity. 1 ad = 12h key, 2 ads = 24h key.</p>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px;">
-      <div class="card" style="cursor:pointer; text-align:center; padding: 30px 20px; position:relative;" onclick="start(12)">
-        <div style="font-size: 36px; font-weight: 700; background: linear-gradient(135deg,#fff,#c084fc); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">12h</div>
-        <p style="margin-top: 8px; color: var(--muted);">1 checkpoint</p>
-        <div style="margin-top: 12px; display: inline-flex; gap: 4px;">
-          <span style="width:10px;height:10px;border-radius:50%;background:#c084fc;display:inline-block;"></span>
+      <div class="card" style="cursor:pointer; text-align:center; padding: 28px 18px; position:relative;" onclick="start(12)">
+        <div style="font-size: 38px; font-weight: 800; background: linear-gradient(135deg,#fff,#c084fc); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">12h</div>
+        <p style="margin-top: 6px; color: var(--color-glow); font-weight: 600;">1 checkpoint</p>
+        <div style="margin-top: 10px; display: inline-flex; gap: 4px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:#c084fc;display:inline-block;"></span>
         </div>
-        <p style="margin-top: 14px; font-size: 12.5px; color: var(--color-muted-2); line-height: 1.6;">One short ad.<br>Quick session.</p>
+        <p style="margin-top: 12px; font-size: 13px; color: var(--color-muted); line-height: 1.5;">One short task.<br>Fast & simple.</p>
       </div>
-      <div class="card" style="cursor:pointer; text-align:center; padding: 30px 20px; position:relative;" onclick="start(24)">
-        <div style="font-size: 36px; font-weight: 700; background: linear-gradient(135deg,#fff,#c084fc); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">24h</div>
-        <p style="margin-top: 8px; color: var(--muted);">2 checkpoints</p>
-        <div style="margin-top: 12px; display: inline-flex; gap: 4px;">
-          <span style="width:10px;height:10px;border-radius:50%;background:#c084fc;display:inline-block;"></span>
-          <span style="width:10px;height:10px;border-radius:50%;background:#c084fc;display:inline-block;"></span>
+      <div class="card" style="cursor:pointer; text-align:center; padding: 28px 18px; position:relative; border-color: rgba(168, 85, 247, 0.45); box-shadow: 0 0 24px rgba(139, 92, 246, 0.2);" onclick="start(24)">
+        <div style="position: absolute; top: -10px; right: 14px;">
+          <span class="badge-pill badge-popular">Best value</span>
         </div>
-        <p style="margin-top: 14px; font-size: 12.5px; color: var(--color-muted-2); line-height: 1.6;">Double duration.<br>Best value.</p>
+        <div style="font-size: 38px; font-weight: 800; background: linear-gradient(135deg,#fff,#d8b4fe); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">24h</div>
+        <p style="margin-top: 6px; color: var(--color-glow); font-weight: 600;">2 checkpoints</p>
+        <div style="margin-top: 10px; display: inline-flex; gap: 4px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:#c084fc;display:inline-block;"></span>
+          <span style="width:8px;height:8px;border-radius:50%;background:#c084fc;display:inline-block;"></span>
+        </div>
+        <p style="margin-top: 12px; font-size: 13px; color: var(--color-muted); line-height: 1.5;">Double duration.<br>Full day access.</p>
       </div>
     </div>
-    <p class="sub" style="text-align:center; margin-top: 14px; font-size: 13px; color: var(--color-muted-2);">
-      🔄 Expired key? Same button renews it — same key (1 ad for 12h, 2 for 24h). Max 2 ad sessions per 12h.
+    <p class="sub" style="text-align:center; margin-top: 16px; font-size: 13px; color: var(--color-muted-2);">
+      🔄 Expired key? Clicking above automatically renews your existing key.
     </p>
-    <div id="startStatus" class="status" style="text-align:center; margin-top: 16px;"></div>
+    <div id="startStatus" class="status" style="text-align:center; margin-top: 14px;"></div>
   </section>
 
   <!-- AD: In-content 728x90 -->
@@ -251,6 +260,7 @@ async function discordLogout() {
 async function loadCurrentKey() {
   const key = localStorage.getItem(KEY_STORAGE);
   if (!key) return;
+  document.getElementById('currentKeyCard').classList.remove('hidden');
   document.getElementById('currentKey').value = key;
   try {
     const r = await fetch('/api/key/info?key=' + encodeURIComponent(key));
