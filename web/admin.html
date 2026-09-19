@@ -1511,6 +1511,9 @@ async function loadBot() {
 
   try {
     const res = await api('/bot/status');
+    if (res.apiUrl && document.getElementById('botApiUrlText')) {
+      document.getElementById('botApiUrlText').textContent = res.apiUrl;
+    }
     if (!res.success || res.offline) {
       if (alertEl) alertEl.classList.remove('hidden');
       if (statStatus) { statStatus.textContent = 'Hors ligne'; statStatus.style.color = 'var(--admin-err)'; }

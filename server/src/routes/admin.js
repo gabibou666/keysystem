@@ -999,12 +999,13 @@ async function callBotApi(endpoint, method = 'GET', body = null) {
 router.get('/bot/status', requireAdmin, async (req, res) => {
   try {
     const data = await callBotApi('/api/status');
-    res.json({ success: true, data });
+    res.json({ success: true, data, apiUrl: BOT_API_URL });
   } catch (e) {
     console.error('[admin/bot/status]', e.message);
     res.json({
       success: false,
       offline: true,
+      apiUrl: BOT_API_URL,
       error: 'Le bot Discord est hors-ligne ou injoignable.',
       details: e.message,
     });
