@@ -43,30 +43,7 @@
       <a class="btn secondary" href="/robux">💎 Pay with Robux</a>
     </div>
 
-    <!-- MOCKUP TERMINAL INTERACTIF -->
-    <div class="hero-terminal reveal d1" id="heroTerminal">
-      <div class="terminal-header">
-        <div class="terminal-dots">
-          <span class="dot-red"></span>
-          <span class="dot-yellow"></span>
-          <span class="dot-green"></span>
-        </div>
-        <div class="terminal-title">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6M12 19h8"/></svg>
-          <span>audit-hub ~ universal-loader.luau</span>
-        </div>
-        <button class="terminal-copy-btn" id="heroCopyBtn" onclick="copyHeroLoader()" title="Copy script">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-          <span id="heroCopyText">Copy</span>
-        </button>
-      </div>
-      <div class="terminal-body">
-        <pre class="terminal-code"><code id="heroTerminalCode"><span class="code-comment">-- AUDIT HUB Universal Script Loader</span>
-<span class="code-keyword">loadstring</span>(game:<span class="code-fn">HttpGet</span>(<span class="code-str">"https://audithub.org/api/v1/loader"</span>))()</code></pre>
-      </div>
-    </div>
-
-    <div class="live-ticker-wrap reveal d1" style="margin-top: 30px;">
+    <div class="live-ticker-wrap reveal d1">
       <div class="ticker-bar" id="socialTickerBar">
         <div class="ticker-inner">
           <span class="ticker-pulse"></span>
@@ -753,26 +730,7 @@ function copyLoader() {
   flashCopied(document.getElementById('loaderCardBtn'), currentScriptMode === 'std' ? '📋 Copy Loader Script' : '⚡ Copy Auto-Key Script');
 }
 
-function copyHeroLoader() {
-  const code = `loadstring(game:HttpGet("${location.origin}/api/v1/loader"))()`;
-  navigator.clipboard.writeText(code).then(() => {
-    const btn = document.getElementById('heroCopyBtn');
-    const txt = document.getElementById('heroCopyText');
-    if (txt) txt.textContent = 'Copied ✓';
-    if (btn) btn.classList.add('copied');
-    if (window.showToast) showToast('📋 Loader copied to clipboard!');
-    setTimeout(() => {
-      if (txt) txt.textContent = 'Copy';
-      if (btn) btn.classList.remove('copied');
-    }, 1500);
-  });
-}
 
-// Initialise le code du terminal hero avec le bon origin
-const heroCodeEl = document.getElementById('heroTerminalCode');
-if (heroCodeEl) {
-  heroCodeEl.innerHTML = `<span class="code-comment">-- AUDIT HUB Universal Script Loader</span>\n<span class="code-keyword">loadstring</span>(game:<span class="code-fn">HttpGet</span>(<span class="code-str">"${location.origin}/api/v1/loader"</span>))()`;
-}
 
 updateLoaderSnippet();
 loadStats();
