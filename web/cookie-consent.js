@@ -1,15 +1,15 @@
 /**
- * KeySystem - Gestionnaire de Consentement Cookies conforme RGPD / CNIL
- * Respecte les delibérations CNIL n° 2020-091 et 2020-092 :
- * - Aucun traceur publicitaire sans consentement explicite prealable
- * - Bouton 'Refuser' avec la meme mise en valeur que 'Accepter'
- * - Duree de validite du consentement : 6 mois
- * - Possibilite de retirer ou modifier son consentement a tout moment
+ * AUDIT HUB - Cookie Consent Manager (GDPR / CNIL Compliant)
+ * Strictly follows CNIL Deliberations 2020-091 & 2020-092 & GDPR:
+ * - No advertising trackers before explicit opt-in
+ * - "Reject All" button is presented with equal prominence to "Accept All"
+ * - Consent duration: 6 months
+ * - Ability to withdraw or modify consent at any time
  */
 
 (function() {
   const CONSENT_KEY = 'ks_cookie_consent';
-  const CONSENT_DURATION_MS = 180 * 24 * 60 * 60 * 1000; // 6 mois (CNIL)
+  const CONSENT_DURATION_MS = 180 * 24 * 60 * 60 * 1000; // 6 months (CNIL)
   const AD_SCRIPT_SRC = 'https://www.highrevenueformat.com/77389bd3deefc49e2ab9e702f1a05cbb/invoke.js';
 
   function getStoredConsent() {
@@ -69,16 +69,16 @@
     banner.setAttribute('aria-describedby', 'ksCookieDesc');
 
     banner.innerHTML = `
-      <h3 id="ksCookieTitle">🍪 Respect de votre vie privée</h3>
+      <h3 id="ksCookieTitle">🍪 We Value Your Privacy</h3>
       <p id="ksCookieDesc">
-        Nous utilisons des cookies nécessaires au fonctionnement du site (session admin, sécurité).
-        Avec votre accord, nous utilisons également des traceurs publicitaires pour financer la gratuité de notre service.
-        Consultez notre <a href="/cookies.html" target="_blank">Politique des cookies</a> et notre <a href="/privacy.html" target="_blank">Politique de confidentialité</a>.
+        We use essential cookies to operate and secure our service (sessions, anti-DDoS).
+        With your consent, we also use third-party advertising cookies to keep our service completely free.
+        Read our <a href="/cookies" target="_blank">Cookie Policy</a> and <a href="/privacy" target="_blank">Privacy Policy</a>.
       </p>
       <div class="ks-cookie-btns">
-        <button type="button" class="ks-cookie-btn accept" id="ksAcceptAll">Tout accepter</button>
-        <button type="button" class="ks-cookie-btn reject" id="ksRejectAll">Tout refuser</button>
-        <button type="button" class="ks-cookie-btn customize" id="ksCustomize">Personnaliser mes choix</button>
+        <button type="button" class="ks-cookie-btn accept" id="ksAcceptAll">Accept All</button>
+        <button type="button" class="ks-cookie-btn reject" id="ksRejectAll">Reject All</button>
+        <button type="button" class="ks-cookie-btn customize" id="ksCustomize">Customize Choices</button>
       </div>
     `;
 
@@ -102,36 +102,36 @@
     overlay.innerHTML = `
       <div class="ks-cookie-modal">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <h3 id="ksModalTitle" style="margin:0;font-size:18px;color:#ffffff;">⚙️ Préférences de Cookies</h3>
-          <button type="button" id="ksCloseModalBtn" style="background:none;border:none;color:var(--color-muted-2);font-size:20px;cursor:pointer;">✕</button>
+          <h3 id="ksModalTitle" style="margin:0;font-size:18px;color:#ffffff;">⚙️ Cookie Preferences</h3>
+          <button type="button" id="ksCloseModalBtn" style="background:none;border:none;color:var(--color-muted-2);font-size:20px;cursor:pointer;" aria-label="Close">✕</button>
         </div>
         <p style="color:var(--color-muted);font-size:13px;line-height:1.6;margin-bottom:18px;">
-          Vous pouvez choisir d'activer ou de désactiver chaque catégorie de cookies. Les cookies nécessaires ne peuvent pas être désactivés car ils sont indispensables au service.
+          You can choose to enable or disable specific categories of cookies. Essential cookies cannot be disabled as they are technically necessary to operate and secure the platform.
         </p>
 
         <div class="ks-cookie-item">
           <div>
-            <h4>Cookies strictement nécessaires</h4>
-            <p>Indispensables au fonctionnement technique (session, sécurité anti-DDoS). Exemptés de consentement.</p>
+            <h4>Strictly Necessary Cookies</h4>
+            <p>Essential for technical operation, admin session authentication, and anti-DDoS security. Exempt from consent.</p>
           </div>
           <div>
-            <input type="checkbox" checked disabled style="accent-color:var(--color-accent);width:18px;height:18px;cursor:not-allowed;">
+            <input type="checkbox" checked disabled style="accent-color:var(--color-accent);width:18px;height:18px;cursor:not-allowed;" aria-label="Strictly necessary cookies (required)">
           </div>
         </div>
 
         <div class="ks-cookie-item">
           <div>
-            <h4>Publicités & Monétisation</h4>
-            <p>Permet l'affichage de publicités non intrusives via nos partenaires pour maintenir le service gratuit.</p>
+            <h4>Advertising & Monetization</h4>
+            <p>Allows non-intrusive sponsor ads via our partners to support and maintain our free services.</p>
           </div>
           <div>
-            <input type="checkbox" id="ksAdsToggle" style="accent-color:var(--color-accent);width:18px;height:18px;cursor:pointer;">
+            <input type="checkbox" id="ksAdsToggle" style="accent-color:var(--color-accent);width:18px;height:18px;cursor:pointer;" aria-label="Advertising cookies">
           </div>
         </div>
 
         <div style="display:flex;gap:10px;margin-top:20px;">
-          <button type="button" class="ks-cookie-btn accept" id="ksSaveCustom" style="flex:1;">Enregistrer mes préférences</button>
-          <button type="button" class="ks-cookie-btn reject" id="ksRejectCustom" style="flex:1;">Tout refuser</button>
+          <button type="button" class="ks-cookie-btn accept" id="ksSaveCustom" style="flex:1;">Save Preferences</button>
+          <button type="button" class="ks-cookie-btn reject" id="ksRejectCustom" style="flex:1;">Reject All</button>
         </div>
       </div>
     `;

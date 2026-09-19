@@ -1,142 +1,163 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Politique des Cookies | KeySystem</title>
-  <meta name="description" content="Informations détaillées sur l'utilisation des cookies et traceurs sur KeySystem, conformes aux délibérations de la CNIL.">
+  <title>Cookie Policy | AUDIT HUB</title>
+  <meta name="description" content="Detailed information on cookie usage, advertising trackers, and consent management on AUDIT HUB compliant with CNIL and GDPR.">
   <meta name="robots" content="index, follow">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/style.css">
 
+  <!-- Schema.org JSON-LD -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "WebPage",
-    "name": "Politique des Cookies",
-    "description": "Politique relative aux cookies et traceurs sur le site KeySystem.",
+    "name": "Cookie Policy",
+    "description": "Cookie and Tracker Policy for AUDIT HUB compliant with GDPR and CNIL standards.",
     "publisher": {
       "@type": "Organization",
-      "name": "KeySystem"
+      "name": "AUDIT HUB",
+      "url": "https://keysystem-vv8b.onrender.com"
     },
-    "inLanguage": "fr-FR",
+    "inLanguage": "en-US",
     "dateModified": "2026-09-19"
   }
   </script>
 </head>
 <body>
-  <a href="#content" class="skip-link">Aller au contenu principal</a>
-
-  <header style="padding: 16px 24px; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; max-width: 1100px; margin: 0 auto;">
-    <a href="/" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #ffffff; font-weight: 700; font-size: 18px;">
-      <span style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #7c3aed, #c084fc); display: grid; place-items: center; font-size: 16px; box-shadow: 0 0 14px rgba(124, 58, 237, 0.4);">🔑</span>
-      KeySystem
+  <!-- Header / Navigation -->
+  <header class="legal-header">
+    <a href="/" class="legal-brand">
+      <div class="logo-shield" style="width:28px; height:28px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </div>
+      <span>AUDIT HUB</span>
     </a>
-    <nav style="display: flex; gap: 16px; font-size: 14px;">
-      <a href="/" style="color: var(--color-muted); text-decoration: none;">Accueil</a>
-      <a href="/getkey" style="color: var(--color-muted); text-decoration: none;">Obtenir une clé</a>
-      <a href="/privacy.html" style="color: var(--color-muted); text-decoration: none;">Confidentialité</a>
+    <nav class="legal-nav" aria-label="Main Navigation">
+      <a href="/">Home</a>
+      <a href="/terms">Terms of Service</a>
+      <a href="/privacy">Privacy Policy</a>
     </nav>
   </header>
 
-  <main id="content" class="legal-page">
-    <div class="legal-header">
-      <h1>Politique relative aux Cookies</h1>
-      <div class="legal-meta">Mise à jour : 19 septembre 2026 • Conforme aux délibérations CNIL 2020-091 & 2020-092</div>
+  <!-- Main Content -->
+  <main class="legal-container">
+    <div class="legal-card">
+      <span class="legal-tag">Cookies & Privacy</span>
+      <h1>Cookie Policy</h1>
+      <p class="legal-subtitle">Last updated: September 19, 2026 | Operator: <strong>AUDIT HUB</strong></p>
+
+      <section>
+        <h2>1. What Are Cookies?</h2>
+        <p>
+          Cookies and local storage are small text files or data fragments stored on your device when visiting a website. They allow the site to remember your preferences, ensure technical security, and facilitate service operation.
+        </p>
+      </section>
+
+      <section>
+        <h2>2. Cookies Used on AUDIT HUB</h2>
+        <p>We classify cookies and storage technologies into two distinct categories:</p>
+
+        <h3>Category A: Strictly Necessary Cookies (Exempt from Consent)</h3>
+        <p>
+          These cookies are vital for the technical functioning, session security, and anti-abuse safeguards of the website.
+        </p>
+        <div class="table-responsive">
+          <table class="legal-table">
+            <thead>
+              <tr>
+                <th>Name / Key</th>
+                <th>Provider</th>
+                <th>Purpose</th>
+                <th>Duration</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>ks_cookie_consent</code></td>
+                <td>AUDIT HUB</td>
+                <td>Stores your cookie consent preferences (Accept / Reject)</td>
+                <td>6 months (localStorage)</td>
+              </tr>
+              <tr>
+                <td><code>session_token</code></td>
+                <td>AUDIT HUB</td>
+                <td>Admin session authentication via Discord OAuth2</td>
+                <td>Session / 24 hours</td>
+              </tr>
+              <tr>
+                <td><code>__cf_bm / cf_clearance</code></td>
+                <td>Cloudflare</td>
+                <td>Anti-DDoS, rate-limiting, and bot defense protection</td>
+                <td>30 minutes to 1 year</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Category B: Advertising & Monetization Trackers (Requires Consent)</h3>
+        <p>
+          To maintain our key delivery system free of charge, we partner with advertising networks.
+          In strict compliance with CNIL recommendations (Deliberations 2020-091 and 2020-092) and the GDPR:
+        </p>
+        <ul>
+          <li><strong>No advertising scripts or trackers are loaded</strong> until you have clicked "Accept All" or opted in.</li>
+          <li>Refusing advertising cookies does not prevent you from obtaining a key through our standard verification steps.</li>
+          <li>You can withdraw or update your consent at any time.</li>
+        </ul>
+        <div class="table-responsive">
+          <table class="legal-table">
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>Purpose</th>
+                <th>Type</th>
+                <th>Consent Required</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>HighRevenueFormat (invoke.js)</code></td>
+                <td>Displays non-intrusive sponsor ads to fund free service</td>
+                <td>Third-party ad network</td>
+                <td><strong>YES (Explicit Opt-In)</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. How to Manage or Withdraw Your Consent</h2>
+        <p>
+          You can modify or withdraw your consent at any time with a single click by using our interactive cookie manager:
+        </p>
+        <div style="margin: 20px 0;">
+          <button type="button" class="btn primary" onclick="openCookieSettings()" style="display:inline-flex; align-items:center; gap:8px;">
+            🍪 Manage Cookie Preferences
+          </button>
+        </div>
+        <p>
+          Additionally, you can configure your browser settings to block or delete cookies from your system. Note that blocking essential cookies may disrupt basic functionality.
+        </p>
+      </section>
     </div>
-
-    <article class="legal-card">
-      <h2>1. Qu'est-ce qu'un cookie ?</h2>
-      <p>
-        Un cookie ou traceur est un petit fichier texte déposé sur votre appareil (ordinateur, tablette, smartphone) lors de la consultation d'un site internet. Il permet de reconnaître votre navigateur et de mémoriser certaines préférences ou données d'authentification.
-      </p>
-
-      <h2>2. Les traceurs utilisés sur KeySystem</h2>
-      <p>
-        Nous distinguons deux catégories de traceurs :
-      </p>
-
-      <div class="legal-table-wrap">
-        <table class="legal-table">
-          <thead>
-            <tr>
-              <th>Nom du traceur</th>
-              <th>Émetteur</th>
-              <th>Type & Finalité</th>
-              <th>Durée de vie</th>
-              <th>Consentement</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>ks_admin</code></td>
-              <td>KeySystem (Interne)</td>
-              <td><strong>Strictement nécessaire :</strong> Maintien de la session d'administration Discord OAuth sécurisée (httpOnly, SameSite=Lax).</td>
-              <td>24 heures</td>
-              <td><span style="color:var(--color-ok);">Exempté</span> (Nécessaire)</td>
-            </tr>
-            <tr>
-              <td><code>keysystem_ref</code></td>
-              <td>KeySystem (Interne)</td>
-              <td><strong>Fonctionnel :</strong> Mémorisation de la référence de session locale du chargeur de clé.</td>
-              <td>Session locale</td>
-              <td><span style="color:var(--color-ok);">Exempté</span> (Fonctionnel)</td>
-            </tr>
-            <tr>
-              <td><code>ks_cookie_consent</code></td>
-              <td>KeySystem (Interne)</td>
-              <td><strong>Fonctionnel :</strong> Mémorisation de votre choix de consentement pour ne pas vous réinterroger à chaque page.</td>
-              <td>6 mois (CNIL)</td>
-              <td><span style="color:var(--color-ok);">Exempté</span></td>
-            </tr>
-            <tr>
-              <td><code>highrevenueformat.com</code></td>
-              <td>Régie publicitaire tierce</td>
-              <td><strong>Publicité & Mesure :</strong> Affichage de formats publicitaires rémunérateurs pour financer la gratuité du service.</td>
-              <td>Variable (tiers)</td>
-              <td><span style="color:var(--color-err);">Requis (Opt-in)</span></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <h2>3. Comment paramétrer ou modifier vos choix ?</h2>
-      <p>
-        Conformément aux recommandations de la CNIL :
-      </p>
-      <ul>
-        <li>Vous pouvez à tout moment <strong>accepter, refuser ou personnaliser</strong> vos choix de cookies.</li>
-        <li>Aucun cookie publicitaire n'est déposé avant que vous n'ayez cliqué sur « Tout accepter ».</li>
-        <li>Votre choix est conservé pour une durée maximale de <strong>6 mois</strong>. À l'issue de ce délai, le bandeau vous sera à nouveau proposé.</li>
-      </ul>
-
-      <div style="text-align: center; margin: 30px 0;">
-        <button type="button" class="ks-cookie-btn accept" onclick="openCookieSettings()" style="padding: 12px 24px; font-size: 15px;">
-          ⚙️ Ouvrir le panneau de gestion des cookies
-        </button>
-      </div>
-
-      <h2>4. Configuration dans votre navigateur</h2>
-      <p>
-        Vous pouvez également configurer votre navigateur pour bloquer systématiquement les cookies :
-      </p>
-      <ul>
-        <li><strong>Google Chrome :</strong> Paramètres > Confidentialité et sécurité > Cookies tiers.</li>
-        <li><strong>Mozilla Firefox :</strong> Paramètres > Vie privée et sécurité > Protection renforcée contre le pistage.</li>
-        <li><strong>Safari :</strong> Préférences > Confidentialité > Bloquer tous les cookies.</li>
-      </ul>
-    </article>
   </main>
 
+  <!-- Legal Footer -->
   <footer class="site-footer">
     <div class="footer-links">
-      <a href="/">Accueil</a>
-      <a href="/terms.html">Conditions d'Utilisation (CGU)</a>
-      <a href="/privacy.html">Confidentialité</a>
-      <a href="/cookies.html">Politique des Cookies</a>
-      <button type="button" onclick="openCookieSettings()">🍪 Gestion des cookies</button>
+      <a href="/">Home</a>
+      <a href="/terms">Terms of Service</a>
+      <a href="/privacy">Privacy Policy</a>
+      <a href="/cookies">Cookie Policy</a>
+      <button type="button" onclick="openCookieSettings()">🍪 Cookie Settings</button>
     </div>
-    <div>© 2026 KeySystem. Tous droits réservés.</div>
+    <div>© 2026 AUDIT HUB. All rights reserved. Independent service not affiliated with Roblox Corporation.</div>
   </footer>
 
   <script src="/cookie-consent.js"></script>

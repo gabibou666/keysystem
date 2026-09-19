@@ -1,164 +1,158 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Politique de Confidentialité | KeySystem</title>
-  <meta name="description" content="Politique de confidentialité et protection des données personnelles de KeySystem, conforme au Règlement Général sur la Protection des Données (RGPD) et aux recommandations de la CNIL.">
+  <title>Privacy Policy | AUDIT HUB</title>
+  <meta name="description" content="Privacy Policy and personal data protection for AUDIT HUB, strictly adhering to GDPR, CNIL guidelines, and international privacy standards.">
   <meta name="robots" content="index, follow">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/style.css">
 
-  <!-- Schema.org JSON-LD pour agents IA et moteurs de recherche -->
+  <!-- Schema.org JSON-LD for AI Agents and Search Engines -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "WebPage",
-    "name": "Politique de Confidentialité",
-    "description": "Politique de protection des données personnelles de KeySystem conforme RGPD.",
+    "name": "Privacy Policy",
+    "description": "Personal data protection policy of AUDIT HUB compliant with GDPR and CNIL standards.",
     "publisher": {
       "@type": "Organization",
-      "name": "KeySystem"
+      "name": "AUDIT HUB",
+      "url": "https://keysystem-vv8b.onrender.com"
     },
-    "inLanguage": "fr-FR",
+    "inLanguage": "en-US",
     "dateModified": "2026-09-19"
   }
   </script>
 </head>
 <body>
-  <a href="#content" class="skip-link">Aller au contenu principal</a>
-
-  <!-- Header Navigation -->
-  <header style="padding: 16px 24px; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; max-width: 1100px; margin: 0 auto;">
-    <a href="/" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #ffffff; font-weight: 700; font-size: 18px;">
-      <span style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #7c3aed, #c084fc); display: grid; place-items: center; font-size: 16px; box-shadow: 0 0 14px rgba(124, 58, 237, 0.4);">🔑</span>
-      KeySystem
+  <!-- Header / Navigation -->
+  <header class="legal-header">
+    <a href="/" class="legal-brand">
+      <div class="logo-shield" style="width:28px; height:28px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </div>
+      <span>AUDIT HUB</span>
     </a>
-    <nav style="display: flex; gap: 16px; font-size: 14px;">
-      <a href="/" style="color: var(--color-muted); text-decoration: none;">Accueil</a>
-      <a href="/getkey" style="color: var(--color-muted); text-decoration: none;">Obtenir une clé</a>
-      <a href="/terms.html" style="color: var(--color-muted); text-decoration: none;">CGU</a>
+    <nav class="legal-nav" aria-label="Main Navigation">
+      <a href="/">Home</a>
+      <a href="/terms">Terms of Service</a>
+      <a href="/cookies">Cookie Policy</a>
     </nav>
   </header>
 
   <!-- Main Content -->
-  <main id="content" class="legal-page">
-    <div class="legal-header">
-      <h1>Politique de Confidentialité</h1>
-      <div class="legal-meta">Dernière mise à jour : 19 septembre 2026 • Conforme au RGPD (Règlement UE 2016/679)</div>
+  <main class="legal-container">
+    <div class="legal-card">
+      <span class="legal-tag">GDPR & Data Protection</span>
+      <h1>Privacy Policy</h1>
+      <p class="legal-subtitle">Last updated: September 19, 2026 | Operator: <strong>AUDIT HUB</strong></p>
+
+      <section>
+        <h2>1. Commitment to Privacy & Data Minimization</h2>
+        <p>
+          At <strong>AUDIT HUB</strong>, we prioritize your privacy and strictly follow the principle of data minimization (Article 5.1.c of the General Data Protection Regulation - GDPR).
+          We only collect and process the minimum amount of technical data strictly necessary to deliver, protect, and maintain our services.
+        </p>
+      </section>
+
+      <section>
+        <h2>2. Data Collected & Processing Purposes</h2>
+        <p>Here is the exhaustive list of data collected through our service and their lawful bases:</p>
+        <div class="table-responsive">
+          <table class="legal-table">
+            <thead>
+              <tr>
+                <th>Data Category</th>
+                <th>Processing Purpose</th>
+                <th>Legal Basis</th>
+                <th>Retention Period</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>IP Address (Hashed)</strong></td>
+                <td>Rate limiting, anti-DDoS, session binding & fraud prevention</td>
+                <td>Legitimate interest (Art. 6.1.f GDPR)</td>
+                <td>Immediately pseudonymized via SHA-256; purged within 24 to 48 hours</td>
+              </tr>
+              <tr>
+                <td><strong>Temporary Access Keys</strong></td>
+                <td>Deliver access verification to authorized scripts</td>
+                <td>Contract performance (Art. 6.1.b GDPR)</td>
+                <td>Purged automatically upon expiration (up to 24 hours)</td>
+              </tr>
+              <tr>
+                <td><strong>Discord User ID & Tag</strong></td>
+                <td>Admin dashboard authentication via Discord OAuth2</td>
+                <td>Explicit consent (Art. 6.1.a GDPR)</td>
+                <td>Session duration; revokable at any time</td>
+              </tr>
+              <tr>
+                <td><strong>Cookie Consent Choices</strong></td>
+                <td>Store your preferences for cookie management</td>
+                <td>Legal obligation (Art. 6.1.c GDPR / CNIL)</td>
+                <td>6 months (stored locally in browser localStorage)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. Third-Party Services & Advertising</h2>
+        <p>
+          To maintain a free and accessible service, AUDIT HUB partners with third-party advertising networks (such as HighRevenueFormat) and monetization partners (LootLabs).
+        </p>
+        <p>
+          In full accordance with European regulations and CNIL guidelines:
+        </p>
+        <ul>
+          <li><strong>No advertising tracker is loaded</strong> without your prior, explicit consent.</li>
+          <li>You can refuse all non-essential trackers at any time with equal ease.</li>
+          <li>Third-party providers operate under their own independent privacy policies and data governance standards.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>4. Your Rights Under GDPR</h2>
+        <p>
+          Under Articles 15 to 22 of the GDPR, you have the following rights regarding your personal data:
+        </p>
+        <ul>
+          <li><strong>Right of access:</strong> You can request confirmation of whether personal data concerning you is being processed.</li>
+          <li><strong>Right to rectification:</strong> You can request the correction of inaccurate data.</li>
+          <li><strong>Right to erasure ("Right to be forgotten"):</strong> You can request the deletion of your personal data.</li>
+          <li><strong>Right to restriction and objection:</strong> You can object to or limit the processing of your data.</li>
+          <li><strong>Right to withdraw consent:</strong> You can withdraw your cookie consent at any moment via our Cookie Settings tool.</li>
+        </ul>
+        <p>
+          To exercise any of these rights, contact us via our official Discord community server or contact our team through the AUDIT HUB platform.
+        </p>
+      </section>
+
+      <section>
+        <h2>5. Security Measures</h2>
+        <p>
+          AUDIT HUB employs state-of-the-art security measures to protect your information, including HTTPS / TLS encryption, SHA-256 one-way cryptographic hashing for IP addresses, automated jail and rate-limiting anti-DDoS defenses, and secure session management.
+        </p>
+      </section>
     </div>
-
-    <article class="legal-card">
-      <h2>1. Introduction et Responsable du Traitement</h2>
-      <p>
-        La présente Politique de Confidentialité s'applique au service <strong>KeySystem</strong> (accessible via notre site web et nos interfaces applicatives). Nous accordons une importance primordiale à la protection de votre vie privée et au respect de la réglementation en vigueur, notamment le Règlement Général sur la Protection des Données (RGPD n° 2016/679) et la Loi Informatique et Libertés modifiée.
-      </p>
-      <p>
-        <strong>Responsable du traitement :</strong> L'éditeur du service KeySystem.<br>
-        <strong>Contact pour vos données personnelles :</strong> Via notre serveur Discord officiel ou par e-mail de support.
-      </p>
-
-      <h2>2. Données Personnelles Collectées</h2>
-      <p>
-        Dans le respect strict du <strong>principe de minimisation des données</strong> (Art. 5.1.c du RGPD), nous ne collectons que les informations strictement nécessaires à la délivrance des clés, à la sécurité du service et à la prévention des fraudes :
-      </p>
-      <div class="legal-table-wrap">
-        <table class="legal-table">
-          <thead>
-            <tr>
-              <th>Catégorie de donnée</th>
-              <th>Finalité</th>
-              <th>Base Légale</th>
-              <th>Durée de conservation</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>Adresse IP</strong></td>
-              <td>Sécurité anti-DDoS, détection des attaques par force brute, validation anti-bypass</td>
-              <td>Intérêt Légitime (Art. 6.1.f RGPD)</td>
-              <td>30 jours (purge automatique récurrente)</td>
-            </tr>
-            <tr>
-              <td><strong>Identifiant Roblox (UserId)</strong></td>
-              <td>Liaison de la clé de licence au compte du joueur pour empêcher le vol de clé</td>
-              <td>Exécution du Service (Art. 6.1.b RGPD)</td>
-              <td>Durée de validité de la clé (12h/24h)</td>
-            </tr>
-            <tr>
-              <td><strong>Identifiant Matériel (HWID / ClientId)</strong></td>
-              <td>Vérification que la clé n'est pas partagée simultanément sur plusieurs appareils</td>
-              <td>Intérêt Légitime (Art. 6.1.f RGPD)</td>
-              <td>Durée de validité de la clé</td>
-            </tr>
-            <tr>
-              <td><strong>Nom de l'exécuteur Luau</strong></td>
-              <td>Télémétrie technique et diagnostics d'erreurs pour compatibilité de script</td>
-              <td>Intérêt Légitime (Art. 6.1.f RGPD)</td>
-              <td>90 jours maximum</td>
-            </tr>
-            <tr>
-              <td><strong>Identifiant Discord (si connecté)</strong></td>
-              <td>Accès au panneau d'administration pour les administrateurs autorisés</td>
-              <td>Exécution du Service (Art. 6.1.b RGPD)</td>
-              <td>Durée de la session (24 heures)</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <h2>3. Cookies et Traceurs Tiers</h2>
-      <p>
-        Notre site utilise deux types de technologies de stockage :
-      </p>
-      <ul>
-        <li><strong>Traceurs strictement nécessaires :</strong> Le cookie de session administrateur <code>ks_admin</code> et le stockage local <code>keysystem_ref</code> indispensable au fonctionnement technique. Ceux-ci sont exemptés de consentement.</li>
-        <li><strong>Traceurs publicitaires tiers :</strong> Fournis par nos régies partenaires (ex: HighRevenueFormat / LootLabs) afin de maintenir l'accès au service gratuit. <strong>Ces traceurs ne sont chargés qu'après votre consentement exprès et préalable</strong> via notre bandeau de cookies.</li>
-      </ul>
-      <p>
-        Pour en savoir plus et paramétrer vos choix à tout moment, consultez notre <a href="/cookies.html" style="color:var(--color-glow);text-decoration:underline;">Politique relative aux Cookies</a>.
-      </p>
-
-      <h2>4. Destinataires et Transferts de Données</h2>
-      <p>
-        Vos données ne sont <strong>jamais vendues, louées ou commercialisées</strong>. Elles ne sont partagées qu'avec nos sous-traitants techniques indispensables :
-      </p>
-      <ul>
-        <li><strong>Hébergement serveur :</strong> Render.com (hébergement applicatif sécurisé).</li>
-        <li><strong>Base de données :</strong> Neon.tech (infrastructure Postgres managée avec chiffrement au repos et en transit SSL/TLS).</li>
-        <li><strong>Régie publicitaire (si consentement accordé) :</strong> LootLabs et partenaires adtech pour la validation des checkpoints.</li>
-      </ul>
-
-      <h2>5. Vos Droits Informatique et Libertés</h2>
-      <p>
-        Conformément aux articles 15 à 22 du RGPD, vous disposez des droits suivants sur vos données personnelles :
-      </p>
-      <ul>
-        <li><strong>Droit d'accès :</strong> Obtenir la confirmation que vos données sont traitées et en recevoir une copie.</li>
-        <li><strong>Droit de rectification :</strong> Corriger des données inexactes ou incomplètes.</li>
-        <li><strong>Droit à l'effacement (« droit à l'oubli ») :</strong> Demander la suppression de vos données lorsqu'elles ne sont plus nécessaires.</li>
-        <li><strong>Droit à la limitation du traitement :</strong> Geler temporairement l'utilisation de certaines données.</li>
-        <li><strong>Droit d'opposition :</strong> Vous opposer à tout moment au traitement de vos données fondé sur l'intérêt légitime.</li>
-        <li><strong>Droit de réclamation :</strong> Si vous estimez que vos droits ne sont pas respectés, vous pouvez déposer une plainte auprès de la <strong>CNIL</strong> (Commission Nationale de l'Informatique et des Libertés - <a href="https://www.cnil.fr" target="_blank" rel="noopener" style="color:var(--color-glow);">www.cnil.fr</a>).</li>
-      </ul>
-
-      <h2>6. Sécurité des Données</h2>
-      <p>
-        Nous mettons en œuvre des mesures techniques et organisationnelles robustes : chiffrement systématique des communications via HTTPS (TLS 1.3), pare-feu applicatif anti-DDoS avec détection automatique des attaques, hachage cryptographique HMAC-SHA256 des signatures de clés, et purge automatique des données expirées.
-      </p>
-    </article>
   </main>
 
-  <!-- Footer -->
+  <!-- Legal Footer -->
   <footer class="site-footer">
     <div class="footer-links">
-      <a href="/">Accueil</a>
-      <a href="/terms.html">Conditions d'Utilisation (CGU)</a>
-      <a href="/privacy.html">Confidentialité</a>
-      <a href="/cookies.html">Politique des Cookies</a>
-      <button type="button" onclick="openCookieSettings()">🍪 Gestion des cookies</button>
+      <a href="/">Home</a>
+      <a href="/terms">Terms of Service</a>
+      <a href="/privacy">Privacy Policy</a>
+      <a href="/cookies">Cookie Policy</a>
+      <button type="button" onclick="openCookieSettings()">🍪 Cookie Settings</button>
     </div>
-    <div>© 2026 KeySystem. Tous droits réservés. Service indépendant non affilié à Roblox Corporation.</div>
+    <div>© 2026 AUDIT HUB. All rights reserved. Independent service not affiliated with Roblox Corporation.</div>
   </footer>
 
   <script src="/cookie-consent.js"></script>
