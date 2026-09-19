@@ -967,4 +967,93 @@ router.post('/users/:discordId/reset-limit', requireAdmin, async (req, res) => {
   }
 });
 
+
+// ============================================================================
+//  DISCORD BOT MANAGEMENT ROUTES
+// ============================================================================
+
+const BOT_API_URL = process.env.DISCORD_BOT_API_URL || 'http://localhost:5000';
+const BOT_API_SECRET = process.env.DISCORD_BOT_API_SECRET || 'ks_discord_bot_secret_2026';
+
+async function callBotApi(endpoint, method = 'GET', body = null) {
+  const url = `${BOT_API_URL.replace(/\/$/, '')}${endpoint}`;
+  const options = {
+    method,
+    headers: {
+      'Authorization': `Bearer ${BOT_API_SECRET}`,
+      'Content-Type': 'application/json',
+    },
+    signal: AbortSignal.timeout(6000),
+  };
+  if (body && method !== 'GET') {
+    options.body = JSON.stringify(body);
+  }
+  const res = await fetch(url, options);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || `Bot API returned ${res.status}`);
+  }
+  return data;
+}
+
+router.get('/bot/status', requireAdmin, async (req, res) => {
+  try {
+    const data = await callBotApi('/api/status');
+    res.json({ success: true, data });
+  } catch (e) {
+    console.error('[admin/bot/status]', e.message);
+    res.json({
+      success: false,
+      offline: true,
+      error: 'Le bot Discord est hors-ligne ou injoignable.',
+      details: e.message,
+    });
+  }
+});
+
+router.get('/bot/guilds/:guildId/settings', requireAdmin, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    const data = await callBotApi(`/api/guilds/${guildId}/settings`);
+    res.json(data);
+  } catch (e) {
+    console.error('[admin/bot/settings GET]', e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+router.post('/bot/guilds/:guildId/settings', requireAdmin, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    const data = await callBotApi(`/api/guilds/${guildId}/settings`, 'POST', req.body);
+    res.json(data);
+  } catch (e) {
+    console.error('[admin/bot/settings POST]', e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+router.post('/bot/guilds/:guildId/send-message', requireAdmin, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    const data = await callBotApi(`/api/guilds/${guildId}/send-message`, 'POST', req.body);
+    res.json(data);
+  } catch (e) {
+    console.error('[admin/bot/send-message]', e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+router.post('/bot/guilds/:guildId/deploy-panel', requireAdmin, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    const data = await callBotApi(`/api/guilds/${guildId}/deploy-panel`, 'POST', req.body);
+    res.json(data);
+  } catch (e) {
+    console.error('[admin/bot/deploy-panel]', e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 module.exports = router;
+
