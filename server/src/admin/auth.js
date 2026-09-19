@@ -1,6 +1,32 @@
 // Session admin via Discord OAuth2 - allowlist stricte d'IDs
 const crypto = require('../services/crypto');
 const pool = require('../db');
+const nodeCrypto = require('crypto');
+
+// Etat anti-CSRF signe (10 min de validite)
+function signState() {
+  const exp = Date.now() + 10 * 60 * 1000;
+  const sig = nodeCrypto
+    .createHmac('sha256', process.env.HMAC_SECRET || 'dev-secret')
+    .update(String(exp))
+    .digest('hex')
+    .slice(0, 16);
+  return `${exp}.${sig}`;
+}
+
+function verifyState(state) {
+  if (!state) return false;
+  const [exp, sig] = state.split('.');
+  if (!exp || !sig) return false;
+  if (parseInt(exp, 10) < Date.now()) return false;
+  const expected = nodeCrypto
+    .createHmac('sha256', process.env.HMAC_SECRET || 'dev-secret')
+    .update(exp)
+    .digest('hex')
+    .slice(0, 16);
+  return sig === expected;
+}
+
 
 const SESSION_DURATION_MS = 24 * 60 * 60 * 1000;
 
@@ -12,11 +38,13 @@ function getAdminIds() {
 }
 
 async function getLoginUrl(redirectUri) {
+  const state = signState();
   const params = new URLSearchParams({
     client_id: process.env.DISCORD_CLIENT_ID,
     redirect_uri: redirectUri,
     response_type: 'code',
     scope: 'identify',
+    state,
   });
   return `https://discord.com/api/oauth2/authorize?${params}`;
 }
@@ -76,6 +104,8 @@ async function destroySession(req) {
 }
 
 module.exports = {
+  signState,
+  verifyState,
   getAdminIds,
   getLoginUrl,
   exchangeCode,

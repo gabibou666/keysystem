@@ -29,8 +29,11 @@ router.get('/auth/login', (req, res) => {
 
 router.get('/auth/callback', async (req, res) => {
   try {
-    const { code } = req.query;
+    const { code, state } = req.query;
     if (!code) return res.status(400).send('code manquant');
+    if (!auth.verifyState(state)) {
+      return res.status(403).send('Session expirée ou requête invalide (erreur anti-CSRF). Veuillez réessayer de vous connecter.');
+    }
     const tokenData = await auth.exchangeCode(code, adminRedirectUri(req));
     const user = await auth.fetchDiscordUser(tokenData.access_token);
     if (!auth.getAdminIds().includes(user.id)) {
