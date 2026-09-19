@@ -213,7 +213,7 @@
     setTimeout(function () { s.remove(); }, 600);
   });
 
-  /* ---------- 7. Magnetic buttons + 3D tilt (delegation mouseover) ---------- */
+  /* ---------- 7. Magnetic buttons, 3D tilt & Spotlight Glow ---------- */
   function bindFx(el) {
     if (el.dataset.ksFx) return;
     el.dataset.ksFx = '1';
@@ -228,6 +228,15 @@
       el.addEventListener('mouseleave', function () {
         el.style.transform = '';
       });
+    }
+
+    /* Spotlight follower sur toutes les surfaces interactives */
+    if (!isTouch && (el.classList.contains('card') || el.classList.contains('step-card') || el.classList.contains('exec-card') || el.classList.contains('stat') || el.classList.contains('hub-card') || el.classList.contains('hero-terminal') || el.classList.contains('ad-banner') || el.classList.contains('game-card'))) {
+      el.addEventListener('mousemove', function (e) {
+        var r = el.getBoundingClientRect();
+        el.style.setProperty('--mouse-x', (e.clientX - r.left) + 'px');
+        el.style.setProperty('--mouse-y', (e.clientY - r.top) + 'px');
+      }, { passive: true });
     }
 
     if ((el.classList.contains('game-card') || el.classList.contains('card')) && !isTouch) {
@@ -245,12 +254,13 @@
     }
   }
 
+  var spotlightSelector = '.btn, .game-card, .card, .step-card, .exec-card, .stat, .hub-card, .hero-terminal, .ad-banner';
   document.addEventListener('mouseover', function (e) {
-    var t = e.target && e.target.closest ? e.target.closest('.btn, .game-card, .card') : null;
+    var t = e.target && e.target.closest ? e.target.closest(spotlightSelector) : null;
     if (t) bindFx(t);
   }, { passive: true });
   /* bind initial statiques */
-  var init = document.querySelectorAll('.btn, .game-card, .card');
+  var init = document.querySelectorAll(spotlightSelector);
   for (var k = 0; k < init.length; k++) bindFx(init[k]);
 
   /* ---------- 8. View Transitions: navigation interne fluide ----------

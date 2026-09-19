@@ -12,7 +12,15 @@
 </head>
 <body>
 <nav>
-  <div class="logo"><div class="logo-badge">🔑</div> AUDIT HUB</div>
+  <div class="logo">
+    <div class="logo-badge">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L3 7V12C3 17.52 6.84 22.5 12 23.8C17.16 22.5 21 17.52 21 12V7L12 2Z" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="rgba(255,255,255,0.12)"/>
+        <path d="M12 6.8L7.2 16.5H9.4L10.5 14.3H13.5L14.6 16.5H16.8L12 6.8ZM11.1 12.5L12 10.2L12.9 12.5H11.1Z" fill="#ffffff"/>
+      </svg>
+    </div>
+    AUDIT HUB
+  </div>
   <div class="links" id="navLinks">
     <a href="/getkey">Get a key</a>
     <a href="/robux">Pay with Robux</a>
@@ -31,10 +39,34 @@
     <p style="font-size: 20px; font-weight: 600; color: #e9d5ff; margin-top: 14px; margin-bottom: 6px;">The gateway to your script</p>
     <p style="margin-top: 0;">One key, one short link, and your script executes instantly — on any executor, for any supported game.</p>
     <div class="actions">
-      <a class="btn pulse" href="/getkey">🔑 Get a Free Key</a>
+      <a class="btn pulse shimmer" href="/getkey">🔑 Get a Free Key</a>
       <a class="btn secondary" href="/robux">💎 Pay with Robux</a>
     </div>
-    <div class="live-ticker-wrap reveal d1">
+
+    <!-- MOCKUP TERMINAL INTERACTIF -->
+    <div class="hero-terminal reveal d1" id="heroTerminal">
+      <div class="terminal-header">
+        <div class="terminal-dots">
+          <span class="dot-red"></span>
+          <span class="dot-yellow"></span>
+          <span class="dot-green"></span>
+        </div>
+        <div class="terminal-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6M12 19h8"/></svg>
+          <span>audit-hub ~ universal-loader.luau</span>
+        </div>
+        <button class="terminal-copy-btn" id="heroCopyBtn" onclick="copyHeroLoader()" title="Copy script">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <span id="heroCopyText">Copy</span>
+        </button>
+      </div>
+      <div class="terminal-body">
+        <pre class="terminal-code"><code id="heroTerminalCode"><span class="code-comment">-- AUDIT HUB Universal Script Loader</span>
+<span class="code-keyword">loadstring</span>(game:<span class="code-fn">HttpGet</span>(<span class="code-str">"https://audithub.org/api/v1/loader"</span>))()</code></pre>
+      </div>
+    </div>
+
+    <div class="live-ticker-wrap reveal d1" style="margin-top: 30px;">
       <div class="ticker-bar" id="socialTickerBar">
         <div class="ticker-inner">
           <span class="ticker-pulse"></span>
@@ -48,18 +80,23 @@
   <!-- UNIFIED STATS STRIP -->
   <section class="stats">
     <div class="stat reveal live">
+      <div class="stat-icon-wrap stat-icon-purple">⚡</div>
       <div class="num" id="execCount">…</div>
       <div class="lbl">executions</div>
       <span id="trustExecs" class="hidden"></span>
     </div>
     <div class="stat reveal d1">
+      <div class="stat-icon-wrap stat-icon-cyan">👥</div>
       <div class="num" id="userCount">…</div>
-      <div class="lbl">users</div>
+      <div class="lbl">active users</div>
       <span id="trustUsers" class="hidden"></span>
     </div>
     <div class="stat reveal d2">
-      <div class="num" id="uptime">24/7</div>
-      <div class="lbl">uptime</div>
+      <div class="stat-icon-wrap stat-icon-green">
+        <span class="stat-pulse-dot"></span>
+      </div>
+      <div class="num" id="uptime">99.9%</div>
+      <div class="lbl">uptime (24/7)</div>
     </div>
   </section>
 
@@ -714,6 +751,27 @@ function copyLoader() {
   setStatus(currentScriptMode === 'std' ? 'Loader copied!' : 'Auto-Key script copied!', 'ok');
   if (window.showToast) showToast(currentScriptMode === 'std' ? '📋 Loader copied to clipboard!' : '⚡ Auto-Key script copied!');
   flashCopied(document.getElementById('loaderCardBtn'), currentScriptMode === 'std' ? '📋 Copy Loader Script' : '⚡ Copy Auto-Key Script');
+}
+
+function copyHeroLoader() {
+  const code = `loadstring(game:HttpGet("${location.origin}/api/v1/loader"))()`;
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = document.getElementById('heroCopyBtn');
+    const txt = document.getElementById('heroCopyText');
+    if (txt) txt.textContent = 'Copied ✓';
+    if (btn) btn.classList.add('copied');
+    if (window.showToast) showToast('📋 Loader copied to clipboard!');
+    setTimeout(() => {
+      if (txt) txt.textContent = 'Copy';
+      if (btn) btn.classList.remove('copied');
+    }, 1500);
+  });
+}
+
+// Initialise le code du terminal hero avec le bon origin
+const heroCodeEl = document.getElementById('heroTerminalCode');
+if (heroCodeEl) {
+  heroCodeEl.innerHTML = `<span class="code-comment">-- AUDIT HUB Universal Script Loader</span>\n<span class="code-keyword">loadstring</span>(game:<span class="code-fn">HttpGet</span>(<span class="code-str">"${location.origin}/api/v1/loader"</span>))()`;
 }
 
 updateLoaderSnippet();
