@@ -1180,7 +1180,7 @@ async function loadUsers() {
       return `<tr>
         <td>
           <div style="display:flex; align-items:center; gap:10px;">
-            <img src="${avatarUrl}" style="width:32px; height:32px; border-radius:50%; object-fit:cover; border:1px solid var(--admin-border);" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'" />
+            <img src="${avatarUrl}" alt="User Avatar" style="width:32px; height:32px; border-radius:50%; object-fit:cover; border:1px solid var(--admin-border);" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'" />
             <b>${esc(u.username || 'Inconnu')}</b>
           </div>
         </td>
@@ -1318,7 +1318,7 @@ async function loadGameStatuses() {
       return `<tr>
         <td>
           <div style="display:flex; align-items:center; gap:10px;">
-            ${g.iconUrl ? `<img src="${g.iconUrl}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;">` : '🎮'}
+            ${g.iconUrl ? `<img src="${g.iconUrl}" alt="${g.name} server icon" style="width:28px;height:28px;border-radius:6px;object-fit:cover;">` : '🎮'}
             <b>${esc(g.name)}</b>
           </div>
         </td>

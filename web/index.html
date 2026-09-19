@@ -103,8 +103,8 @@
   <!-- AD: Leaderboard 728x90 -->
   <div class="ad-banner leaderboard" id="ad-leaderboard-home-2">
     <script>atOptions = { key: '77389bd3deefc49e2ab9e702f1a05cbb', format: 'iframe', height: 90, width: 728, params: {} };</script>
-    <script src="https://www.highrevenueformat.com/77389bd3deefc49e2ab9e702f1a05cbb/invoke.js"></script>
-  </div>
+    <!-- Ad script managed conditionally by cookie-consent.js -->
+</div>
 
   <!-- HOW IT WORKS (Logical Order) -->
   <div class="steps-section" id="howItWorks">
@@ -300,8 +300,8 @@
   <!-- AD: In-content 728x90 -->
   <div class="ad-banner in-content" id="ad-content-home">
     <script>atOptions = { key: '77389bd3deefc49e2ab9e702f1a05cbb', format: 'iframe', height: 90, width: 728, params: {} };</script>
-    <script src="https://www.highrevenueformat.com/77389bd3deefc49e2ab9e702f1a05cbb/invoke.js"></script>
-  </div>
+    <!-- Ad script managed conditionally by cookie-consent.js -->
+</div>
 
   <!-- Supported games -->
   <div class="games-head" id="games">
@@ -332,8 +332,8 @@
   <!-- AD: Leaderboard 728x90 -->
   <div class="ad-banner leaderboard" id="ad-leaderboard-home">
     <script>atOptions = { key: '77389bd3deefc49e2ab9e702f1a05cbb', format: 'iframe', height: 90, width: 728, params: {} };</script>
-    <script src="https://www.highrevenueformat.com/77389bd3deefc49e2ab9e702f1a05cbb/invoke.js"></script>
-  </div>
+    <!-- Ad script managed conditionally by cookie-consent.js -->
+</div>
 
   <!-- Live activity -->
   <div class="activity-head" id="activity">
@@ -572,7 +572,7 @@ function renderGames() {
     }
     return `
     <div class="game-card" style="animation-delay: ${i * 0.05}s">
-      <div class="g-icon">${g.iconUrl ? `<img src="${g.iconUrl}" alt="" loading="lazy">` : '🎮'}</div>
+      <div class="g-icon">${g.iconUrl ? `<img src="${g.iconUrl}" alt="${g.name} game icon" loading="lazy">` : '🎮'}</div>
       <div class="g-body">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
           <div class="g-name" title="${g.name.replace(/"/g, '&quot;')}">${g.name.replace(/</g, '&lt;')}</div>

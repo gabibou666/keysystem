@@ -124,7 +124,12 @@ app.get('/getkey/callback', (req, res) => {
 });
 
 // Page paiement Robux
-app.get('/robux/', (req, res) => {
+  // Legal pages
+  app.get(['/privacy', '/privacy/'], (req, res) => res.sendFile(path.join(webDir, 'privacy.html')));
+  app.get(['/terms', '/terms/'], (req, res) => res.sendFile(path.join(webDir, 'terms.html')));
+  app.get(['/cookies', '/cookies/'], (req, res) => res.sendFile(path.join(webDir, 'cookies.html')));
+
+  app.get('/robux/', (req, res) => {
   res.sendFile(path.join(webDir, 'robux.html'));
 });
 
