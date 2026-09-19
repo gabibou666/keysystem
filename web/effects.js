@@ -259,15 +259,109 @@
      Sans support -> navigation normale, aucun changement. */
   if (document.startViewTransition && !reduced) {
     document.addEventListener('click', function (e) {
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) return;
       var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
       if (!a) return;
       var href = a.getAttribute('href') || '';
-      // interne seulement, pas d'ancre pure ni de nouvelle fenetre
-      if (!href || href.startsWith('#') || href.startsWith('http') || href.startsWith('mailto') || a.target === '_blank') return;
+      // interne seulement, pas d'ancre pure, pas d'api ni de nouvelle fenetre
+      if (!href || href.startsWith('#') || href.startsWith('http') || href.startsWith('mailto') || href.startsWith('//') || href.startsWith('/api/') || a.target === '_blank' || a.hasAttribute('download')) return;
       e.preventDefault();
       document.startViewTransition(function () {
         location.assign(href);
       });
     });
   }
+
+  /* ---------- 9. Neon Confetti Celebration Engine (0-dep native canvas) ---------- */
+  window.launchConfetti = function () {
+    if (reduced) return;
+    var canvas = document.createElement('canvas');
+    canvas.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:99999;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width = window.innerWidth;
+    var h = canvas.height = window.innerHeight;
+
+    var colors = ['#c084fc', '#a855f7', '#34d399', '#38bdf8', '#fbbf24', '#f472b6', '#ffffff'];
+    var confettis = [];
+    var count = Math.min(110, Math.floor(w / 10));
+
+    for (var i = 0; i < count; i++) {
+      confettis.push({
+        x: w * (0.2 + Math.random() * 0.6),
+        y: h * 0.4 + (Math.random() - 0.5) * 80,
+        vx: (Math.random() - 0.5) * 16,
+        vy: -Math.random() * 15 - 5,
+        size: Math.random() * 8 + 4,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rotation: Math.random() * 360,
+        rotSpeed: (Math.random() - 0.5) * 14,
+        opacity: 1,
+        decay: Math.random() * 0.012 + 0.009,
+      });
+    }
+
+    var start = performance.now();
+    function animate(now) {
+      ctx.clearRect(0, 0, w, h);
+      var alive = false;
+      for (var i = 0; i < confettis.length; i++) {
+        var c = confettis[i];
+        if (c.opacity <= 0) continue;
+        alive = true;
+        c.x += c.vx;
+        c.y += c.vy;
+        c.vy += 0.38; // gravity
+        c.vx *= 0.985;
+        c.rotation += c.rotSpeed;
+        c.opacity -= c.decay;
+
+        ctx.save();
+        ctx.translate(c.x, c.y);
+        ctx.rotate((c.rotation * Math.PI) / 180);
+        ctx.globalAlpha = Math.max(0, c.opacity);
+        ctx.fillStyle = c.color;
+        ctx.shadowColor = c.color;
+        ctx.shadowBlur = 8;
+        ctx.fillRect(-c.size / 2, -c.size / 2, c.size, c.size * 0.65);
+        ctx.restore();
+      }
+
+      if (alive && now - start < 4500) {
+        requestAnimationFrame(animate);
+      } else {
+        canvas.remove();
+      }
+    }
+    requestAnimationFrame(animate);
+  };
+
+  /* ---------- 10. Live Social-Proof Activity Stream ---------- */
+  window.startSocialTicker = function (containerEl) {
+    if (!containerEl) return;
+    var events = [
+      { icon: '⚡', text: '12h key activated on Delta (Mobile)', time: '30s ago' },
+      { icon: '🎮', text: 'Script executed for Blox Fruits', time: '1m ago' },
+      { icon: '💎', text: 'Lifetime VIP key unlocked via Robux', time: '2m ago' },
+      { icon: '⚡', text: '24h key activated on Wave (PC)', time: '2m ago' },
+      { icon: '🛡️', text: 'Auto-Save enabled on Codex (iOS)', time: '4m ago' },
+      { icon: '🎮', text: 'Script loaded for Blade Ball (Safe)', time: '5m ago' },
+      { icon: '⚡', text: '24h key renewed on MacSploit (macOS)', time: '6m ago' },
+      { icon: '🎁', text: 'Referral reward: Free 24h VIP key claimed', time: '8m ago' },
+    ];
+    var index = 0;
+    function showNext() {
+      var ev = events[index % events.length];
+      index++;
+      containerEl.innerHTML =
+        '<div class="ticker-inner">' +
+        '<span class="ticker-pulse"></span>' +
+        '<span class="ticker-icon">' + ev.icon + '</span>' +
+        '<span class="ticker-text">' + ev.text + '</span>' +
+        '<span class="ticker-time">' + ev.time + '</span>' +
+        '</div>';
+    }
+    showNext();
+    setInterval(showNext, 4500);
+  };
 })();

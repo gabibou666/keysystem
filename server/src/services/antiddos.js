@@ -181,10 +181,25 @@ setInterval(() => {
 }, 5 * 60 * 1000).unref();
 
 function getStats() {
+  const now = Date.now();
+  const jailedList = [];
+  for (const [ip, info] of jailedIPs.entries()) {
+    if (now < info.jailUntil) {
+      jailedList.push({
+        ip,
+        jailUntil: info.jailUntil,
+        remainingSec: Math.max(0, Math.ceil((info.jailUntil - now) / 1000)),
+        peakCount: info.peakCount || 0,
+        targetPath: info.targetPath || 'N/A',
+        userAgent: info.userAgent || 'N/A',
+      });
+    }
+  }
   return {
     totalBlockedAttacks,
     currentJailedCount: jailedIPs.size,
     currentlyTrackedIPs: trackedIPs.size,
+    jailedList,
   };
 }
 

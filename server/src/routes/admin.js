@@ -5,6 +5,7 @@ const auth = require('../admin/auth');
 const { runPipeline, rebuildWithPatches } = require('../compat/pipeline');
 const { decryptAES, encryptAES } = require('../services/crypto');
 const { notifyDiscord } = require('../services/notify');
+const { getGameInfo } = require('../services/roblox');
 const robuxOffers = require('../services/robux');
 
 const router = express.Router();
@@ -273,14 +274,107 @@ router.get('/script/versions', requireAdmin, async (req, res) => {
   res.json({ success: true, versions: rows });
 });
 
-// Liste des scripts publiés par jeu (pour le loader: quel PlaceId a un script actif)
+// Liste des scripts publiés par jeu + leur statut (Safe / Undetected / Updating)
 router.get('/script/games', requireAdmin, async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT place_id, MAX(version) AS version, MAX(published_at) AS published_at
-     FROM script_builds WHERE active = true AND place_id IS NOT NULL
-     GROUP BY place_id ORDER BY place_id`
-  );
-  res.json({ success: true, games: rows });
+  try {
+    const { rows } = await pool.query(
+      `SELECT b.place_id, MAX(b.version) AS version, MAX(v.published_at) AS published_at,
+              COALESCE(gs.status, 'safe') AS status,
+              gs.note AS status_note,
+              gs.updated_at AS status_updated_at
+       FROM script_builds b
+       LEFT JOIN script_versions v ON v.id = b.version_id
+       LEFT JOIN game_statuses gs ON gs.place_id = b.place_id
+       WHERE b.active = true AND b.place_id IS NOT NULL
+       GROUP BY b.place_id, gs.status, gs.note, gs.updated_at
+       ORDER BY b.place_id`
+    );
+
+    // Récupérer aussi les jeux configurés manuellement dans game_statuses même sans build
+    const explicitStatus = await pool.query(
+      `SELECT gs.place_id, gs.status, gs.note AS status_note, gs.updated_at AS status_updated_at
+       FROM game_statuses gs`
+    );
+
+    const map = new Map();
+    for (const r of rows) {
+      map.set(String(r.place_id), r);
+    }
+    for (const s of explicitStatus.rows) {
+      if (!map.has(String(s.place_id))) {
+        map.set(String(s.place_id), {
+          place_id: s.place_id,
+          version: null,
+          published_at: null,
+          status: s.status,
+          status_note: s.status_note,
+          status_updated_at: s.status_updated_at,
+        });
+      }
+    }
+
+    const games = await Promise.all(
+      Array.from(map.values()).map(async (r) => {
+        const info = await getGameInfo(r.place_id).catch(() => null);
+        return {
+          placeId: parseInt(r.place_id, 10),
+          version: r.version ? parseInt(r.version, 10) : null,
+          publishedAt: r.published_at,
+          status: r.status || 'safe',
+          statusNote: r.status_note || '',
+          statusUpdatedAt: r.status_updated_at || null,
+          name: info ? info.name : `Game ${r.place_id}`,
+          iconUrl: info ? info.iconUrl : null,
+          playing: info ? info.playing : null,
+          visits: info && info.visits != null ? parseInt(info.visits, 10) : null,
+        };
+      })
+    );
+
+    res.json({ success: true, games });
+  } catch (e) {
+    console.error('[admin/script/games]', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Mettre a jour le statut d'un jeu (safe | updating | detected)
+router.post('/script/game-status', requireAdmin, async (req, res) => {
+  try {
+    const placeId = parseInt(req.body?.placeId, 10);
+    const status = String(req.body?.status || 'safe').toLowerCase();
+    const note = (req.body?.note || '').slice(0, 255);
+
+    if (!Number.isFinite(placeId) || placeId <= 0) {
+      return res.status(400).json({ success: false, error: 'PlaceId invalide' });
+    }
+    if (!['safe', 'updating', 'detected'].includes(status)) {
+      return res.status(400).json({ success: false, error: 'Statut invalide (safe, updating, detected)' });
+    }
+
+    await pool.query(
+      `INSERT INTO game_statuses (place_id, status, note, updated_at)
+       VALUES ($1, $2, $3, now())
+       ON CONFLICT (place_id) DO UPDATE SET status = $2, note = $3, updated_at = now()`,
+      [placeId, status, note]
+    );
+
+    if (notifyDiscord) {
+      const statusLabels = {
+        safe: '🟢 Undetected (Safe)',
+        updating: '🟡 Updating (Mise à jour)',
+        detected: '🔴 Detected (Risque / Maintenance)',
+      };
+      notifyDiscord(
+        `🎮 **Statut de script modifié**\nPlaceId: \`${placeId}\`\nNouveau statut: **${statusLabels[status] || status}**${note ? `\nNote: _${note}_` : ''}`
+      ).catch(() => {});
+    }
+
+    res.json({ success: true, placeId, status, note });
+  } catch (e) {
+    console.error('[admin/script/game-status]', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // Sauvegarder une nouvelle version (brouillon) + pipeline complet
@@ -731,11 +825,32 @@ router.get('/robux-stats', requireAdmin, async (req, res) => {
 
 // ---------- CHANGELOG (public data pour la page /changelog) ----------
 router.get('/changelog', async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT version, note, created_at, published FROM script_versions
-     WHERE published = true AND note <> '' ORDER BY version DESC LIMIT 50`
-  );
-  res.json({ success: true, versions: rows });
+  try {
+    const { rows } = await pool.query(
+      `SELECT version, note, created_at, published, place_id FROM script_versions
+       WHERE published = true AND note <> '' ORDER BY version DESC LIMIT 50`
+    );
+    const versions = await Promise.all(
+      rows.map(async (v) => {
+        let gameName = null;
+        if (v.place_id) {
+          const info = await getGameInfo(v.place_id).catch(() => null);
+          gameName = info ? info.name : `Game ${v.place_id}`;
+        }
+        return {
+          version: v.version,
+          note: v.note,
+          created_at: v.created_at,
+          published: v.published,
+          placeId: v.place_id ? parseInt(v.place_id, 10) : null,
+          gameName,
+        };
+      })
+    );
+    res.json({ success: true, versions });
+  } catch (e) {
+    res.json({ success: true, versions: [] });
+  }
 });
 
 // ---------- ANTI-DDOS (Gestion et Statistiques) ----------

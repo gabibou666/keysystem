@@ -276,6 +276,21 @@ local function performCheck(key)
         return false, "This key is bound to another PC/device."
     elseif data.reason == "revoked" then
         return false, "Key revoked by the administrator."
+    elseif data.reason == "not_in_discord" then
+        local invite = data.discordInvite or "https://discord.gg/2ZT28kXZR"
+        pcall(function()
+            if setclipboard then
+                setclipboard(invite)
+                notify("🔑 Discord Required", "You left our Discord! Rejoin to use your key (link copied to clipboard).", 10)
+            else
+                notify("🔑 Discord Required", "Rejoin our Discord: " .. invite, 15)
+            end
+        end)
+        return false, "⚠️ You left our Discord server!\nRejoin to use your key (link copied to clipboard):\n" .. invite
+    elseif data.reason == "script_updating" then
+        return false, "⏳ Script updating for this game!\n" .. tostring(data.message or "Check website/Discord for updates.")
+    elseif data.reason == "script_detected" then
+        return false, "🛡️ Script temporarily paused (security/detection risk)!\n" .. tostring(data.message or "Check website/Discord for updates.")
     elseif data.reason == "no_script" then
         return false, "No script published for this game yet — try again later."
     elseif data.reason == "invalid_key" then

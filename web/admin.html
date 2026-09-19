@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KeySystem — Admin</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="shortcut icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/favicon.png">
 <link rel="stylesheet" href="/style.css">
 <style>
 /* Admin-specific overrides — inherits the full theme from style.css */
@@ -487,11 +491,100 @@ body { background: var(--admin-bg); color: var(--admin-text); min-height: 100vh;
       </table>
     </div>
   </div>
+
+  <!-- Anti-DDoS IP Jail Panel -->
+  <div class="admin-panel fade-up fade-up-d2" style="margin-top: 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom: 14px;">
+      <div>
+        <h3 style="margin:0;"><span class="icon">🛡️</span> Protection Anti-DDoS & IP Bloquées</h3>
+        <p class="sub" style="margin:4px 0 0;">Surveillance en temps réel des flux malveillants, IP en prison temporaire (ban 15m) et déblocage immédiat.</p>
+      </div>
+      <button class="admin-btn ghost small" onclick="loadAntiDdos()">↻ Rafraîchir</button>
+    </div>
+
+    <div class="stat-grid" style="margin-bottom: 20px;">
+      <div class="admin-stat">
+        <div class="stat-icon">⚡</div>
+        <div class="num" id="statDdosBlocked">-</div>
+        <div class="lbl">Attaques / flood bloqués</div>
+      </div>
+      <div class="admin-stat">
+        <div class="stat-icon">🔒</div>
+        <div class="num" id="statDdosJailed" style="color:var(--admin-err);">-</div>
+        <div class="lbl">IP en prison (ban 15m)</div>
+      </div>
+      <div class="admin-stat">
+        <div class="stat-icon">📡</div>
+        <div class="num" id="statDdosTracked">-</div>
+        <div class="lbl">IP actives suivies (10s)</div>
+      </div>
+    </div>
+
+    <div style="overflow-x:auto">
+      <table class="admin-table" id="ddosTable">
+        <thead>
+          <tr>
+            <th>Adresse IP</th>
+            <th>Temps restant</th>
+            <th>Pic de requêtes</th>
+            <th>Dernier endpoint</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="ddosTableBody">
+          <tr><td colspan="5" style="text-align:center; padding:20px; color:var(--admin-muted-2);">Chargement de l'état Anti-DDoS...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </section>
 
 <!-- ==================== SCRIPT TAB ==================== -->
 <section id="tab-script" class="hidden">
+  <!-- Statut des Scripts par Jeu (Safe / Undetected / Updating / Detected) -->
   <div class="admin-panel fade-up">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom: 14px;">
+      <div>
+        <h3 style="margin:0;"><span class="icon">🟢</span> Statuts des Scripts par Jeu (Safe / Undetected / Updating)</h3>
+        <p class="sub" style="margin:4px 0 0;">Contrôlez en direct le statut visible sur le site et protégez les joueurs in-game contre les détections.</p>
+      </div>
+      <button class="admin-btn ghost small" onclick="loadGameStatuses()">↻ Rafraîchir</button>
+    </div>
+
+    <!-- Ajout / Forçage manuel d'un PlaceId -->
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:#0d0b12; padding:12px 14px; border-radius:10px; border:1px solid var(--admin-border); margin-bottom:18px;">
+      <span style="font-size:13px; font-weight:600; color:var(--admin-text);">➕ Configurer un PlaceId :</span>
+      <input id="newStatusPlaceId" class="admin-input" placeholder="PlaceId (ex: 189707)" style="width:160px; padding:6px 12px; font-size:13px;" type="number">
+      <select id="newStatusSelect" class="admin-input" style="padding:6px 12px; font-size:13px;">
+        <option value="safe">🟢 Safe / Undetected</option>
+        <option value="updating">🟡 Updating (Mise à jour)</option>
+        <option value="detected">🔴 Detected (Risque / Pause)</option>
+      </select>
+      <input id="newStatusNote" class="admin-input" placeholder="Note publique (facultatif)" style="flex:1; min-width:180px; padding:6px 12px; font-size:13px;">
+      <button class="admin-btn small" onclick="addNewGameStatus()">Appliquer</button>
+    </div>
+
+    <div style="overflow-x:auto">
+      <table class="admin-table" id="gamesStatusTable">
+        <thead>
+          <tr>
+            <th>Jeu Roblox</th>
+            <th>PlaceId</th>
+            <th>Version</th>
+            <th>Statut actuel</th>
+            <th>Nouveau Statut</th>
+            <th>Note publique</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="gamesStatusBody">
+          <tr><td colspan="7" style="text-align:center; padding:24px; color:var(--admin-muted-2);">Chargement des jeux...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="admin-panel fade-up fade-up-d1">
     <h3><span class="icon">📝</span> Versions</h3>
     <div style="overflow-x:auto">
       <table class="admin-table" id="versionsTable">
@@ -593,8 +686,8 @@ function showTab(name) {
   if (name === 'revenue') loadRevenue();
   if (name === 'keys') loadKeys();
   if (name === 'users') loadUsers();
-  if (name === 'bans') loadBans();
-  if (name === 'script') loadVersions();
+  if (name === 'bans') { loadBans(); loadAntiDdos(); }
+  if (name === 'script') { loadVersions(); loadGameStatuses(); }
   if (name === 'patches') loadPatches();
 }
 
@@ -941,6 +1034,164 @@ async function banUser() {
   loadBans();
 }
 async function unban(userId) { await api(`/bans/${userId}`, { method: 'DELETE' }); loadBans(); }
+
+// ==================== ANTI-DDOS ====================
+async function loadAntiDdos() {
+  const tbody = document.getElementById('ddosTableBody');
+  if (!tbody) return;
+  try {
+    const d = await api('/antiddos');
+    if (!d.success || !d.stats) return;
+    const s = d.stats;
+    const statBlocked = document.getElementById('statDdosBlocked');
+    const statJailed = document.getElementById('statDdosJailed');
+    const statTracked = document.getElementById('statDdosTracked');
+    if (statBlocked) statBlocked.textContent = s.totalBlockedAttacks || 0;
+    if (statJailed) statJailed.textContent = s.currentJailedCount || 0;
+    if (statTracked) statTracked.textContent = s.currentlyTrackedIPs || 0;
+
+    const list = s.jailedList || [];
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--admin-muted-2);">Aucune IP bannie actuellement. Le réseau est sain.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = list.map(item => {
+      const min = Math.floor(item.remainingSec / 60);
+      const sec = item.remainingSec % 60;
+      const timeLeft = `${min}m ${sec < 10 ? '0' : ''}${sec}s`;
+
+      return `<tr>
+        <td class="mono"><b>${esc(item.ip)}</b></td>
+        <td><span class="badge err">⏳ ${timeLeft}</span></td>
+        <td><b>${item.peakCount} reqs / 10s</b></td>
+        <td><span class="mono" style="font-size:12px; color:var(--admin-glow);">${esc(item.targetPath)}</span></td>
+        <td>
+          <button class="admin-btn small green" onclick="unbanDdosIp('${esc(item.ip)}')">
+            🔓 Débannir IP
+          </button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--admin-err);">Erreur: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function unbanDdosIp(ip) {
+  if (!confirm(`Débannir l'adresse IP ${ip} immédiatement ?`)) return;
+  try {
+    const res = await api('/antiddos/unban', {
+      method: 'POST',
+      body: JSON.stringify({ ip })
+    });
+    if (res.success) {
+      loadAntiDdos();
+    } else {
+      alert(`❌ Erreur: ${res.error || 'Échec'}`);
+    }
+  } catch (e) {
+    alert(`❌ Erreur: ${e.message}`);
+  }
+}
+
+// ==================== GAME SCRIPT STATUSES ====================
+async function loadGameStatuses() {
+  const tbody = document.getElementById('gamesStatusBody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--admin-muted-2);">Chargement des jeux...</td></tr>';
+  try {
+    const d = await api('/script/games');
+    if (!d.success || !d.games || !d.games.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--admin-muted-2);">Aucun jeu configuré pour le moment. Vous pouvez en ajouter un ci-dessus.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = d.games.map(g => {
+      const st = g.status || 'safe';
+      let badgeHtml = '<span class="badge ok">🟢 Safe / Undetected</span>';
+      if (st === 'updating') badgeHtml = '<span class="badge" style="background:#f59e0b1f;color:#fbbf24;border:1px solid #f59e0b44;">🟡 Updating</span>';
+      if (st === 'detected') badgeHtml = '<span class="badge err">🔴 Detected / Down</span>';
+
+      return `<tr>
+        <td>
+          <div style="display:flex; align-items:center; gap:10px;">
+            ${g.iconUrl ? `<img src="${g.iconUrl}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;">` : '🎮'}
+            <b>${esc(g.name)}</b>
+          </div>
+        </td>
+        <td class="mono">${g.placeId}</td>
+        <td>${g.version ? `<b>v${g.version}</b>` : '<span style="color:var(--admin-muted-2);">–</span>'}</td>
+        <td id="curr-status-${g.placeId}">${badgeHtml}</td>
+        <td>
+          <select id="sel-status-${g.placeId}" class="admin-input" style="padding:4px 8px; font-size:12.5px;">
+            <option value="safe" ${st === 'safe' ? 'selected' : ''}>🟢 Safe / Undetected</option>
+            <option value="updating" ${st === 'updating' ? 'selected' : ''}>🟡 Updating</option>
+            <option value="detected" ${st === 'detected' ? 'selected' : ''}>🔴 Detected</option>
+          </select>
+        </td>
+        <td>
+          <input id="note-status-${g.placeId}" class="admin-input" value="${esc(g.statusNote || '')}" placeholder="Note (ex: Update v2)" style="width:160px; padding:4px 8px; font-size:12px;">
+        </td>
+        <td>
+          <button class="admin-btn small green" onclick="saveGameStatus(${g.placeId})">💾 Sauvegarder</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--admin-err);">Erreur: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function saveGameStatus(placeId) {
+  const sel = document.getElementById('sel-status-' + placeId);
+  const noteInput = document.getElementById('note-status-' + placeId);
+  if (!sel) return;
+  const status = sel.value;
+  const note = noteInput ? noteInput.value.trim() : '';
+
+  try {
+    const res = await api('/script/game-status', {
+      method: 'POST',
+      body: JSON.stringify({ placeId, status, note })
+    });
+    if (res.success) {
+      loadGameStatuses();
+    } else {
+      alert(`❌ Erreur: ${res.error || 'Échec'}`);
+    }
+  } catch (e) {
+    alert(`❌ Erreur: ${e.message}`);
+  }
+}
+
+async function addNewGameStatus() {
+  const pInput = document.getElementById('newStatusPlaceId');
+  const sel = document.getElementById('newStatusSelect');
+  const noteInput = document.getElementById('newStatusNote');
+  const placeId = parseInt(pInput?.value, 10);
+  if (!Number.isFinite(placeId) || placeId <= 0) {
+    alert('Veuillez entrer un PlaceId Roblox valide.');
+    return;
+  }
+  const status = sel ? sel.value : 'safe';
+  const note = noteInput ? noteInput.value.trim() : '';
+
+  try {
+    const res = await api('/script/game-status', {
+      method: 'POST',
+      body: JSON.stringify({ placeId, status, note })
+    });
+    if (res.success) {
+      if (pInput) pInput.value = '';
+      if (noteInput) noteInput.value = '';
+      loadGameStatuses();
+    } else {
+      alert(`❌ Erreur: ${res.error || 'Échec'}`);
+    }
+  } catch (e) {
+    alert(`❌ Erreur: ${e.message}`);
+  }
+}
 
 // ==================== SCRIPT ====================
 async function loadVersions() {

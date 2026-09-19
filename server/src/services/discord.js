@@ -131,6 +131,76 @@ async function upsertJoin(discordId, username, avatar, joined) {
   );
 }
 
+// ---------- Verification de presence sur le serveur (Anti-Leave) ----------
+const memberCache = new Map(); // discordId -> { inGuild: boolean, ts: number }
+let cachedInvite = null;
+let cachedInviteTs = 0;
+
+async function isGuildMember(discordId) {
+  if (!discordId) return true;
+  const guildId = process.env.DISCORD_GUILD_ID;
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (!guildId || !botToken) return true;
+
+  const now = Date.now();
+  const cached = memberCache.get(discordId);
+  // Cache 5 minutes si membre, 30 secondes si non-membre (detecte rapidement si le joueur rejoint a nouveau)
+  const ttl = cached && cached.inGuild ? 5 * 60 * 1000 : 30 * 1000;
+  if (cached && now - cached.ts < ttl) {
+    return cached.inGuild;
+  }
+
+  try {
+    const res = await fetch(`https://discord.com/api/guilds/${guildId}/members/${discordId}`, {
+      headers: { Authorization: `Bot ${botToken}` },
+      signal: AbortSignal.timeout(6000),
+    });
+
+    if (res.status === 200) {
+      memberCache.set(discordId, { inGuild: true, ts: now });
+      return true;
+    } else if (res.status === 404) {
+      memberCache.set(discordId, { inGuild: false, ts: now });
+      return false;
+    } else if (res.status === 429) {
+      console.warn('[discord] isGuildMember rate-limited (429), fail-open temporaire');
+      return cached ? cached.inGuild : true;
+    }
+    // Fail-open sur erreur 5xx pour ne pas bloquer les joueurs si Discord a un incident
+    return true;
+  } catch (e) {
+    console.warn('[discord] isGuildMember network error:', e.message);
+    return cached ? cached.inGuild : true;
+  }
+}
+
+async function getGuildInvite() {
+  if (process.env.DISCORD_INVITE_URL) return process.env.DISCORD_INVITE_URL;
+  const now = Date.now();
+  if (cachedInvite && now - cachedInviteTs < 30 * 60 * 1000) {
+    return cachedInvite;
+  }
+  const guildId = process.env.DISCORD_GUILD_ID;
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (guildId && botToken) {
+    try {
+      const res = await fetch(`https://discord.com/api/guilds/${guildId}/invites`, {
+        headers: { Authorization: `Bot ${botToken}` },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const invites = await res.json();
+        if (Array.isArray(invites) && invites[0] && invites[0].code) {
+          cachedInvite = `https://discord.gg/${invites[0].code}`;
+          cachedInviteTs = now;
+          return cachedInvite;
+        }
+      }
+    } catch {}
+  }
+  return 'https://discord.gg/2ZT28kXZR';
+}
+
 module.exports = {
   USER_COOKIE,
   USER_TTL_MS,
@@ -141,4 +211,6 @@ module.exports = {
   fetchUser,
   addToGuild,
   upsertJoin,
+  isGuildMember,
+  getGuildInvite,
 };

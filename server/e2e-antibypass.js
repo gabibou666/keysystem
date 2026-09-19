@@ -3,13 +3,19 @@ require('dotenv').config();
 const crypto = require('./src/services/crypto');
 const pool = require('./src/db');
 
-const BASE = 'http://localhost:' + (process.env.PORT || 3000);
+const TEST_PORT = process.env.TEST_PORT || 3099;
+process.env.PORT = TEST_PORT;
+const BASE = 'http://localhost:' + TEST_PORT;
 
 async function ensureServer() {
-  const ok = await fetch(`${BASE}/api/keepalive`).then(() => true).catch(() => false);
+  const ok = await fetch(`${BASE}/api/keepalive`).then((r) => r.ok).catch(() => false);
   if (!ok) {
     require('./src/index');
-    await new Promise((r) => setTimeout(r, 1500));
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      const up = await fetch(`${BASE}/api/keepalive`).then((r) => r.ok).catch(() => false);
+      if (up) break;
+    }
   }
 }
 
@@ -21,8 +27,8 @@ async function main() {
     ok ? pass++ : fail++;
   };
 
-  // ---- Contexte: simule une session creee par le proprietaire "u-owner-123"
-  const OWNER = '999000111';
+  // ---- Contexte: simule une session creee par un membre present dans le serveur
+  const OWNER = process.env.ADMIN_DISCORD_IDS ? process.env.ADMIN_DISCORD_IDS.split(',')[0].trim() : '899294059225579531';
   const puid = crypto.randomToken(32);
   await pool.query(
     `INSERT INTO ll_sessions (puid, tasks_required, ip, owner_discord_id, started_at)
@@ -91,9 +97,44 @@ async function main() {
     const aSecret = await fetch(`${BASE}/api/lootlabs/postback?click_id=${secretPuid}&unique_id=badsec-${Date.now()}&secret=wrong-secret-value`);
     check('postback avec secret invalide -> refuse (403)', aSecret.status === 403);
     await pool.query('DELETE FROM ll_sessions WHERE puid = $1', [secretPuid]);
+
+    // ==== ATTAQUE 6b: postback SANS secret alors qu un secret est configure ====
+    const noSecPuid = crypto.randomToken(32);
+    await pool.query(
+      `INSERT INTO ll_sessions (puid, tasks_required, ip, owner_discord_id, started_at)
+       VALUES ($1, 1, '203.0.113.54', $2, now() - interval '2 minutes')`,
+      [noSecPuid, OWNER]
+    );
+    const aNoSec = await fetch(`${BASE}/api/lootlabs/postback?click_id=${noSecPuid}&unique_id=nosec-${Date.now()}`);
+    check('postback sans secret -> refuse (403)', aNoSec.status === 403);
+    await pool.query('DELETE FROM ll_sessions WHERE puid = $1', [noSecPuid]);
   } else {
     check('postback secret: non configure en dev (passe sans secret)', true);
   }
+
+  // ==== ATTAQUE 6c: self-postback (appel direct depuis la machine du joueur) ====
+  const selfPuid = crypto.randomToken(32);
+  await pool.query(
+    `INSERT INTO ll_sessions (puid, tasks_required, ip, owner_discord_id, started_at)
+     VALUES ($1, 1, '127.0.0.1', $2, now() - interval '2 minutes')`,
+    [selfPuid, OWNER]
+  );
+  const aSelf = await fetch(`${BASE}/api/lootlabs/postback?click_id=${selfPuid}&unique_id=self-${Date.now()}${postbackSecretParam}`);
+  check('self-postback (IP client == IP postback) -> refuse (403 client cannot self-postback)', aSelf.status === 403);
+  await pool.query('DELETE FROM ll_sessions WHERE puid = $1', [selfPuid]);
+
+  // ==== ATTAQUE 6d: appel depuis IP blacklistee (ex Hetzner 37.27.162.36) ====
+  const blkPuid = crypto.randomToken(32);
+  await pool.query(
+    `INSERT INTO ll_sessions (puid, tasks_required, ip, owner_discord_id, started_at)
+     VALUES ($1, 1, '203.0.113.55', $2, now() - interval '2 minutes')`,
+    [blkPuid, OWNER]
+  );
+  const aBlk = await fetch(`${BASE}/api/lootlabs/postback?click_id=${blkPuid}&unique_id=blk-${Date.now()}${postbackSecretParam}`, {
+    headers: { 'x-forwarded-for': '37.27.162.36' },
+  });
+  check('postback IP blacklistee -> refuse (403)', aBlk.status === 403);
+  await pool.query('DELETE FROM ll_sessions WHERE puid = $1', [blkPuid]);
 
   // ==== FLUX LEGITIME: le proprietaire recupere sa cle ====
   const a6 = await fetch(`${BASE}/api/key/status?puid=${puid}`, {
@@ -152,6 +193,27 @@ async function main() {
     const dChk2 = await chk2.json();
     check('2eme check avec HWID-B different -> refuse bound_to_other_device', dChk2.success === false && dChk2.reason === 'bound_to_other_device');
   }
+
+  // ==== TEST 11: Anti-Leave Discord — clé d'un utilisateur ayant quitté le serveur ====
+  const leaverGen = crypto.generateKey();
+  const leaverIns = await pool.query(
+    `INSERT INTO keys (kid, signature, duration_hours, owner_discord_id, expires_at)
+     VALUES ($1, $2, 12, '123456789012345678', now() + interval '12 hours') RETURNING id`,
+    [leaverGen.kid, leaverGen.signature]
+  );
+  const leaverKey = `${leaverGen.kid}.${leaverGen.signature}`;
+  const chkLeaver = await fetch(`${BASE}/api/v1/check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: leaverKey, userId: 9991234, executor: 'TestExec', hwid: 'hwid-leaver-123' }),
+  });
+  const dLeaver = await chkLeaver.json();
+  check('Anti-Leave: utilisateur ayant quitte le Discord -> refuse not_in_discord', dLeaver.success === false && dLeaver.reason === 'not_in_discord' && !!dLeaver.discordInvite);
+
+  const infoLeaver = await fetch(`${BASE}/api/key/info?key=${encodeURIComponent(leaverKey)}`).then((r) => r.json());
+  check('Anti-Leave: key/info indique inDiscord: false', infoLeaver.success === true && infoLeaver.inDiscord === false && infoLeaver.valid === false);
+
+  await pool.query('DELETE FROM keys WHERE id = $1', [leaverIns.rows[0].id]);
 
   // ==== Nettoyage (ordre FK: ll_sessions avant keys) ====
   const keyKid = d6.key ? d6.key.split('.')[0] : null;

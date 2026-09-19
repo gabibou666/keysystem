@@ -1,4 +1,5 @@
 const express = require('express');
+const nodeCrypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const crypto = require('../services/crypto');
 const lootlabs = require('../services/lootlabs');
@@ -27,7 +28,10 @@ const checkLimiter = rateLimit({
 });
 
 function clientIp(req) {
-  return (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip;
+  let ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || '';
+  if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+  if (ip === '::1') ip = '127.0.0.1';
+  return ip;
 }
 
 // ---------- POST /api/key/start ----------
@@ -40,6 +44,18 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
     const duration = parseInt(req.body?.duration, 10);
     if (!lootlabs.DURATIONS[duration]) {
       return res.status(400).json({ success: false, error: 'Invalid duration (12 or 24).' });
+    }
+
+    // Anti-Leave / Anti-Bypass: Verifie que l'utilisateur est bien membre du serveur Discord
+    const inGuild = await discordService.isGuildMember(req.discordId);
+    if (!inGuild) {
+      const inviteUrl = await discordService.getGuildInvite();
+      return res.status(403).json({
+        success: false,
+        reason: 'discord_member_required',
+        error: 'You must be a member of our Discord server to get a key.',
+        inviteUrl,
+      });
     }
 
     let keyId = null;
@@ -150,16 +166,30 @@ router.get('/lootlabs/postback', async (req, res) => {
       return res.status(400).send('missing click_id');
     }
 
+    const sourceIp = clientIp(req);
+
+    // Blacklist connue des serveurs de bots / bypass
+    const BLOCKED_POSTBACK_IPS = new Set(['37.27.162.36']);
+    if (BLOCKED_POSTBACK_IPS.has(sourceIp)) {
+      console.warn(`[postback] REJET IP blacklistee (bot bypass: ${sourceIp}, puid=${click_id.slice(0, 8)}...)`);
+      return res.status(403).send('rejected: blacklisted ip');
+    }
+
     // --- Verification du secret partagé LootLabs (anti-forge absolu) ---
     // Si LOOTLABS_POSTBACK_SECRET est défini dans .env, il DOIT être présent dans l'URL (&secret=...)
     // configurée dans le panel LootLabs. Rejette toute tentative manuelle/bot externe.
     const expectedSecret = process.env.LOOTLABS_POSTBACK_SECRET;
     if (expectedSecret) {
-      const providedSecret = req.query.secret || req.headers['x-postback-secret'];
-      if (!providedSecret || providedSecret !== expectedSecret) {
-        console.warn(`[postback] REJET secret invalide/absent (puid=${String(click_id).slice(0, 8)}...)`);
+      const providedSecret = String(req.query.secret || req.headers['x-postback-secret'] || '');
+      const isValid =
+        providedSecret.length === expectedSecret.length &&
+        nodeCrypto.timingSafeEqual(Buffer.from(providedSecret), Buffer.from(expectedSecret));
+      if (!isValid) {
+        console.warn(`[postback] REJET secret invalide/absent (puid=${String(click_id).slice(0, 8)}..., src=${sourceIp})`);
         return res.status(403).send('rejected: invalid postback secret');
       }
+    } else if (process.env.NODE_ENV === 'production') {
+      console.error('[postback] ALERTE: LOOTLABS_POSTBACK_SECRET non configure en production !');
     }
 
     // unique_id optionnel: fallback genere si le template du panel ne l'inclut pas
@@ -180,7 +210,6 @@ router.get('/lootlabs/postback', async (req, res) => {
 
     // --- Verification d'origine: le postback doit venir de l'infrastructure LootLabs ---
     // (doc: "A GET request will be sent there" — serveur LootLabs -> nous)
-    const sourceIp = clientIp(req);
     const dns = require('dns').promises;
     let originOk = false;
     let originNote = 'unknown';
@@ -195,13 +224,16 @@ router.get('/lootlabs/postback', async (req, res) => {
         originOk = true;
         originNote = 'lootlabs_infra';
       } else {
-        // Fallback accepte: CDN/proxy legitimes (Render est derriere Cloudflare, l'IP source
-        // peut etre un edge). On accepte si l'IP USER annoncee par LootLabs correspond
-        // a une session recente activee par cette IP (cohérence metier).
         originNote = 'not_direct_infra';
       }
     } catch {
       originNote = 'dns_error';
+    }
+
+    // Si aucun secret n'est configure ET que l'origine n'est pas LootLabs, REJET strict
+    if (!expectedSecret && originNote === 'not_direct_infra') {
+      console.warn(`[postback] REJET: origine non reconnue sans secret (src=${sourceIp}, puid=${click_id.slice(0, 8)}...)`);
+      return res.status(403).send('rejected: untrusted origin');
     }
 
     // Dedup par unique_id (doc: "prevent duplicate processing")
@@ -216,9 +248,16 @@ router.get('/lootlabs/postback', async (req, res) => {
     const session = sess.rows[0];
     if (!session) return res.status(404).send('session not found');
 
+    // --- ANTI-SELF-POSTBACK: Le joueur ne peut PAS appeler son propre postback ---
+    // Le postback LootLabs est serveur-a-serveur. Si l'IP source est l'IP du client, c'est une fraude.
+    if (session.ip && sourceIp === session.ip) {
+      console.warn(`[postback] REJET auto-postback: l'IP cliente tente de valider sa propre session (puid=${click_id.slice(0, 8)}..., ip=${sourceIp})`);
+      return res.status(403).send('rejected: client cannot self-postback');
+    }
+
     // --- Delai anti-bot: un bypass automatique/script valide en < 2-3 secondes.
-    // Un humain sur mobile ou PC met au minimum 4 secondes pour charger et valider.
-    const MIN_SECONDS = 4;
+    // Un humain sur mobile ou PC met au minimum 12 à 15 secondes par tache.
+    const MIN_SECONDS = Math.max(12, (session.tasks_required || 1) * 10);
     const elapsedSec = (Date.now() - new Date(session.started_at).getTime()) / 1000;
     if (elapsedSec < MIN_SECONDS) {
       console.warn(`[postback] REJET robot instantané: ${elapsedSec.toFixed(1)}s < ${MIN_SECONDS}s requis (puid=${click_id.slice(0, 8)}...)`);
@@ -455,19 +494,30 @@ router.get('/key/info', infoLimiter, async (req, res) => {
     if (!parsed) return res.json({ success: false, error: 'Invalid format' });
 
     const { rows } = await pool.query(
-      'SELECT kid, expires_at, revoked, bound_user_id, bound_hwid, hwid_last_reset FROM keys WHERE kid = $1',
+      'SELECT kid, expires_at, revoked, bound_user_id, bound_hwid, hwid_last_reset, owner_discord_id FROM keys WHERE kid = $1',
       [parsed.kid]
     );
     const key = rows[0];
     if (!key) return res.json({ success: false, error: 'Unknown key' });
     if (key.revoked) return res.json({ success: false, error: 'Revoked', revoked: true });
 
+    let inDiscord = true;
+    let discordInvite = null;
+    if (key.owner_discord_id) {
+      inDiscord = await discordService.isGuildMember(key.owner_discord_id);
+      if (!inDiscord) {
+        discordInvite = await discordService.getGuildInvite();
+      }
+    }
+
     const expired = new Date(key.expires_at).getTime() < Date.now();
     res.json({
       success: true,
-      valid: !expired,
+      valid: !expired && inDiscord,
       expiresAt: key.expires_at,
       expired,
+      inDiscord,
+      discordInvite,
       bound: !!key.bound_user_id,
       hwidBound: !!key.bound_hwid,
     });
@@ -705,6 +755,20 @@ router.post('/v1/check', checkLimiter, async (req, res) => {
     if (!dbKey) return res.json({ success: false, reason: 'invalid_key' });
     if (dbKey.revoked) return res.json({ success: false, reason: 'revoked' });
 
+    // Anti-Leave: Verification de presence sur le serveur Discord
+    if (dbKey.owner_discord_id) {
+      const inGuild = await discordService.isGuildMember(dbKey.owner_discord_id);
+      if (!inGuild) {
+        const inviteUrl = await discordService.getGuildInvite();
+        return res.json({
+          success: false,
+          reason: 'not_in_discord',
+          error: 'You must remain in our Discord server to use this script!',
+          discordInvite: inviteUrl,
+        });
+      }
+    }
+
     // Ban par UserId Roblox (cascade)
     const ban = await pool.query('SELECT id FROM bans WHERE user_id = $1', [uid]);
     if (ban.rows[0]) return res.json({ success: false, reason: 'banned' });
@@ -727,6 +791,31 @@ router.post('/v1/check', checkLimiter, async (req, res) => {
     // Expiration
     const expired = new Date(dbKey.expires_at).getTime() < Date.now();
     if (expired) return res.json({ success: false, reason: 'expired' });
+
+    // Statut du script (Safe / Undetected / Updating / Detected)
+    if (placeId) {
+      const statusCheck = await pool.query(
+        'SELECT status, note FROM game_statuses WHERE place_id = $1',
+        [placeId]
+      );
+      if (statusCheck.rows[0]) {
+        const s = statusCheck.rows[0].status;
+        if (s === 'updating') {
+          return res.json({
+            success: false,
+            reason: 'script_updating',
+            message: statusCheck.rows[0].note || 'Script is currently being updated for this game. Please check back shortly.',
+          });
+        }
+        if (s === 'detected') {
+          return res.json({
+            success: false,
+            reason: 'script_detected',
+            message: statusCheck.rows[0].note || 'Script is temporarily disabled for security (detection risk).',
+          });
+        }
+      }
+    }
 
     // Build actif pour CE jeu (placeId), sinon build "tous jeux" (place_id null)
     let buildQuery;
@@ -922,19 +1011,25 @@ router.get('/stats/public', async (req, res) => {
 });
 
 // ---------- GET /api/games/public ----------
-// Jeux supportes (builds actifs) avec nom + icone + stats recuperees des APIs Roblox
+// Jeux supportes (builds actifs) avec nom + icone + stats + statut (Safe/Updating/Detected)
 router.get('/games/public', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT DISTINCT ON (place_id) place_id, version
-       FROM script_builds WHERE active = true AND place_id IS NOT NULL
-       ORDER BY place_id, created_at DESC`
+      `SELECT DISTINCT ON (b.place_id) b.place_id, b.version,
+              COALESCE(gs.status, 'safe') AS status,
+              gs.note AS status_note
+       FROM script_builds b
+       LEFT JOIN game_statuses gs ON gs.place_id = b.place_id
+       WHERE b.active = true AND b.place_id IS NOT NULL
+       ORDER BY b.place_id, b.created_at DESC`
     );
     const games = await Promise.all(
       rows.map((r) =>
         getGameInfo(r.place_id).then((info) => ({
           placeId: parseInt(r.place_id, 10),
           version: parseInt(r.version, 10),
+          status: r.status || 'safe',
+          statusNote: r.status_note || '',
           name: info ? info.name : `Game ${r.place_id}`,
           iconUrl: info ? info.iconUrl : null,
           playing: info ? info.playing : null,
@@ -979,6 +1074,36 @@ router.get('/activity/public', async (req, res) => {
   } catch (e) {
     console.error('[activity/public]', e);
     res.json({ success: true, onlineNow: 0, usersToday: 0, executionsToday: 0, totalUsers: 0 });
+  }
+});
+
+// ---------- GET /api/changelog (alias public) ----------
+router.get('/changelog', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT version, note, created_at, published, place_id FROM script_versions
+       WHERE published = true AND note <> '' ORDER BY version DESC LIMIT 50`
+    );
+    const versions = await Promise.all(
+      rows.map(async (v) => {
+        let gameName = null;
+        if (v.place_id) {
+          const info = await getGameInfo(v.place_id).catch(() => null);
+          gameName = info ? info.name : `Game ${v.place_id}`;
+        }
+        return {
+          version: v.version,
+          note: v.note,
+          created_at: v.created_at,
+          published: v.published,
+          placeId: v.place_id ? parseInt(v.place_id, 10) : null,
+          gameName,
+        };
+      })
+    );
+    res.json({ success: true, versions });
+  } catch (e) {
+    res.json({ success: true, versions: [] });
   }
 });
 

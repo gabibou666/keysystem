@@ -81,17 +81,20 @@ router.get('/callback', async (req, res) => {
 router.get('/status', async (req, res) => {
   const discordId = discord.verifyUserCookie(req.cookies && req.cookies[discord.USER_COOKIE]);
   if (!discordId) return res.json({ loggedIn: false });
-  const { rows } = await pool.query(
-    'SELECT username, avatar, joined FROM discord_joins WHERE discord_id = $1',
-    [discordId]
-  );
+  const [rows, inServer, inviteUrl] = await Promise.all([
+    pool.query('SELECT username, avatar, joined FROM discord_joins WHERE discord_id = $1', [discordId]),
+    discord.isGuildMember(discordId),
+    discord.getGuildInvite(),
+  ]);
   res.json({
     loggedIn: true,
-    username: rows[0] ? rows[0].username : null,
-    avatar: rows[0] && rows[0].avatar
-      ? `https://cdn.discordapp.com/avatars/${discordId}/${rows[0].avatar}.png`
+    discordId,
+    username: rows.rows[0] ? rows.rows[0].username : null,
+    avatar: rows.rows[0] && rows.rows[0].avatar
+      ? `https://cdn.discordapp.com/avatars/${discordId}/${rows.rows[0].avatar}.png`
       : null,
-    inServer: rows[0] ? rows[0].joined : false,
+    inServer,
+    inviteUrl: inServer ? null : inviteUrl,
   });
 });
 
