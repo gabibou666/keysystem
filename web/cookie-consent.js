@@ -50,12 +50,18 @@
   }
 
   function loadAdScript() {
-    if (document.getElementById('ks-ad-script')) return;
-    const script = document.createElement('script');
-    script.id = 'ks-ad-script';
-    script.src = AD_SCRIPT_SRC;
-    script.async = true;
-    document.head.appendChild(script);
+    const banners = document.querySelectorAll('.ad-banner');
+    if (!banners || !banners.length) return;
+
+    banners.forEach((banner) => {
+      // Avoid injecting multiple times in the same container
+      if (banner.querySelector('script[src*="highrevenueformat.com"]')) return;
+
+      const script = document.createElement('script');
+      script.type = 'text/javascript';
+      script.src = AD_SCRIPT_SRC;
+      banner.appendChild(script);
+    });
   }
 
   function createBannerDOM() {
