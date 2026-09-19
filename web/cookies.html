@@ -7,9 +7,10 @@
   <meta name="description" content="Detailed information on cookie usage, advertising trackers, and consent management on AUDIT HUB compliant with CNIL and GDPR.">
   <meta name="robots" content="index, follow">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="shortcut icon" href="/favicon.ico">
   <link rel="stylesheet" href="/style.css">
 
-  <!-- Schema.org JSON-LD -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -27,128 +28,136 @@
   </script>
 </head>
 <body>
-  <!-- Header / Navigation -->
-  <header class="legal-header">
-    <a href="/" class="legal-brand">
-      <div class="logo-shield" style="width:28px; height:28px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-        </svg>
-      </div>
-      <span>AUDIT HUB</span>
-    </a>
-    <nav class="legal-nav" aria-label="Main Navigation">
-      <a href="/">Home</a>
-      <a href="/terms">Terms of Service</a>
-      <a href="/privacy">Privacy Policy</a>
-    </nav>
-  </header>
-
-  <!-- Main Content -->
-  <main class="legal-container">
-    <div class="legal-card">
-      <span class="legal-tag">Cookies & Privacy</span>
-      <h1>Cookie Policy</h1>
-      <p class="legal-subtitle">Last updated: September 19, 2026 | Operator: <strong>AUDIT HUB</strong></p>
-
-      <section>
-        <h2>1. What Are Cookies?</h2>
-        <p>
-          Cookies and local storage are small text files or data fragments stored on your device when visiting a website. They allow the site to remember your preferences, ensure technical security, and facilitate service operation.
-        </p>
-      </section>
-
-      <section>
-        <h2>2. Cookies Used on AUDIT HUB</h2>
-        <p>We classify cookies and storage technologies into two distinct categories:</p>
-
-        <h3>Category A: Strictly Necessary Cookies (Exempt from Consent)</h3>
-        <p>
-          These cookies are vital for the technical functioning, session security, and anti-abuse safeguards of the website.
-        </p>
-        <div class="table-responsive">
-          <table class="legal-table">
-            <thead>
-              <tr>
-                <th>Name / Key</th>
-                <th>Provider</th>
-                <th>Purpose</th>
-                <th>Duration</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><code>ks_cookie_consent</code></td>
-                <td>AUDIT HUB</td>
-                <td>Stores your cookie consent preferences (Accept / Reject)</td>
-                <td>6 months (localStorage)</td>
-              </tr>
-              <tr>
-                <td><code>session_token</code></td>
-                <td>AUDIT HUB</td>
-                <td>Admin session authentication via Discord OAuth2</td>
-                <td>Session / 24 hours</td>
-              </tr>
-              <tr>
-                <td><code>__cf_bm / cf_clearance</code></td>
-                <td>Cloudflare</td>
-                <td>Anti-DDoS, rate-limiting, and bot defense protection</td>
-                <td>30 minutes to 1 year</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <h3>Category B: Advertising & Monetization Trackers (Requires Consent)</h3>
-        <p>
-          To maintain our key delivery system free of charge, we partner with advertising networks.
-          In strict compliance with CNIL recommendations (Deliberations 2020-091 and 2020-092) and the GDPR:
-        </p>
-        <ul>
-          <li><strong>No advertising scripts or trackers are loaded</strong> until you have clicked "Accept All" or opted in.</li>
-          <li>Refusing advertising cookies does not prevent you from obtaining a key through our standard verification steps.</li>
-          <li>You can withdraw or update your consent at any time.</li>
-        </ul>
-        <div class="table-responsive">
-          <table class="legal-table">
-            <thead>
-              <tr>
-                <th>Provider</th>
-                <th>Purpose</th>
-                <th>Type</th>
-                <th>Consent Required</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><code>HighRevenueFormat (invoke.js)</code></td>
-                <td>Displays non-intrusive sponsor ads to fund free service</td>
-                <td>Third-party ad network</td>
-                <td><strong>YES (Explicit Opt-In)</strong></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section>
-        <h2>3. How to Manage or Withdraw Your Consent</h2>
-        <p>
-          You can modify or withdraw your consent at any time with a single click by using our interactive cookie manager:
-        </p>
-        <div style="margin: 20px 0;">
-          <button type="button" class="btn primary" onclick="openCookieSettings()" style="display:inline-flex; align-items:center; gap:8px;">
-            🍪 Manage Cookie Preferences
-          </button>
-        </div>
-        <p>
-          Additionally, you can configure your browser settings to block or delete cookies from your system. Note that blocking essential cookies may disrupt basic functionality.
-        </p>
-      </section>
+<nav>
+  <a class="logo" href="/" style="text-decoration:none;color:inherit">
+    <div class="logo-badge">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L3 7V12C3 17.52 6.84 22.5 12 23.8C17.16 22.5 21 17.52 21 12V7L12 2Z" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="rgba(255,255,255,0.12)"/>
+        <path d="M12 6.8L7.2 16.5H9.4L10.5 14.3H13.5L14.6 16.5H16.8L12 6.8ZM11.1 12.5L12 10.2L12.9 12.5H11.1Z" fill="#ffffff"/>
+      </svg>
     </div>
-  </main>
+    AUDIT HUB
+  </a>
+  <div class="links" id="navLinks">
+    <a href="/">Home</a>
+    <a href="/getkey">Get a key</a>
+    <a href="/terms">Terms</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/cookies" style="color:var(--color-glow-2);">Cookies</a>
+    <a href="https://discord.gg/2ZT28kXZR" target="_blank" class="nav-discord-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.991.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.128 12.3 12.3 0 0 1-1.873.891.077.077 0 0 0-.041.107c.36.698.772 1.363 1.225 1.991a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.029zM8.02 15.331c-1.182 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>Discord</a>
+  </div>
+  <button class="nav-hamburger" id="navHamburger" onclick="toggleNav()">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
 
-  <!-- Legal Footer -->
+<main>
+  <section class="hero-mini">
+    <h1>Cookie Policy</h1>
+    <p>How we use cookies and respect your privacy choices</p>
+  </section>
+
+  <section class="legal-page">
+    <div class="legal-card">
+      <p class="legal-meta" style="color:var(--color-muted-2); font-size:14px; margin-bottom:24px;">
+        Last updated: September 19, 2026 · Operator: <strong style="color:#ffffff;">AUDIT HUB</strong>
+      </p>
+
+      <h2>1. What Are Cookies?</h2>
+      <p>
+        Cookies and local storage are small text files or data fragments stored on your device when visiting a website. They allow the site to remember your preferences, ensure technical security, and facilitate service operation.
+      </p>
+
+      <h2>2. Cookies Used on AUDIT HUB</h2>
+      <p>We classify cookies and storage technologies into two distinct categories:</p>
+
+      <h3 style="color:#e9d5ff; font-size:17px; margin-top:20px; margin-bottom:10px;">Category A: Strictly Necessary Cookies (Exempt from Consent)</h3>
+      <p>
+        These cookies are vital for the technical functioning, session security, and anti-abuse safeguards of the website.
+      </p>
+      
+      <div class="legal-table-wrap">
+        <table class="legal-table">
+          <thead>
+            <tr>
+              <th>Name / Key</th>
+              <th>Provider</th>
+              <th>Purpose</th>
+              <th>Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>ks_cookie_consent</code></td>
+              <td>AUDIT HUB</td>
+              <td>Stores your cookie consent preferences (Accept / Reject)</td>
+              <td>6 months (localStorage)</td>
+            </tr>
+            <tr>
+              <td><code>session_token</code></td>
+              <td>AUDIT HUB</td>
+              <td>Admin session authentication via Discord OAuth2</td>
+              <td>Session / 24 hours</td>
+            </tr>
+            <tr>
+              <td><code>__cf_bm / cf_clearance</code></td>
+              <td>Cloudflare</td>
+              <td>Anti-DDoS, rate-limiting, and bot defense protection</td>
+              <td>30 minutes to 1 year</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="color:#e9d5ff; font-size:17px; margin-top:24px; margin-bottom:10px;">Category B: Advertising & Monetization Trackers (Requires Consent)</h3>
+      <p>
+        To maintain our key delivery system free of charge, we partner with advertising networks.
+        In strict compliance with CNIL recommendations (Deliberations 2020-091 and 2020-092) and the GDPR:
+      </p>
+      <ul>
+        <li><strong>No advertising scripts or trackers are loaded</strong> until you have clicked "Accept All" or opted in.</li>
+        <li>Refusing advertising cookies does not prevent you from obtaining a key through our standard verification steps.</li>
+        <li>You can withdraw or update your consent at any time.</li>
+      </ul>
+      
+      <div class="legal-table-wrap">
+        <table class="legal-table">
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>Purpose</th>
+              <th>Type</th>
+              <th>Consent Required</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>HighRevenueFormat (invoke.js)</code></td>
+              <td>Displays non-intrusive sponsor ads to fund free service</td>
+              <td>Third-party ad network</td>
+              <td><strong>YES (Explicit Opt-In)</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>3. How to Manage or Withdraw Your Consent</h2>
+      <p>
+        You can modify or withdraw your consent at any time with a single click by using our interactive cookie manager:
+      </p>
+      <div style="margin: 24px 0;">
+        <button type="button" class="btn primary" onclick="openCookieSettings()" style="display:inline-flex; align-items:center; gap:8px;">
+          🍪 Manage Cookie Preferences
+        </button>
+      </div>
+      <p>
+        Additionally, you can configure your browser settings to block or delete cookies from your system. Note that blocking essential cookies may disrupt basic functionality.
+      </p>
+    </div>
+  </section>
+</main>
+
+  <!-- Footer with legal links & cookie settings -->
   <footer class="site-footer">
     <div class="footer-links">
       <a href="/">Home</a>
@@ -159,7 +168,12 @@
     </div>
     <div>© 2026 AUDIT HUB. All rights reserved. Independent service not affiliated with Roblox Corporation.</div>
   </footer>
-
   <script src="/cookie-consent.js"></script>
+  <script>
+    function toggleNav() {
+      document.getElementById('navLinks').classList.toggle('open');
+      document.getElementById('navHamburger').classList.toggle('open');
+    }
+  </script>
 </body>
 </html>
