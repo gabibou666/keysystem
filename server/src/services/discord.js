@@ -136,6 +136,33 @@ const memberCache = new Map(); // discordId -> { inGuild: boolean, ts: number }
 let cachedInvite = null;
 let cachedInviteTs = 0;
 
+// Invitation PERMANENTE de secours (max_age = 0).
+// Pourquoi: si le bot n'est pas configure cote hebergement (token absent) ou si
+// l'API Discord est indisponible, le site se retrouvait SANS lien Discord — or
+// l'appartenance au serveur est obligatoire pour obtenir ET utiliser une cle.
+// Une invitation permanente ne peut pas expirer (contrairement a l'ancienne
+// invitation temporaire codee en dur, qui a fini par casser le parcours).
+// Surchargeable par DISCORD_INVITE_URL dans les variables d'environnement.
+const DEFAULT_PERMANENT_INVITE = 'https://discord.gg/nrgtDK52Er';
+let fallbackChecked = false;
+
+// Verifie une invitation via l'API publique Discord (detecte une invitation
+// supprimee/expiree) et alerte une fois si elle n'est plus utilisable.
+async function isUsableInvite(url) {
+  const code = String(url || '').split('/').pop();
+  if (!code) return false;
+  try {
+    const res = await fetch(`https://discord.com/api/v10/invites/${code}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return !data.expires_at; // expires_at null/absent => permanente
+  } catch {
+    return true; // Discord injoignable: on ne casse pas le parcours pour autant
+  }
+}
+
 async function isGuildMember(discordId) {
   if (!discordId) return true;
   const guildId = process.env.DISCORD_GUILD_ID;
@@ -180,6 +207,7 @@ async function getGuildInvite() {
   if (cachedInvite && now - cachedInviteTs < 30 * 60 * 1000) {
     return cachedInvite;
   }
+
   const guildId = process.env.DISCORD_GUILD_ID;
   const botToken = process.env.DISCORD_BOT_TOKEN;
   if (guildId && botToken) {
@@ -236,12 +264,25 @@ async function getGuildInvite() {
     return created;
   }
 
-  // Aucun lien exploitable: on renvoie null plutot qu'une invitation morte
-  // (le front masque alors le bouton au lieu d'envoyer l'utilisateur dans le vide).
-  console.error(
-    "[discord] Aucune invitation permanente disponible — definis DISCORD_INVITE_URL (invitation sans expiration) dans les variables d'environnement."
+  // Aucune invitation recuperee via l'API (bot non configure cote hebergement,
+  // ou erreur Discord): on utilise l'invitation permanente de secours pour ne
+  // JAMAIS laisser le parcours sans lien, et on verifie qu'elle est utilisable.
+  if (!fallbackChecked) {
+    fallbackChecked = true;
+    const ok = await isUsableInvite(DEFAULT_PERMANENT_INVITE);
+    if (!ok) {
+      console.error(
+        `[discord] ATTENTION: l'invitation de secours ${DEFAULT_PERMANENT_INVITE} n'est plus valide. ` +
+          "Definis DISCORD_INVITE_URL (invitation permanente) dans les variables d'environnement, ou execute: npm run invite:ensure"
+      );
+    }
+  }
+  console.warn(
+    `[discord] invitation via l'API indisponible (DISCORD_BOT_TOKEN/DISCORD_GUILD_ID absents ou erreur Discord) — repli sur ${DEFAULT_PERMANENT_INVITE}`
   );
-  return null;
+  cachedInvite = DEFAULT_PERMANENT_INVITE;
+  cachedInviteTs = now;
+  return cachedInvite;
 }
 
 // Cree une invitation permanente (max_age 0) sur le premier salon texte ou le
