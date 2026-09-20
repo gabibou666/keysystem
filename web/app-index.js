@@ -179,13 +179,13 @@ function renderGames() {
 
   grid.innerHTML = filtered.map((g, i) => {
     const status = g.status || 'safe';
-    let statusLabel = '🟢 Undetected';
+    let statusLabel = 'Undetected';
     let statusClass = 'safe';
     if (status === 'updating') {
-      statusLabel = '🟡 Updating';
+      statusLabel = 'Updating';
       statusClass = 'updating';
     } else if (status === 'detected') {
-      statusLabel = '🔴 Detected';
+      statusLabel = 'Detected';
       statusClass = 'detected';
     }
     return `
