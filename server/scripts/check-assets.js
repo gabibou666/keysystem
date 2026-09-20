@@ -87,7 +87,7 @@ for (const file of htmlFiles) {
 
 // ---------- 4. versionnement des assets ----------
 const VERSIONED_ASSET_RE =
-  /(?:src|href)="(\/(?:style\.css|effects\.js|guard\.js|cookie-consent\.js|site-config\.js|ad-init\.js|app-[a-z]+\.js|favicon\.[a-z]+))"/g;
+  /(?:src|href)="(\/(?:style\.css|design\.css|effects\.js|guard\.js|polish\.js|cookie-consent\.js|site-config\.js|ad-init\.js|app-[a-z]+\.js|favicon\.[a-z]+))"/g;
 for (const file of htmlFiles) {
   const html = fs.readFileSync(file, 'utf8');
   for (const match of html.matchAll(VERSIONED_ASSET_RE)) {
