@@ -136,7 +136,8 @@ keysystem/
 | `npm start` | Serveur de production |
 | `npm run dev` | Serveur avec rechargement automatique |
 | `npm run migrate` | Applique le schéma en base |
-| `npm run check` | Garde-fou qualité (assets manquants, scripts inline, syntaxe, échappement) — **exécuté en CI** |
+| `npm run check` | Garde-fous qualité : assets/scripts inline/syntaxe/échappement (`check-assets`) **+** respect de la direction visuelle (`check-design`) — **exécuté en CI** |
+| `npm run check:design` | Vérifie seulement le contrat visuel : violet sur noir, aucune boucle d'animation, `prefers-reduced-motion`, flous ≤ 14 px, jetons `--dx-*` cohérents |
 | `npm run invite:ensure` | Trouve/crée une **invitation Discord permanente** |
 | `npm run fonts` | Re-télécharge et auto-héberge les polices (`web/fonts/`) |
 | `npm run og` | Régénère l'image de partage social (`web/og.png`) |

@@ -1,0 +1,12 @@
+{
+  "name": "keysystem",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aggregateur racine: l'application et ses garde-fous vivent dans server/ (le service Render deploie ce dossier). Permet de lancer les verifications depuis la racine du depot.",
+  "scripts": {
+    "check": "npm --prefix server run check",
+    "test": "npm --prefix server test",
+    "start": "npm --prefix server start",
+    "migrate": "npm --prefix server run migrate"
+  }
+}
