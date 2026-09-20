@@ -10,7 +10,13 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "migrate": "node src/migrate.js"
+    "migrate": "node src/migrate.js",
+    "check": "node scripts/check-assets.js",
+    "test": "node test-crypto-config.js",
+    "invite:ensure": "node scripts/ensure-discord-invite.js",
+    "fonts": "python scripts/selfhost-fonts.py",
+    "og": "python scripts/make-og-image.py",
+    "pages:polish": "python scripts/polish-pages.py"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

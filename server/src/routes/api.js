@@ -181,10 +181,9 @@ router.get('/lootlabs/postback', async (req, res) => {
     const expectedSecret = process.env.LOOTLABS_POSTBACK_SECRET;
     if (expectedSecret) {
       const providedSecret = String(req.query.secret || req.headers['x-postback-secret'] || '');
-      const isValid =
-        providedSecret.length === expectedSecret.length &&
-        nodeCrypto.timingSafeEqual(Buffer.from(providedSecret), Buffer.from(expectedSecret));
-      if (!isValid) {
+      // safeEqual: comparaison a temps constant qui ne jette jamais
+      // (timingSafeEqual levait une exception quand les longueurs differaient).
+      if (!crypto.safeEqual(providedSecret, expectedSecret)) {
         console.warn(`[postback] REJET secret invalide/absent (puid=${String(click_id).slice(0, 8)}..., src=${sourceIp})`);
         return res.status(403).send('rejected: invalid postback secret');
       }
@@ -990,6 +989,26 @@ router.get('/v1/loader', (req, res) => {
   } catch {
     res.status(503).send('-- loader indisponible: loader/loader.luau manquant');
   }
+});
+
+// ---------- GET /api/config/public ----------
+// Source de verite unique pour le front: plus aucune URL (invitation Discord,
+// loader) codee en dur dans les pages HTML. Evite les liens morts quand le bot
+// regenere une invitation ou quand le domaine change.
+router.get('/config/public', async (req, res) => {
+  const siteUrl = (process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  let inviteUrl = null;
+  try {
+    inviteUrl = await discordService.getGuildInvite();
+  } catch (e) {
+    console.warn('[config/public] invitation indisponible:', e.message);
+  }
+  res.json({
+    success: true,
+    siteUrl,
+    inviteUrl,
+    loaderUrl: `${siteUrl}/api/v1/loader`,
+  });
 });
 
 // ---------- GET /api/stats/public ----------

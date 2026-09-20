@@ -190,15 +190,100 @@ async function getGuildInvite() {
       });
       if (res.ok) {
         const invites = await res.json();
-        if (Array.isArray(invites) && invites[0] && invites[0].code) {
-          cachedInvite = `https://discord.gg/${invites[0].code}`;
-          cachedInviteTs = now;
-          return cachedInvite;
+        if (Array.isArray(invites)) {
+          // Priorite a une invitation PERMANENTE (max_age = 0): une invitation
+          // temporaire casse le parcours utilisateur, puisque l'appartenance au
+          // serveur est obligatoire pour obtenir ET utiliser une cle.
+          const permanentList = invites.filter((i) => i && i.code && i.max_age === 0 && !i.expired);
+          // Choix deterministe: on prefere une invitation permanente sur un salon
+          // d'accueil (👋welcome, 💬general, 📜rules...) et on ecarte les salons
+          // internes (moderation, logs) ou l'arrivee du membre serait inutile.
+          const NICE = /welcome|general|chat|rules|accueil|main|start|talk|aide|help/i;
+          const BAD = /moderator|mod[-_]|staff|admin|log|private|no-response|bot/i;
+          const ranked = permanentList
+            .map((i) => {
+              const name = (i.channel && i.channel.name) || '';
+              return { invite: i, score: BAD.test(name) ? 0 : NICE.test(name) ? 2 : 1 };
+            })
+            .sort((a, b) => b.score - a.score);
+          const permanent = ranked.length ? ranked[0].invite : null;
+          const expiring = invites.filter((i) => i && i.code && i.max_age > 0);
+          if (permanent) {
+            cachedInvite = `https://discord.gg/${permanent.code}`;
+            cachedInviteTs = now;
+            console.log('[discord] invitation permanente utilisee:', cachedInvite);
+            return cachedInvite;
+          }
+          if (expiring.length) {
+            const longest = Math.round(Math.max(...expiring.map((i) => i.max_age)) / 86400);
+            console.warn(
+              `[discord] AUCUNE invitation permanente (${expiring.length} temporaire(s), la plus longue expire dans ${longest} j) — creation d'une invitation permanente par le bot...`
+            );
+          }
         }
       }
     } catch {}
   }
-  return 'https://discord.gg/2ZT28kXZR';
+
+  // Creation d'une invitation permanente par le bot (permission "Create Invite"
+  // requise). unique:false => Discord renvoie l'invitation existante si le bot
+  // en a deja une pour ce salon: pas de duplication a chaque redemarrage.
+  const created = await createPermanentInvite();
+  if (created) {
+    cachedInvite = created;
+    cachedInviteTs = now;
+    console.log('[discord] invitation permanente creee:', created);
+    return created;
+  }
+
+  // Aucun lien exploitable: on renvoie null plutot qu'une invitation morte
+  // (le front masque alors le bouton au lieu d'envoyer l'utilisateur dans le vide).
+  console.error(
+    "[discord] Aucune invitation permanente disponible — definis DISCORD_INVITE_URL (invitation sans expiration) dans les variables d'environnement."
+  );
+  return null;
+}
+
+// Cree une invitation permanente (max_age 0) sur le premier salon texte ou le
+// bot possede la permission de creer des invitations.
+async function createPermanentInvite() {
+  const guildId = process.env.DISCORD_GUILD_ID;
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (!guildId || !botToken) return null;
+  try {
+    const chRes = await fetch(`https://discord.com/api/guilds/${guildId}/channels`, {
+      headers: { Authorization: `Bot ${botToken}` },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!chRes.ok) {
+      console.error(`[discord] impossible de lister les salons (HTTP ${chRes.status})`);
+      return null;
+    }
+    const channels = await chRes.json();
+    const candidates = (Array.isArray(channels) ? channels : []).filter(
+      (c) => c && c.id && (c.type === 0 || c.type === 5)
+    );
+    for (const channel of candidates) {
+      const res = await fetch(`https://discord.com/api/channels/${channel.id}/invites`, {
+        method: 'POST',
+        headers: { Authorization: `Bot ${botToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ max_age: 0, max_uses: 0, unique: false }),
+        signal: AbortSignal.timeout(6000),
+      });
+      if (res.ok) {
+        const inv = await res.json();
+        if (inv && inv.code) return `https://discord.gg/${inv.code}`;
+      } else if (res.status === 401 || res.status === 403) {
+        console.error(
+          `[discord] le bot ne peut pas creer d'invitation (HTTP ${res.status}): donne-lui la permission "Create Invite" sur un salon texte.`
+        );
+        return null;
+      }
+    }
+  } catch (e) {
+    console.error('[discord] createPermanentInvite:', e.message);
+  }
+  return null;
 }
 
 module.exports = {

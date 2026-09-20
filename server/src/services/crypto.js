@@ -1,12 +1,12 @@
 const crypto = require('crypto');
+const { secret, aesKey } = require('../config-check');
 
-const HMAC_SECRET = process.env.HMAC_SECRET || 'dev-secret';
-const AES_KEY = Buffer.from(
-  (process.env.AES_KEY || '').length === 64
-    ? process.env.AES_KEY
-    : crypto.randomBytes(32).toString('hex'),
-  'hex'
-);
+// Secrets via l'environnement (voir src/config-check.js).
+// ATTENTION: plus aucun fallback silencieux de type 'dev-secret' (forgeable par
+// n'importe qui) et plus d'AES_KEY aleatoire par processus (elle rendait les
+// originaux chiffres illisibles apres chaque redeploiement).
+const HMAC_SECRET = secret('HMAC_SECRET');
+const AES_KEY = aesKey();
 
 // ---------- Cles HMAC (format: kid.signature) ----------
 function generateKey() {
@@ -22,15 +22,25 @@ function generateKey() {
 function verifyKeyFormat(key) {
   if (typeof key !== 'string') return null;
   const parts = key.split('.');
-  if (parts.length !== 2 || parts[0].length !== 32 || parts[1].length !== 32) return null;
-  const kid = parts[0];
+  // Validation stricte du format AVANT tout calcul cryptographique:
+  // timingSafeEqual leve une exception si les buffers n'ont pas la meme taille,
+  // et une entree non hex produirait un buffer plus court => 500 au lieu d'un
+  // simple "cle invalide".
+  if (parts.length !== 2) return null;
+  const [kid, signature] = parts;
+  if (!/^[0-9a-f]{32}$/i.test(kid) || !/^[0-9a-f]{32}$/i.test(signature)) return null;
+
   const expected = crypto
     .createHmac('sha256', HMAC_SECRET)
     .update(kid)
     .digest('hex')
     .slice(0, 32);
-  if (!crypto.timingSafeEqual(Buffer.from(parts[1]), Buffer.from(expected))) return null;
-  return { kid, signature: parts[1] };
+  try {
+    if (!crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'))) return null;
+  } catch {
+    return null;
+  }
+  return { kid, signature };
 }
 
 // ---------- AES-256-GCM pour le script original ----------
@@ -47,8 +57,8 @@ function encryptAES(plaintext) {
 
 function decryptAES(encBase64, ivBase64) {
   const raw = Buffer.from(encBase64, 'base64');
-  const tag = raw.slice(raw.length - 16);
-  const data = raw.slice(0, raw.length - 16);
+  const tag = raw.subarray(raw.length - 16);
+  const data = raw.subarray(0, raw.length - 16);
   const iv = Buffer.from(ivBase64, 'base64');
   const decipher = crypto.createDecipheriv('aes-256-gcm', AES_KEY, iv);
   decipher.setAuthTag(tag);
@@ -67,4 +77,24 @@ function hashToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-module.exports = { generateKey, verifyKeyFormat, encryptAES, decryptAES, sha256, randomToken, hashToken };
+// Comparaison de secrets a temps constant, tolerante aux entrees invalides
+// (l'ancien code appelait timingSafeEqual directement => exception + 500).
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  } catch {
+    return false;
+  }
+}
+
+module.exports = {
+  generateKey,
+  verifyKeyFormat,
+  encryptAES,
+  decryptAES,
+  sha256,
+  randomToken,
+  hashToken,
+  safeEqual,
+};

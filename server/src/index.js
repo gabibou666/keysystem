@@ -1,15 +1,30 @@
 require('dotenv').config();
+
+// Validation de configuration AVANT tout le reste: refuse de demarrer en
+// production avec un secret manquant (voir src/config-check.js).
+const { assertProdConfig, checkConfig } = require('./config-check');
+assertProdConfig();
+
 const express = require('express');
 const helmet = require('helmet');
+const nodeCrypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 
 const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
 const discordRoutes = require('./routes/discord');
 const robuxRoutes = require('./routes/robux');
+const pool = require('./db');
 const { startPurgeScheduler } = require('./services/purge');
 const { auditRecentSessions } = require('./services/lootlabs-verify');
 const { notifyDiscord } = require('./services/notify');
+
+// Schedulers desactivables (utile pour lancer un serveur local de test sans
+// declencher purge + audit + self-ping sur la base / le site de production).
+const SCHEDULERS_ON = process.env.SCHEDULERS !== 'off';
+
+const webDir = path.join(__dirname, '..', '..', 'web');
 
 function startLootlabsAuditScheduler() {
   if (!process.env.LOOTLABS_API_KEY) {
@@ -43,37 +58,155 @@ function startLootlabsAuditScheduler() {
   console.log('[audit-lootlabs] Scheduler actif (toutes les 2 heures)');
 }
 
+// ============================================================================
+// Version des assets: sert au cache-busting (style.css?v=xxxx).
+// Recalculee a chaque demarrage a partir des fichiers reellement servis:
+// modifier le CSS/JS change la version => les navigateurs rechargent, sans
+// jamais avoir a renommer les fichiers ni a vider un cache CDN.
+// ============================================================================
+function listStaticFiles(dir, acc = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) listStaticFiles(full, acc);
+    else if (!/\.html?$/i.test(entry.name)) acc.push(full);
+  }
+  return acc;
+}
+
+function computeAssetVersion() {
+  const hash = nodeCrypto.createHash('sha1');
+  try {
+    for (const file of listStaticFiles(webDir).sort()) {
+      const st = fs.statSync(file);
+      hash.update(`${path.relative(webDir, file)}:${st.size}:${Math.floor(st.mtimeMs)}`);
+    }
+  } catch (e) {
+    console.warn('[assets] version partielle:', e.message);
+  }
+  return hash.digest('hex').slice(0, 12);
+}
+
+const ASSET_VERSION = computeAssetVersion();
+
+// URL publique du site, utilisee pour canonical/Open Graph (placeholder __SITE__
+// dans les pages). Fallback: la variable d'environnement PORT/URL Render.
+const SITE_URL = (process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
+
+// ============================================================================
+// Pages HTML: injection de la version d'assets (placeholder __V__) + en-tetes.
+// Le HTML se revalide toujours (no-cache), les assets versionnes sont caches 1 an.
+// ============================================================================
+const htmlCache = new Map();
+
+function serveHtml(req, res, next) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+
+  let rel = decodeURIComponent(req.path).replace(/^\/+/, '').replace(/\/+$/, '');
+  if (rel === '') rel = 'index';
+  if (rel.startsWith('api/') || rel.startsWith('admin/auth')) return next(); // routes dynamiques
+  if (path.extname(rel)) {
+    if (!rel.endsWith('.html')) return next(); // asset -> express.static
+  } else {
+    rel += '.html'; // /getkey -> getkey.html, /privacy/ -> privacy.html
+  }
+
+  const abs = path.resolve(webDir, rel);
+  if (!abs.startsWith(path.resolve(webDir) + path.sep)) return next(); // anti path traversal
+
+  let st;
+  try {
+    st = fs.statSync(abs);
+    if (!st.isFile()) return next();
+  } catch {
+    return next();
+  }
+
+  let html;
+  const cached = htmlCache.get(abs);
+  if (cached && cached.mtimeMs === st.mtimeMs) {
+    html = cached.html;
+  } else {
+    try {
+      html = fs.readFileSync(abs, 'utf8');
+    } catch {
+      return next();
+    }
+    if (html.includes('__V__')) html = html.split('__V__').join(ASSET_VERSION);
+    // __SITE__: URL publique reelle (canonical, Open Graph). Evite toute URL de
+    // domaine codee en dur dans les pages (le domaine peut changer).
+    if (html.includes('__SITE__')) html = html.split('__SITE__').join(SITE_URL);
+    htmlCache.set(abs, { html, mtimeMs: st.mtimeMs });
+  }
+
+  res.set('Content-Type', 'text/html; charset=UTF-8');
+  res.set('Cache-Control', 'no-cache, must-revalidate');
+  // Pages d'administration / d'attente: jamais indexees.
+  if (rel === 'admin.html' || rel === 'verify.html') {
+    res.set('X-Robots-Tag', 'noindex, nofollow');
+  }
+  res.send(html);
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.set('trust proxy', 1);
+// Nombre de proxies de confiance (Render = 1). Rend configurable pour pouvoir
+// corriger un mauvais reglage (IP client faussee => anti-DDoS inoperant) sans
+// redeployer de code.
+const TRUST_PROXY = parseInt(process.env.TRUST_PROXY || '1', 10);
+app.set('trust proxy', Number.isFinite(TRUST_PROXY) ? TRUST_PROXY : 1);
 
 // ===== PROTECTION ANTI-DDOS & AUTO-JAIL (Premier rempart d'interception) =====
 const { antiDdosMiddleware } = require('./services/antiddos');
 app.use(antiDdosMiddleware);
+
+// ===== Filet de securite CSP =====
+// Le durcissement (suppression de 'unsafe-inline') est volontairement reversible
+// sans redeploiement: si un partenaire publicitaire injectait un jour un script
+// inline, il suffit de mettre CSP_ALLOW_INLINE_SCRIPTS=1 dans les variables
+// d'environnement Render pour restaurer l'ancien comportement en 10 secondes.
+const ALLOW_INLINE_SCRIPTS = process.env.CSP_ALLOW_INLINE_SCRIPTS === '1';
 
 app.use(
   helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", 'https://www.highrevenueformat.com'],
+        // Plus de 'unsafe-inline' sur scriptSrc: tous les <script> inline ont
+        // ete extraits dans web/app-*.js. Les attributs onclick= restent
+        // autorises via script-src-attr (tolerance temporaire, documentee:
+        // toute injection HTML est bloquee par l'echappement strict cote front).
+        scriptSrc: ALLOW_INLINE_SCRIPTS
+          ? ["'self'", "'unsafe-inline'", 'https://www.highrevenueformat.com']
+          : ["'self'", 'https://www.highrevenueformat.com'],
         scriptSrcAttr: ["'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
+        // Violations remontees sur /api/csp-report (log + alerte Discord):
+        // on detecte immediatement un partenaire qui aurait besoin d'une
+        // exception, au lieu de le decouvrir en perdant du revenu.
+        reportUri: ['/api/csp-report'],
+        styleSrc: ["'self'", "'unsafe-inline'"],
         // Les creatives publicitaires arrivent depuis des domaines CDN tournants
         // impossibles a lister: images/frames/tracking ouverts (aucun risque de
         // script via img/frame; la protection XSS reste sur scriptSrc).
         imgSrc: ['*'],
         frameSrc: ['*'],
         mediaSrc: ['*'],
+        // Polices auto-hebergees (/fonts): plus aucun appel a Google Fonts
+        // (conformite RGPD/CNIL + suppression d'une chaine bloquante).
+        fontSrc: ["'self'", 'data:'],
         connectSrc: ["'self'", 'https://discord.com', 'https://www.highrevenueformat.com', 'https://*.highrevenueformat.com'],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'self'"],
       },
     },
     crossOriginEmbedderPolicy: false,
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   })
 );
 
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '2mb', type: ['application/json', 'application/csp-report', 'application/reports+json'] }));
 app.use(express.urlencoded({ extended: true }));
 
 // Cookie parser minimal (sans dependance)
@@ -95,9 +228,104 @@ app.use((req, res, next) => {
 // Keepalive — empêche Render free tier de s'endormir
 app.get('/api/keepalive', (req, res) => res.json({ ok: true, t: Date.now() }));
 
-// Static front
-const webDir = path.join(__dirname, '..', '..', 'web');
-app.use(express.static(webDir, { extensions: ['html'] }));
+// ---------- POST /api/csp-report ----------
+// Recoit les rapports de violation de la CSP (report-uri). Si un partenaire
+// publicitaire tente d'injecter un script inline, on le voit ici (log + alerte
+// Discord) au lieu de le decouvrir via une baisse de revenu inexplicable.
+const cspAlertState = { lastAt: 0 };
+app.post('/api/csp-report', (req, res) => {
+  try {
+    const raw = req.body || {};
+    const report = raw['csp-report'] || raw.body || (Array.isArray(raw) ? raw[0] && raw[0].body : null) || {};
+    const directive = report['violated-directive'] || report.violatedDirective || report['effective-directive'] || '(inconnue)';
+    const blocked = report['blocked-uri'] || report.blockedURL || '(inconnu)';
+    const page = report['document-uri'] || report.documentURL || '(inconnue)';
+    console.warn(`[csp] ${directive} <- ${String(blocked).slice(0, 120)} (page ${String(page).slice(0, 120)})`);
+
+    const now = Date.now();
+    if (now - cspAlertState.lastAt > 10 * 60 * 1000) {
+      cspAlertState.lastAt = now;
+      notifyDiscord({
+        title: '🛡️ CSP : ressource bloquee',
+        color: 'warn',
+        description: `Directive : \`${directive}\`\nBloque : \`${String(blocked).slice(0, 120)}\`\nPage : ${String(page).slice(0, 120)}`,
+        fields: [
+          {
+            name: 'Que faire ?',
+            value:
+              "Script publicitaire ? definir `CSP_ALLOW_INLINE_SCRIPTS=1` dans Render. Autre domaine legitime ? l'ajouter a la directive concernee dans src/index.js.",
+          },
+        ],
+      }).catch(() => {});
+    }
+  } catch (e) {
+    console.warn('[csp] rapport illisible:', e.message);
+  }
+  res.status(204).end();
+});
+
+// Sante complete (DB incluse): a brancher sur un moniteur externe
+// (UptimeRobot / cron-job.org) pour etre alerte AVANT les utilisateurs.
+app.get('/healthz', async (req, res) => {
+  const started = Date.now();
+  try {
+    await pool.query('SELECT 1');
+    res.json({
+      ok: true,
+      db: 'up',
+      assets: ASSET_VERSION,
+      uptimeSec: Math.round(process.uptime()),
+      latencyMs: Date.now() - started,
+    });
+  } catch (e) {
+    res.status(503).json({ ok: false, db: 'down', error: e.message });
+  }
+});
+
+// robots.txt / sitemap.xml: servis avec l'URL publique reelle (placeholder
+// __SITE__) pour ne jamais dependre d'un domaine code en dur.
+for (const [route, file, type] of [
+  ['/robots.txt', 'robots.txt', 'text/plain; charset=utf-8'],
+  ['/sitemap.xml', 'sitemap.xml', 'application/xml; charset=utf-8'],
+]) {
+  app.get(route, (req, res) => {
+    try {
+      const body = fs
+        .readFileSync(path.join(webDir, file), 'utf8')
+        .split('__SITE__')
+        .join(SITE_URL);
+      res.set('Content-Type', type);
+      res.set('Cache-Control', 'public, max-age=3600');
+      res.send(body);
+    } catch {
+      res.status(404).type('text/plain').send('Not found');
+    }
+  });
+}
+
+// ===== Front statique =====
+// 1) Pages HTML (versionnees + no-cache)
+app.use(serveHtml);
+
+// 2) Polices auto-hebergees: cache tres long
+app.use(
+  '/fonts',
+  express.static(path.join(webDir, 'fonts'), { maxAge: '365d', immutable: true })
+);
+
+// 3) Assets versionnes (style.css?v=xxxx, app-*.js?v=xxxx...): cache 1 an
+app.use(
+  express.static(webDir, {
+    index: false,
+    setHeaders: (res, filePath) => {
+      if (/\.(css|js|woff2|png|svg|ico|jpg|webp)$/i.test(filePath)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+      }
+    },
+  })
+);
 
 // API
 app.use('/api', apiRoutes);
@@ -108,34 +336,22 @@ app.use('/api/robux', robuxRoutes);
 // OAuth Discord: redirect configure dans Discord = /admin/auth/callback
 app.use('/admin', adminRoutes);
 
-// Callback LootLabs: la page getkey.html gere le puid cote client
+// Retour LootLabs: sert la page getkey (versionnee) en conservant l'URL du
+// navigateur intacte (le front lit location.search).
 // Anti-bypass: le referer doit venir de l'infrastructure LootLabs (spoofable seul,
-// mais couche supplementaire) — sinon redirection normale (l'experience legitime
-// passe toujours par loot-link.com / links.lootlabs.gg).
-app.get('/getkey/callback', (req, res) => {
+// mais couche supplementaire) — sinon on log pour audit, la vraie protection
+// reste le token serveur (un referer falsifie ne delivre rien).
+app.get('/getkey/callback', (req, res, next) => {
   const ref = (req.headers.referer || '').toLowerCase();
-  const fromLootlabs = ref.includes('loot-link.com') || ref.includes('lootlabs.gg');
-  if (!fromLootlabs && process.env.NODE_ENV === 'production') {
-    // Referer absent/etranger: on log pour audit, mais on laisse passer —
-    // la vraie protection est le token serveur (un referer falsifie ne delivre rien).
+  if (!ref.includes('loot-link.com') && !ref.includes('lootlabs.gg') && process.env.NODE_ENV === 'production') {
     console.log('[getkey/callback] referer non-LootLabs:', req.headers.referer || '(none)');
   }
-  res.sendFile(path.join(webDir, 'getkey.html'));
+  req.url = '/getkey.html';
+  serveHtml(req, res, next);
 });
 
-// Page paiement Robux
-  // Legal pages
-  app.get(['/privacy', '/privacy/'], (req, res) => res.sendFile(path.join(webDir, 'privacy.html')));
-  app.get(['/terms', '/terms/'], (req, res) => res.sendFile(path.join(webDir, 'terms.html')));
-  app.get(['/cookies', '/cookies/'], (req, res) => res.sendFile(path.join(webDir, 'cookies.html')));
-
-  app.get('/robux/', (req, res) => {
-  res.sendFile(path.join(webDir, 'robux.html'));
-});
-
-// /admin -> dashboard
-app.get('/admin/', (req, res) => {
-  res.sendFile(path.join(webDir, 'admin.html'));
+app.use((req, res) => {
+  res.status(404).type('text/plain').send('Not found');
 });
 
 app.use((err, req, res, next) => {
@@ -152,31 +368,47 @@ app.use((err, req, res, next) => {
 // (Le GitHub Actions keepalive reste en filet de securite pour REVEILLER le service
 //  si Render le redemarre/redeploie: le self-ping ne peut pas traverser un redemarrage.)
 const SELF_PING_URL = process.env.PUBLIC_URL
-  ? process.env.PUBLIC_URL.replace(/\/$/, '') + '/api/stats/public'
+  ? process.env.PUBLIC_URL.replace(/\/$/, '') + '/api/keepalive'
   : null;
-
-if (SELF_PING_URL && !SELF_PING_URL.includes('localhost') && !SELF_PING_URL.includes('127.0.0.1')) {
-  setInterval(
-    async () => {
-      try {
-        const res = await fetch(SELF_PING_URL, { signal: AbortSignal.timeout(20000) });
-        console.log(`[self-ping] ${new Date().toISOString()} -> HTTP ${res.status}`);
-      } catch (e) {
-        console.log(`[self-ping] echec (${e.message}) — le filet GitHub Actions prendra le relais`);
-      }
-    },
-    5 * 60 * 1000
-  ).unref();
-  console.log(`[self-ping] anti-sleep actif vers ${SELF_PING_URL} (toutes les 5 min)`);
-} else {
-  console.log('[self-ping] desactive (PUBLIC_URL local ou non defini)');
-}
 
 app.listen(PORT, () => {
   console.log(`[server] KeySystem en ligne sur le port ${PORT}`);
   console.log(`[server] PUBLIC_URL = ${process.env.PUBLIC_URL || '(non defini)'}`);
+  console.log(`[server] assets=${ASSET_VERSION} · trust proxy=${app.get('trust proxy')}`);
+
+  const { warnings } = checkConfig();
+  if (warnings.length && process.env.NODE_ENV === 'production') {
+    notifyDiscord({
+      title: '⚠️ Configuration a corriger',
+      color: 'warn',
+      description: warnings.map((w) => `• ${w}`).join('\n'),
+    }).catch(() => {});
+  }
+
+  if (!SCHEDULERS_ON) {
+    console.log('[schedulers] desactives (SCHEDULERS=off)');
+    return;
+  }
+
   startPurgeScheduler();
   startLootlabsAuditScheduler();
+
+  if (SELF_PING_URL && !SELF_PING_URL.includes('localhost') && !SELF_PING_URL.includes('127.0.0.1')) {
+    setInterval(
+      async () => {
+        try {
+          const res = await fetch(SELF_PING_URL, { signal: AbortSignal.timeout(20000) });
+          console.log(`[self-ping] ${new Date().toISOString()} -> HTTP ${res.status}`);
+        } catch (e) {
+          console.log(`[self-ping] echec (${e.message}) — le filet GitHub Actions prendra le relais`);
+        }
+      },
+      5 * 60 * 1000
+    ).unref();
+    console.log(`[self-ping] anti-sleep actif vers ${SELF_PING_URL} (toutes les 5 min)`);
+  } else {
+    console.log('[self-ping] desactive (PUBLIC_URL local ou non defini)');
+  }
 });
 
 module.exports = app;
