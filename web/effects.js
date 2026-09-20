@@ -346,21 +346,23 @@
     requestAnimationFrame(animate);
   };
 
-  /* ---------- 10. Live Social-Proof Activity Stream ---------- */
-  window.startSocialTicker = function (containerEl) {
-    if (!containerEl) return;
-    var events = [
-      { icon: '⚡', text: '12h key activated on Delta (Mobile)', time: '30s ago' },
-      { icon: '🎮', text: 'Script executed for Blox Fruits', time: '1m ago' },
-      { icon: '💎', text: 'Lifetime VIP key unlocked via Robux', time: '2m ago' },
-      { icon: '⚡', text: '24h key activated on Wave (PC)', time: '2m ago' },
-      { icon: '🛡️', text: 'Auto-Save enabled on Codex (iOS)', time: '4m ago' },
-      { icon: '🎮', text: 'Script loaded for Blade Ball (Safe)', time: '5m ago' },
-      { icon: '⚡', text: '24h key renewed on MacSploit (macOS)', time: '6m ago' },
-      { icon: '🎁', text: 'Referral reward: Free 24h VIP key claimed', time: '8m ago' },
-    ];
+  /* ---------- 10. Bandeau d'activite: CHIFFRES REELS uniquement ---------- */
+  // L'ancien bandeau affichait des evenements inventes ("12h key activated on
+  // Delta"...). C'est de la fausse preuve sociale: trompeur pour l'utilisateur
+  // (et sanctionnable en UE). Desormais le contenu vient d'un provider branche
+  // sur nos vraies API; sans donnees, la barre garde son texte statique.
+  window.startSocialTicker = function (containerEl, provider) {
+    if (!containerEl || typeof provider !== 'function') return;
     var index = 0;
-    function showNext() {
+
+    function rotate() {
+      var events = [];
+      try {
+        events = provider() || [];
+      } catch (e) {
+        events = [];
+      }
+      if (!events.length) return;
       var ev = events[index % events.length];
       index++;
       containerEl.innerHTML =
@@ -371,7 +373,10 @@
         '<span class="ticker-time">' + ev.time + '</span>' +
         '</div>';
     }
-    showNext();
-    setInterval(showNext, 4500);
+
+    rotate();
+    setInterval(function () {
+      if (document.visibilityState === 'visible') rotate();
+    }, 4500);
   };
 })();

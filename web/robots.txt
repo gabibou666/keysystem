@@ -1,0 +1,15 @@
+# AUDIT HUB — robots.txt
+# L'URL du sitemap est injectee par le serveur (placeholder __SITE__) pour rester
+# correcte meme si le domaine change.
+
+User-agent: *
+Allow: /
+
+# Pages techniques / privees: jamais indexees
+Disallow: /admin/
+Disallow: /admin
+Disallow: /verify
+Disallow: /api/
+Disallow: /getkey/callback
+
+Sitemap: __SITE__/sitemap.xml

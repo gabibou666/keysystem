@@ -1,4 +1,25 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* ============================================================
+   POLICES AUTO-HEBERGEES (genere par scripts/selfhost-fonts.py)
+   - plus aucun appel a fonts.googleapis.com / fonts.gstatic.com
+     (RGPD/CNIL: aucune IP visiteur transmise a Google)
+   - suppression d une chaine bloquante de 2 requetes
+   ============================================================ */
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/fonts/plus-jakarta-sans-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 /* ============================================================
    KeySystem — Theme noir/violet néon haute fidélité
@@ -2276,4 +2297,40 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 }
 .site-footer .footer-links a:hover, .site-footer .footer-links button:hover {
   color: var(--color-glow);
+}
+
+/* ============================================================
+   ACCESSIBILITE — respect des preferences systeme (WCAG 2.3.3 / 2.1.1)
+   ============================================================ */
+
+/* 1. L'utilisateur a demande moins d'animations (OS ou navigateur):
+      on neutralise les animations/transitions au lieu de les subir. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal { opacity: 1 !important; transform: none !important; }
+  .pulse, .shimmer, .breathe { animation: none !important; }
+}
+
+/* 2. Navigateur sans JavaScript actif: le contenu ne doit JAMAIS rester
+      invisible (les blocs .reveal sont masques en attendant l'IntersectionObserver). */
+@media (scripting: none) {
+  .reveal { opacity: 1 !important; transform: none !important; }
+}
+
+/* 3. Focus visible au clavier sur le bouton de navigation mobile */
+.nav-hamburger:focus-visible {
+  outline: 2px solid var(--color-glow);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* 4. Respect des zones sures (encoche iPhone) pour la barre du bas */
+@supports (padding: max(0px)) {
+  .ks-cookie-banner { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
 }
