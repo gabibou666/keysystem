@@ -75,11 +75,27 @@ keysystem/
    - `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `ADMIN_DISCORD_IDS`
    - `AI_API_KEY`, `AI_BASE_URL=https://tokenrouter.ai/v1`, `AI_MODEL`
    - `NODE_ENV=production`
+
+   Optionnel mais recommandé :
+   - `DISCORD_INVITE_URL` — invitation Discord **permanente** affichée par le site.
+     Génère-la/vérifie-la avec `npm run invite:ensure`. Si la variable est absente,
+     le serveur cherche une invitation permanente et en crée une tout seul au
+     démarrage (permission *Create Invite* requise pour le bot).
+   - `TRUST_PROXY` — défaut `1` (Render). À ajuster uniquement si l'IP vue par
+     l'anti-DDoS n'est pas celle du visiteur : l'onglet **anti-DDoS** du panel
+     admin affiche un diagnostic (`ipResolution.samples`).
+   - `IP_HEADER=cf-connecting-ip` — à activer **seulement** si tout le trafic
+     passe par un Cloudflare que tu contrôles (sinon l'en-tête est falsifiable).
+   - `SCHEDULERS=off` — pour lancer un serveur local de test sans déclencher la
+     purge, l'audit LootLabs et le self-ping sur la production.
 6. Déployer → note l'URL `https://xxx.onrender.com`
 7. **Migrations** : Render → Shell → `npm run migrate` (ou en local avec `DATABASE_URL` en env)
 
-### 6. Keep-alive (optionnel, anti cold-start)
-[cron-job.org](https://cron-job.org) → job toutes les 10 min → `https://TONSITE.onrender.com/api/stats/public`
+### 6. Keep-alive & surveillance (gratuit)
+- **Réveil** : [cron-job.org](https://cron-job.org) → job toutes les 10-30 min → `https://TONSITE.onrender.com/api/keepalive`
+- **Surveillance** : [UptimeRobot](https://uptimerobot.com) → moniteur HTTP sur `https://TONSITE.onrender.com/healthz`
+  (`/healthz` teste aussi la base de données : il renvoie 503 si Neon est injoignable, ce qui déclenche l'alerte **avant** que les utilisateurs s'en aperçoivent).
+- ⚠️ Le workflow GitHub Actions ci-dessus ne suffit pas comme unique filet : GitHub **désactive les workflows planifiés après 60 jours sans activité du dépôt**. D'où la surveillance externe.
 
 ### 7. Premier script
 1. Va sur `https://TONSITE.onrender.com/admin/` → login Discord
@@ -96,6 +112,7 @@ keysystem/
 ## Sécurité — checklist
 
 - [x] Clés HMAC signées serveur (impossible à forger sans le secret)
+- [x] **Secrets obligatoires en production** : le serveur refuse de démarrer si `DATABASE_URL` ou `HMAC_SECRET` manquent (`src/config-check.js`) — plus jamais de repli silencieux sur `dev-secret` (clés forgeables). Les autres variables manquantes déclenchent un avertissement + une alerte Discord **sans couper le site**.
 - [x] Liaison au premier UserId Roblox (anti-partage)
 - [x] Ban en cascade par UserId
 - [x] Postback LootLabs vérifié serveur-à-serveur (anti-bypass pub)
@@ -104,7 +121,38 @@ keysystem/
 - [x] Secrets uniquement en variables d'environnement
 - [x] Rate limiting sur tous les endpoints sensibles
 - [x] Sessions admin httpOnly + allowlist Discord
+- [x] **Source d'IP anti-DDoS non falsifiable** : `req.ip` (chaîne de proxies déclarée), en-têtes clients ignorés ; une adresse non publique n'est jamais mise en quarantaine.
+- [x] **Échappement HTML strict** dans le panel admin (fini les injections par pseudo Discord) + aucune donnée serveur injectée dans un attribut HTML (`data-*` uniquement)
+- [x] **CSP sans `unsafe-inline`** sur les scripts : tous les `<script>` sont des fichiers externes
+- [x] Polices auto-hébergées : aucun appel à Google Fonts (RGPD + performance)
+- [x] **Garde-fou automatique** (`npm run check`) exécuté en CI : assets, CSP, syntaxe, échappement
 - [ ] **Régénère ton token LootLabs s'il a déjà été partagé quelque part**
+- [ ] Passe les attributs `onclick=` en `addEventListener` (tolérance actuelle de la CSP) — voir « Suites »
+
+## Scripts
+
+| Commande | Rôle |
+|---|---|
+| `npm start` | Serveur de production |
+| `npm run dev` | Serveur avec rechargement automatique |
+| `npm run migrate` | Applique le schéma en base |
+| `npm run check` | Garde-fou qualité (assets manquants, scripts inline, syntaxe, échappement) — **exécuté en CI** |
+| `npm run invite:ensure` | Trouve/crée une **invitation Discord permanente** |
+| `npm run fonts` | Re-télécharge et auto-héberge les polices (`web/fonts/`) |
+| `npm run og` | Régénère l'image de partage social (`web/og.png`) |
+
+CI GitHub Actions (`.github/workflows/ci.yml`) : lance `npm ci`, `npm run check`,
+un audit des dépendances et un **smoke test** qui démarre réellement le serveur
+puis vérifie les pages, `robots.txt`, `sitemap.xml`, le CSS et `healthz`.
+
+## Suites recommandées (non bloquantes)
+
+1. **Cache CDN long** : les assets sont servis en `immutable` avec `?v=<hash>` calculé au démarrage (`src/index.js`). Le HTML reste en `no-cache`.
+2. **Loader** : `/api/v1/check` renvoie tout le script à chaque lancement; un ETag/`If-None-Match` éviterait de re-télécharger 30 Ko identiques.
+3. **Attributs `onclick=`** : les convertir en `addEventListener` permettrait de retirer `script-src-attr 'unsafe-inline'` de la CSP.
+4. **Observabilité** : Sentry (erreurs) + un moniteur sur `/healthz` avec alerte Discord.
+5. **Sauvegardes** : un `pg_dump` planifié vers un stockage externe (la perte de la base = tous les utilisateurs bloqués).
+6. **`trust proxy`** : confirmer via le diagnostic admin que l'IP résolue est bien celle du visiteur.
 
 ## Renouvellement des clés
 
