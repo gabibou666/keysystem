@@ -3,6 +3,14 @@ name: Keep Render awake
 # ROLE: filet de securite pour REVEILLER le service apres un redemarrage/
 # redeploiement Render (le self-ping serveur ne traverse pas un spin-up).
 # Cadence: 30 min -> ~1440 min Actions/mois, sous la limite GitHub Free (2000).
+#
+# ATTENTION (piege qui a epuise le quota Neon): ce ping vise volontairement
+# /api/keepalive, qui NE TOUCHE PAS la base de donnees.
+# Ne JAMAIS pointer ici vers /api/stats/public, /healthz ou une autre route qui
+# fait un SELECT: Neon (gratuit) met le calcul en veille apres 5 min d'inactivite
+# et une requete SQL toutes les 30 min le reveille 24 h/24, ce qui consomme
+# ~182 CU-hours/mois pour un quota gratuit de 100 CU-hours/mois.
+# En cas de doute: npm run check (le garde-fou check-cost le refuse).
 
 on:
   schedule:
@@ -14,9 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Wake / keep-alive KeySystem
+      - name: Wake / keep-alive KeySystem (route SANS base de donnees)
         run: |
-          URL="https://keysystem-vv8b.onrender.com/api/stats/public"
+          URL="https://keysystem-vv8b.onrender.com/api/keepalive"
           code=$(curl -s -o /dev/null -w '%{http_code}' -m 90 --retry 2 --retry-delay 10 "$URL")
           echo "[$(date -u '+%Y-%m-%d %H:%M UTC')] keep-alive -> HTTP $code"
           # Toujours reussir: un ping rate ne doit pas spammer d'emails d'echec

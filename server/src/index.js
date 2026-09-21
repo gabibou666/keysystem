@@ -43,7 +43,11 @@ function startLootlabsAuditScheduler() {
     }
   }, 2 * 60 * 1000).unref();
 
-  // Audit recurrent toutes les 2 heures
+  // Audit recurrent — intervalle reglable, 6 h par defaut (AUDIT_INTERVAL_HOURS).
+  // Chaque passage REVEILLE la base Neon: un intervalle court consomme du quota
+  // sans rien apporter, l'audit n'etant qu'un filet de securite (le postback
+  // valide deja le revenu en temps reel). Voir scripts/check-cost.js.
+  const auditHours = Math.max(1, Number(process.env.AUDIT_INTERVAL_HOURS) || 6);
   setInterval(async () => {
     try {
       const res = await auditRecentSessions(notifyDiscord);
@@ -53,9 +57,9 @@ function startLootlabsAuditScheduler() {
     } catch (e) {
       console.warn('[audit-lootlabs] echec recurrent:', e.message);
     }
-  }, 2 * 60 * 60 * 1000).unref();
+  }, auditHours * 60 * 60 * 1000).unref();
 
-  console.log('[audit-lootlabs] Scheduler actif (toutes les 2 heures)');
+  console.log(`[audit-lootlabs] Scheduler actif (toutes les ${auditHours} h)`);
 }
 
 // ============================================================================
@@ -225,8 +229,17 @@ app.use((req, res, next) => {
   next();
 });
 
-// Keepalive — empêche Render free tier de s'endormir
+// ---------- Sondes SANS base de donnees ----------
+// ATTENTION: ces routes ne doivent JAMAIS interroger la base. Neon gratuit met
+// le calcul en veille apres 5 min d'inactivite: un ping frequent vers une route
+// qui fait un SELECT reveille la base 24 h/24 (~182 CU-hours/mois pour un quota
+// de 100) et epuise le quota vers le 16 du mois. Cibles officielles des
+// moniteurs et des keep-alive (Render, GitHub Actions, UptimeRobot):
+//   /api/keepalive (historique, utilise par le self-ping et GitHub Actions)
+//   /ping          (nom public pour un moniteur externe)
+// Garde-fou associe: npm run check -> scripts/check-cost.js
 app.get('/api/keepalive', (req, res) => res.json({ ok: true, t: Date.now() }));
+app.get('/ping', (req, res) => res.set('Cache-Control', 'no-store').json({ ok: true, t: Date.now() }));
 
 // ---------- POST /api/csp-report ----------
 // Recoit les rapports de violation de la CSP (report-uri). Si un partenaire
@@ -264,22 +277,51 @@ app.post('/api/csp-report', (req, res) => {
   res.status(204).end();
 });
 
-// Sante complete (DB incluse): a brancher sur un moniteur externe
-// (UptimeRobot / cron-job.org) pour etre alerte AVANT les utilisateurs.
+// ---------- /healthz : sonde PROFONDE, a cout maitrise ----------
+// Elle verifie la base, donc elle la REVEILLE. Pour ne pas consommer le quota
+// Neon gratuit (100 CU-hours/mois, veille apres 5 min), la requete SQL n'est
+// faite qu'une fois par HEALTHZ_DEEP_TTL_MIN (60 min par defaut) meme si un
+// moniteur appelle la route toutes les minutes: les appels suivants repondent
+// depuis le cache. Les moniteurs FREQUENTS visent /ping (aucune requete SQL).
+//   ?deep=1 -> sonde forcee (diagnostic ponctuel)
+// Si la base est en panne, le delai retombe a 60 s pour detecter la reprise.
+const HEALTHZ_DEEP_TTL_MS = Math.max(5, Number(process.env.HEALTHZ_DEEP_TTL_MIN) || 60) * 60 * 1000;
+const healthzState = { checkedAt: 0, ok: false, latencyMs: null, error: null };
+
 app.get('/healthz', async (req, res) => {
+  const forced = req.query.deep === '1';
+  const age = Date.now() - healthzState.checkedAt;
+  const ttl = healthzState.ok ? HEALTHZ_DEEP_TTL_MS : 60 * 1000;
+
+  if (!forced && healthzState.checkedAt && age < ttl) {
+    return res.status(healthzState.ok ? 200 : 503).json({
+      ok: healthzState.ok,
+      db: healthzState.ok ? 'up' : 'down',
+      cached: true,
+      checkedAgeSec: Math.round(age / 1000),
+      nextDeepCheckInSec: Math.round((ttl - age) / 1000),
+      assets: ASSET_VERSION,
+      uptimeSec: Math.round(process.uptime()),
+      ...(healthzState.error ? { error: healthzState.error } : {}),
+    });
+  }
+
   const started = Date.now();
   try {
     await pool.query('SELECT 1');
-    res.json({
-      ok: true,
-      db: 'up',
-      assets: ASSET_VERSION,
-      uptimeSec: Math.round(process.uptime()),
-      latencyMs: Date.now() - started,
-    });
+    Object.assign(healthzState, { checkedAt: Date.now(), ok: true, latencyMs: Date.now() - started, error: null });
   } catch (e) {
-    res.status(503).json({ ok: false, db: 'down', error: e.message });
+    Object.assign(healthzState, { checkedAt: Date.now(), ok: false, latencyMs: null, error: e.message });
   }
+  res.status(healthzState.ok ? 200 : 503).json({
+    ok: healthzState.ok,
+    db: healthzState.ok ? 'up' : 'down',
+    cached: false,
+    ...(healthzState.latencyMs !== null ? { latencyMs: healthzState.latencyMs } : {}),
+    ...(healthzState.error ? { error: healthzState.error } : {}),
+    assets: ASSET_VERSION,
+    uptimeSec: Math.round(process.uptime()),
+  });
 });
 
 // robots.txt / sitemap.xml: servis avec l'URL publique reelle (placeholder
