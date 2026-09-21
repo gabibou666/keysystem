@@ -39,6 +39,8 @@ keysystem/
 | POST | `/api/v1/report` | télémétrie erreurs loader |
 | GET | `/api/v1/loader` | sert loader.luau |
 | GET | `/api/stats/public` | compteur public |
+| GET | `/ping` | sonde de disponibilité — **aucune requête SQL** (cible des moniteurs et keep-alive) |
+| GET | `/healthz` | sonde profonde (vérifie la base) — résultat en cache 60 min, `?deep=1` pour forcer |
 | — | `/api/admin/*` | stats, clés, bans, script manager, patchs IA (session Discord) |
 
 ## Déploiement pas-à-pas
@@ -92,9 +94,15 @@ keysystem/
 7. **Migrations** : Render → Shell → `npm run migrate` (ou en local avec `DATABASE_URL` en env)
 
 ### 6. Keep-alive & surveillance (gratuit)
-- **Réveil** : [cron-job.org](https://cron-job.org) → job toutes les 10-30 min → `https://TONSITE.onrender.com/api/keepalive`
-- **Surveillance** : [UptimeRobot](https://uptimerobot.com) → moniteur HTTP sur `https://TONSITE.onrender.com/healthz`
-  (`/healthz` teste aussi la base de données : il renvoie 503 si Neon est injoignable, ce qui déclenche l'alerte **avant** que les utilisateurs s'en aperçoivent).
+- **Réveil de Render** : [cron-job.org](https://cron-job.org) → job toutes les 10-30 min → `https://TONSITE.onrender.com/ping`
+- **Surveillance** : [UptimeRobot](https://uptimerobot.com), **deux moniteurs** :
+  - `/ping` toutes les **5 min** → disponibilité du site, **zéro requête SQL** ;
+  - `/healthz` toutes les **heures** → contrôle aussi la base (503 si Neon est injoignable) ; le
+    résultat est mis en cache 60 min, donc même un moniteur trop fréquent ne coûte qu'une requête
+    par heure (voir *Consommation de la base* plus bas).
+- ⚠️ **Ne jamais pointer un moniteur fréquent vers une route qui lit la base** (`/healthz`,
+  `/api/stats/public`… ) : cela garde Neon éveillé 24 h/24 et épuise le quota gratuit. Le garde-fou
+  `npm run check` refuse ce cas — c'est exactement l'erreur qui a consommé le quota.
 - ⚠️ Le workflow GitHub Actions ci-dessus ne suffit pas comme unique filet : GitHub **désactive les workflows planifiés après 60 jours sans activité du dépôt**. D'où la surveillance externe.
 
 ### 7. Premier script
@@ -145,6 +153,37 @@ keysystem/
 CI GitHub Actions (`.github/workflows/ci.yml`) : lance `npm ci`, `npm run check`,
 un audit des dépendances et un **smoke test** qui démarre réellement le serveur
 puis vérifie les pages, `robots.txt`, `sitemap.xml`, le CSS et `healthz`.
+
+## Consommation de la base (plan gratuit Neon)
+
+Le plan gratuit Neon accorde **100 CU-hours par mois et par projet** et **met le calcul en veille
+après 5 minutes d'inactivité**. D'où une conséquence contre-intuitive :
+
+| Scénario | Requêtes SQL | CU-hours/mois | Verdict |
+|---|---|---|---|
+| Ping toutes les 5 min vers une route qui lit la base | 288/jour | ~182 | ❌ quota épuisé vers le 16 |
+| Ping toutes les 30 min vers une route qui lit la base | 48/jour | ~182 | ❌ idem : la base ne dort jamais |
+| Visites réelles + surveillance sur `/ping` | ~10/jour | < 5 | ✅ confortable |
+
+Quand le quota est dépassé, Neon **suspend le calcul jusqu'à la période suivante** (ou jusqu'à un
+passage payant). Les **données ne sont jamais supprimées**, et le compteur repart de zéro à chaque
+période de facturation. Suivi : console Neon → projet → **Monitoring / Usage**.
+
+**Les règles, et pourquoi :**
+- les moniteurs et keep-alive visent `/ping` ou `/api/keepalive` : **aucune requête SQL**, donc la
+  base peut dormir entre deux visites réelles — c'est tout l'intérêt du plan gratuit ;
+- `/healthz` est la sonde **profonde** : son résultat est mis en cache `HEALTHZ_DEEP_TTL_MIN`
+  minutes (60 par défaut), donc l'appeler en boucle ne coûte qu'une requête SQL par heure.
+  `?deep=1` force une sonde réelle (diagnostic) ;
+- une base en panne n'est **pas** mise en cache une heure : nouvelle sonde au bout de **60 s**, pour
+  détecter la reprise rapidement ;
+- les tâches planifiées qui touchent la base restent espacées : purge **quotidienne**, audit LootLabs
+  `AUDIT_INTERVAL_HOURS` (**6 h par défaut**).
+
+Garde-fou : `npm run check` exécute `scripts/check-cost.js`, qui échoue si un workflow GitHub pointe
+un ping vers une route qui lit la base, si `/ping` ou `/api/keepalive` se mettent à appeler le pool,
+ou si un `setInterval` de moins de 5 minutes contient une requête SQL. `npm test` exécute
+`test-healthz-cache.js`, qui démarre le vrai serveur et vérifie ces comportements.
 
 ## Suites recommandées (non bloquantes)
 
