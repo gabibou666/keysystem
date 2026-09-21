@@ -6,6 +6,7 @@ const lootlabs = require('../services/lootlabs');
 const pool = require('../db');
 const path = require('path');
 const { requireDiscordUser } = require('./discord');
+const { secret } = require('../config-check');
 const discordService = require('../services/discord');
 const tokens = require('../services/tokens');
 const wmService = require('../services/watermark');
@@ -1123,6 +1124,65 @@ router.get('/changelog', async (req, res) => {
     res.json({ success: true, versions });
   } catch (e) {
     res.json({ success: true, versions: [] });
+  }
+});
+
+// ============================================================================
+// POST /api/v1/token -- CONTROLE DE SESSION (anti-dump)
+// ----------------------------------------------------------------------------
+// Le preambule ajoute a CHAQUE build appelle ce point regulierement. Sans reponse
+// valide, le script se neutralise.
+// POURQUOI: sans ce controle, une copie extraite (dump) d'un script continue de
+// fonctionner sans cle et sans publicite, indefiniment -- c'est la fuite qui
+// coute le plus cher. Aucune protection cote client n'est inviolable, le script
+// s'executant chez l'utilisateur; mais un controle PERIODIQUE transforme une
+// copie gratuite et permanente en une copie qui cesse de fonctionner.
+// ============================================================================
+const SESSION_TTL_SECONDS = Math.max(60, Number(process.env.SESSION_TTL_SECONDS) || 600);
+
+router.post('/v1/token', async (req, res) => {
+  try {
+    const key = typeof req.body?.key === 'string' ? req.body.key.replace(/\s+/g, '') : '';
+    const userId = String(req.body?.userId || '');
+    const parsed = crypto.verifyKeyFormat(key);
+    if (!parsed) return res.status(401).json({ ok: false, reason: 'invalid_key' });
+    if (!/^\d{5,20}$/.test(userId)) return res.status(401).json({ ok: false, reason: 'invalid_user' });
+
+    const { rows } = await pool.query(
+      'SELECT kid, bound_user_id, expires_at, revoked FROM keys WHERE kid = $1',
+      [parsed.kid]
+    );
+    const row = rows[0];
+    if (!row || row.revoked) return res.status(403).json({ ok: false, reason: 'key_revoked' });
+    if (!row.expires_at || new Date(row.expires_at).getTime() <= Date.now()) {
+      return res.status(403).json({ ok: false, reason: 'key_expired' });
+    }
+    // Liaison au premier UserId: une cle partagee est refusee ici, comme au
+    // moment de la delivrance.
+    if (row.bound_user_id && String(row.bound_user_id) !== userId) {
+      return res.status(403).json({ ok: false, reason: 'key_bound_to_other_user' });
+    }
+
+    const expiresAt = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
+    // Nonce: deux appels dans la meme seconde ne doivent PAS produire le meme
+    // jeton (sinon l'artefact est rejouable a l'identique).
+    const nonce = nodeCrypto.randomBytes(6).toString('hex');
+    const charge = `${parsed.kid}.${userId}.${expiresAt}.${nonce}`;
+    const signature = nodeCrypto
+      .createHmac('sha256', secret('HMAC_SECRET'))
+      .update(`ks-session:${charge}`)
+      .digest('hex')
+      .slice(0, 40);
+
+    res.json({
+      ok: true,
+      token: `${charge}.${signature}`,
+      expiresIn: SESSION_TTL_SECONDS,
+      intervalSec: Math.max(30, SESSION_TTL_SECONDS - 60),
+    });
+  } catch (err) {
+    console.error('[v1/token]', err.message);
+    res.status(500).json({ ok: false, reason: 'server_error' });
   }
 });
 
