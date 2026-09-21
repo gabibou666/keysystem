@@ -623,6 +623,181 @@ async function publishVersion(version) {
   loadVersions();
 }
 
+// ============ FABRIQUE DE PROMPT + ENREGISTREMENT DU CODE COLLE ============
+// Ce panneau n'appelle AUCUN modele: la construction du prompt est locale
+// (route /generate-script), et c'est l'admin qui porte le texte a l'IA de son
+// choix. Le code colle en retour est valide par luaparse cote serveur
+// (/script-from-text) et n'est enregistre en brouillon que s'il compile.
+// La page n'utilise AUCUN attribut onclick (CSP stricte + risque d'injection):
+// les ecouteurs sont attaches ici. app-admin.js est charge en defer, le DOM est
+// donc deja pret.
+function afficherMsg(el, texte, nature) {
+  el.textContent = texte;
+  el.className = nature ? 'msg ' + nature : 'msg';
+}
+
+// Copie dans le presse-papiers: navigator.clipboard d'abord (il exige un
+// contexte securise), puis repli sur la selection du textarea + execCommand
+// quand l'API est absente ou refusee (http local, permission refusee).
+async function copierTexte(texte, textarea) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(texte);
+      return true;
+    }
+  } catch (_) {
+    // on tente le repli ci-dessous
+  }
+  try {
+    textarea.focus();
+    textarea.select();
+    const ok = document.execCommand && document.execCommand('copy');
+    if (textarea.setSelectionRange) textarea.setSelectionRange(0, 0);
+    return !!ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+let _copieTimer = null;
+
+async function construirePrompt() {
+  const brief = document.getElementById('genBrief').value.trim();
+  const placeIdBrut = document.getElementById('genPlaceId').value.trim();
+  const bouton = document.getElementById('genButton');
+  const msg = document.getElementById('genMsg');
+  const confirmation = document.getElementById('genCopied');
+  const sortie = document.getElementById('genPrompt');
+  const rangeeCopie = document.getElementById('genCopyRow');
+
+  // Nouvel essai: on efface le resultat precedent pour ne jamais melanger deux
+  // prompts a l'ecran.
+  sortie.value = '';
+  sortie.classList.add('hidden');
+  rangeeCopie.classList.add('hidden');
+  confirmation.classList.add('hidden');
+
+  if (brief.length < 10) {
+    afficherMsg(msg, 'Decrivez le script en 10 caracteres minimum.', 'err');
+    return;
+  }
+  if (placeIdBrut && !/^[0-9]+$/.test(placeIdBrut)) {
+    afficherMsg(msg, "L'ID du jeu doit etre numerique (ou laisse vide).", 'err');
+    return;
+  }
+
+  afficherMsg(msg, 'Construction du prompt...', '');
+  bouton.disabled = true;
+
+  try {
+    const d = await api('/generate-script', {
+      method: 'POST',
+      body: JSON.stringify({
+        brief,
+        placeId: placeIdBrut ? parseInt(placeIdBrut, 10) : null,
+      }),
+    });
+
+    if (d.ok && typeof d.prompt === 'string') {
+      sortie.value = d.prompt;
+      sortie.classList.remove('hidden');
+      rangeeCopie.classList.remove('hidden');
+      afficherMsg(
+        msg,
+        `Prompt pret (${d.tailleOctets} octets). Copiez-le et donnez-le a l'IA de votre choix : ce site ne contacte aucun modele.`,
+        'ok'
+      );
+    } else {
+      afficherMsg(msg, d.error || 'Prompt impossible a construire.', 'err');
+    }
+  } catch (e) {
+    afficherMsg(msg, 'Erreur reseau pendant la construction du prompt : ' + e.message, 'err');
+  } finally {
+    bouton.disabled = false;
+  }
+}
+
+async function copierPrompt() {
+  const sortie = document.getElementById('genPrompt');
+  const confirmation = document.getElementById('genCopied');
+  if (!sortie.value) return;
+
+  const ok = await copierTexte(sortie.value, sortie);
+  confirmation.className = ok ? 'gen-copied' : 'gen-copied err';
+  confirmation.textContent = ok
+    ? 'Prompt copie dans le presse-papiers.'
+    : 'Copie impossible : selectionnez le texte puis Ctrl+C.';
+  clearTimeout(_copieTimer);
+  _copieTimer = setTimeout(() => confirmation.classList.add('hidden'), 3000);
+}
+
+async function enregistrerCodeColle() {
+  const code = document.getElementById('genCode').value;
+  const brief = document.getElementById('genBrief').value.trim();
+  const placeIdBrut = document.getElementById('genPlaceId').value.trim();
+  const bouton = document.getElementById('genSaveButton');
+  const msg = document.getElementById('genSaveMsg');
+  const rapport = document.getElementById('genSaveReport');
+  const erreurEl = document.getElementById('genSaveError');
+
+  rapport.classList.add('hidden');
+  erreurEl.classList.add('hidden');
+
+  if (!code.trim()) {
+    afficherMsg(msg, "Collez la reponse de l'IA avant de verifier.", 'err');
+    return;
+  }
+  if (placeIdBrut && !/^[0-9]+$/.test(placeIdBrut)) {
+    afficherMsg(msg, "L'ID du jeu doit etre numerique (ou laisse vide).", 'err');
+    return;
+  }
+
+  afficherMsg(msg, 'Verification de la syntaxe puis enregistrement en brouillon...', '');
+  bouton.disabled = true;
+
+  try {
+    const d = await api('/script-from-text', {
+      method: 'POST',
+      body: JSON.stringify({
+        code,
+        brief,
+        placeId: placeIdBrut ? parseInt(placeIdBrut, 10) : null,
+      }),
+    });
+
+    if (d.ok) {
+      afficherMsg(
+        msg,
+        `Code valide : brouillon v${d.version} enregistre (NON publie)${d.nettoye ? ', balises markdown retirees' : ''}.`,
+        'ok'
+      );
+      rapport.textContent = `Validation : ${d.tailleOctets} octets. Contenu : ${d.resume}`;
+      rapport.classList.remove('hidden');
+      loadVersions();
+    } else {
+      // Aucun enregistrement: le message du parseur est affiche TEL QUEL
+      // (textContent: jamais interprete comme HTML).
+      afficherMsg(msg, "Code refuse : rien n'a ete enregistre en base.", 'err');
+      erreurEl.textContent = d.error || 'Erreur inconnue';
+      erreurEl.classList.remove('hidden');
+    }
+  } catch (e) {
+    afficherMsg(msg, 'Erreur reseau pendant la verification : ' + e.message, 'err');
+  } finally {
+    bouton.disabled = false;
+  }
+}
+
+// Attache une seule fois, quand le panneau est present dans la page.
+(() => {
+  const boutonPrompt = document.getElementById('genButton');
+  const boutonCopie = document.getElementById('genCopy');
+  const boutonEnregistrer = document.getElementById('genSaveButton');
+  if (boutonPrompt) boutonPrompt.addEventListener('click', construirePrompt);
+  if (boutonCopie) boutonCopie.addEventListener('click', copierPrompt);
+  if (boutonEnregistrer) boutonEnregistrer.addEventListener('click', enregistrerCodeColle);
+})();
+
 // ==================== PATCHES ====================
 async function loadPatches() {
   try {

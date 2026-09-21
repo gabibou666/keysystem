@@ -1,6 +1,9 @@
 // IA TokenRouter (API compatible OpenAI) - patchs de compatibilite contraints
 // L'IA ne renvoie JAMAIS de code reecrit: uniquement des patchs {find, replace, reason}
 // Streaming: le modele (z-ai/glm-5.3-free) raisonne longtemps, le stream evite les timeouts.
+// Depuis la fabrique de prompt, ce service ne GENERE plus de script: il ne reste ici
+// que les patchs de compatibilite, plus la construction du prompt et la validation
+// de syntaxe, toutes deux 100% locales (aucun appel reseau).
 
 const https = require('https');
 const { URL } = require('url');
@@ -155,4 +158,135 @@ Propose patches for executor-specific calls NOT covered by the prelude. JSON arr
   return { patches: valid };
 }
 
-module.exports = { requestCompatibilityPatches };
+// ============================================================================
+// FABRIQUE DE PROMPT (100% locale: aucun appel reseau, aucun cout)
+// ----------------------------------------------------------------------------
+// Le panneau d'administration n'appelle plus aucun modele. Il FABRIQUE le
+// prompt exigeant que l'admin copie dans l'IA de son choix: ce texte est donc
+// la seule garantie de qualite du flux. S'il oublie une contrainte, l'IA rendra
+// un script qui ne compile pas, ou qui cassera l'executeur de l'utilisateur
+// (d'ou les interdictions explicites de require tiers et de loadstring
+// distant, et l'exigence "code directement executable").
+//
+// La VERIFICATION reste ici, locale elle aussi: nettoyerCode puis
+// verifierSyntaxe (luaparse) sont appliques au code colle par l'admin AVANT
+// tout enregistrement. Aucune de ces deux fonctions ne touche au reseau.
+// ============================================================================
+
+const PROMPT_TETE =
+  'Tu es un ingenieur Luau senior. Ecris UN script Luau complet et autonome qui construit une interface graphique (GUI) pour un executeur Roblox.';
+
+// Contraintes techniques: chacune repond a une panne observee (code qui ne
+// compile pas, fenetre qui s'empile, passerelle cassee par un require tiers).
+// test-admin-generate.js verifie qu'aucune ne disparait du prompt.
+const PROMPT_REGLES = `REGLES DE SORTIE (absolues)
+- Reponds avec LE CODE SOURCE UNIQUEMENT: aucun texte avant ou apres, aucune explication, aucune balise de bloc de code markdown, aucun JSON, jamais une phrase du genre "voici votre script".
+- Le code doit etre syntaxiquement valide pour un analyseur Lua 5.1: pas d'affectation composee (+=, -=, ..=, *=, /=), pas d'annotations de type, pas de continue, pas de goto, pas d'operateur //, pas de chaine interpolee entre accents graves.
+- Le code doit etre directement executable tel quel dans un executeur Roblox: table de configuration en haut, fonctions utilitaires, puis la construction. Aucun placeholder, aucun "...", aucun TODO, aucune fonction vide.
+
+CE QUE L'INTERFACE DOIT CONTENIR
+- Un ScreenGui parente au PlayerGui du joueur local (l'affectation passe par un pcall).
+- Un cadre principal DEPLACABLE a la souris: implemente le deplacement toi-meme (UserInputService ou InputChanged sur l'en-tete).
+- Des boutons bascule dont l'APPARENCE reflete l'etat (couleur ON differente de la couleur OFF), organises en SECTIONS avec un titre et un separateur.
+- Des animations douces d'ouverture, de fermeture et de bascule avec TweenService (durees courtes, aucune boucle infinie).
+- La palette violet et noir: fonds #08070c et #12101a, accents violets #8b5cf6, #c084fc, #a78bfa, texte blanc.
+- Une FERMETURE PROPRE: le bouton de fermeture detruit le ScreenGui avec :Destroy(), deconnecte la connexion de deplacement, et plus rien ne continue de tourner ensuite.
+- Uniquement task.wait et task.spawn (jamais wait, spawn, delay ni sleep des globales historiques).
+- pcall autour des appels fragiles (PlayerGui, creation d'Instance, acces au personnage).
+- AUCUNE dependance externe: jamais require(id) d'un asset tiers, jamais loadstring d'un contenu distant, aucun telechargement HTTP. Services Roblox uniquement.
+- Detruis toute instance existante du meme nom avant de creer la nouvelle, pour qu'executer le script deux fois n'empile pas deux fenetres.
+
+STYLE
+- Bloc de commentaires en tete decrivant l'interface, bannieres de commentaires entre les sections, noms de variables explicites. Moins de 600 lignes.`;
+
+// Fabrique le prompt complet a remettre a une IA, a partir de la description de
+// l'admin et (facultativement) d'un ID de jeu. Purement local: aucune lecture
+// de fichier, aucun appel reseau, aucun acces a la base.
+function buildScriptPrompt({ brief, placeId } = {}) {
+  const description = String(brief == null ? '' : brief).trim();
+  if (!description) {
+    throw new Error('Description vide: impossible de construire le prompt');
+  }
+
+  const blocs = [`CE QUE L'INTERFACE DOIT FAIRE\n${description}`];
+
+  // Le PlaceId n'est qu'un contexte: il ne doit pas finir code en dur dans le
+  // script (un meme script peut servir plusieurs jeux).
+  const id = Number.parseInt(placeId, 10);
+  if (Number.isFinite(id) && id > 0) {
+    blocs.push(
+      `ID DU JEU CIBLE (contexte seulement: ne code aucune logique de jeu en dur et n'ecris pas cet identifiant dans le script)\n${id}`
+    );
+  }
+
+  return [PROMPT_TETE, blocs.join('\n\n'), PROMPT_REGLES].join('\n\n');
+}
+
+// Analyseur de syntaxe charge a la demande (devDependency: elle n'est pas
+// necessaire au reste du service, mais son absence doit faire ECHOUER la
+// verification plutot que de laisser passer un script non controle).
+let _luaparse;
+function analyseurLua() {
+  if (_luaparse === undefined) {
+    try {
+      _luaparse = require('luaparse');
+    } catch (_) {
+      _luaparse = null;
+    }
+  }
+  if (!_luaparse) {
+    throw new Error('luaparse absent (npm install): impossible de garantir la syntaxe du script');
+  }
+  return _luaparse;
+}
+
+// Verifie la syntaxe du code. Renvoie { ok, message } - le message est celui du
+// parseur, tel quel (c'est celui-la qui est affiche a l'admin).
+function verifierSyntaxe(code) {
+  try {
+    analyseurLua().parse(code, { luaVersion: '5.1' });
+    return { ok: true, message: '' };
+  } catch (e) {
+    return { ok: false, message: String((e && e.message) || e) };
+  }
+}
+
+// Retire les balises de code que l'IA produit malgre la consigne.
+// Cas courant: trois accents graves devant et derriere le script.
+function nettoyerCode(texte) {
+  let code = String(texte || '');
+  const bloc = code.match(/```[a-zA-Z]*[ \t]*\r?\n([\s\S]*?)```/);
+  if (bloc) {
+    code = bloc[1];
+  } else {
+    code = code.replace(/```[a-zA-Z]*/g, '');
+  }
+  return code.replace(/^[\s\r\n]+/, '').replace(/[\s\r\n]+$/, '');
+}
+
+// Resume LOCAL du script (aucun appel IA): ce que l'admin doit voir avant de
+// relire le code - taille et elements attendus.
+function resumerScript(source) {
+  const lignes = source.split('\n').length;
+  const octets = Buffer.byteLength(source, 'utf8');
+  const marqueurs = [
+    ['ScreenGui', /ScreenGui/],
+    ['TweenService', /TweenService/],
+    ['fenetre deplacable', /UserInputService|InputChanged|InputBegan/],
+    ['boutons bascule', /TextButton|ImageButton|Toggle/],
+    ['task.spawn', /task\.spawn/],
+    ['pcall', /pcall\s*\(/],
+    ['fermeture propre', /:Destroy\(\)/],
+  ]
+    .filter(([, motif]) => motif.test(source))
+    .map(([nom]) => nom);
+  return `${lignes} lignes, ${octets} octets${marqueurs.length ? ' - ' + marqueurs.join(', ') : ''}`;
+}
+
+module.exports = {
+  requestCompatibilityPatches,
+  buildScriptPrompt,
+  verifierSyntaxe,
+  nettoyerCode,
+  resumerScript,
+};

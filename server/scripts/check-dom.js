@@ -22,6 +22,7 @@ const WEB = path.join(__dirname, '..', '..', 'web');
 // Page <-> script qui la pilote.
 const PAIRES = [
   ['index.html', 'app-index.js'],
+  ['index.html', 'app-requests.js'],
   ['getkey.html', 'app-getkey.js'],
   ['robux.html', 'app-robux.js'],
   ['verify.html', 'app-verify.js'],

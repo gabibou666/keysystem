@@ -331,6 +331,30 @@ body { background: var(--admin-bg); color: var(--admin-text); min-height: 100vh;
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
 }
 .login-page p { color: var(--admin-muted); margin-bottom: 30px; }
+/* ===== FABRIQUE DE PROMPT (aucun appel a l'IA) ===== */
+.gen-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px;
+}
+.gen-row .admin-btn { display: inline-flex; align-items: center; gap: 8px; }
+.gen-label {
+  display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--admin-muted-2); margin-bottom: 6px; margin-top: 14px;
+}
+.gen-report {
+  margin-top: 12px; font-size: 13px; color: var(--admin-ok);
+  background: var(--admin-input); border: 1px solid var(--admin-border-accent);
+  border-radius: 10px; padding: 10px 14px;
+}
+.gen-error {
+  margin-top: 12px; font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+  color: var(--admin-err); background: #150f1c; border: 1px solid var(--admin-border-accent);
+  border-radius: 10px; padding: 12px 14px; font-family: Consolas, monospace;
+}
+.gen-output { margin-top: 12px; }
+.gen-brief { min-height: 110px; }
+.gen-code { min-height: 260px; }
+.gen-copied { font-size: 12.5px; color: var(--admin-ok); }
+.gen-copied.err { color: var(--admin-err); }
 .hidden { display: none !important; }
 </style>
 </head>
@@ -611,6 +635,40 @@ body { background: var(--admin-bg); color: var(--admin-text); min-height: 100vh;
         <tbody></tbody>
       </table>
     </div>
+  </div>
+  <div class="admin-panel fade-up fade-up-d1">
+    <h3><span class="icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2.5"/><path d="M12 18.5V21"/><path d="M4.9 4.9 6.7 6.7"/><path d="m17.3 17.3 1.8 1.8"/><path d="M3 12h2.5"/><path d="M18.5 12H21"/><path d="m4.9 19.1 1.8-1.8"/><path d="m17.3 6.7 1.8-1.8"/><circle cx="12" cy="12" r="3.2"/></svg></span> Fabrique de prompt (aucun appel a l'IA)</h3>
+    <p class="sub">Decrivez l'interface voulue : cette page construit le <b>prompt</b> complet, vous le copiez dans l'IA de votre choix, puis vous collez sa reponse. Aucun modele n'est contacte depuis ce site (aucun cout) et rien n'est enregistre avant la verification de syntaxe du code colle.</p>
+    <label class="gen-label" for="genBrief">1. Description du script</label>
+    <textarea id="genBrief" class="admin-textarea gen-brief" rows="4" maxlength="4000" placeholder="Ex : panneau de farm avec une section Recolte (interrupteurs Auto-Farm, Auto-Collect) et une section Personnage (Recharger les personnages), cadre deplacable, fermeture propre."></textarea>
+    <div class="gen-row">
+      <input id="genPlaceId" class="admin-input" type="text" inputmode="numeric" placeholder="ID du jeu (facultatif)" aria-label="ID du jeu (facultatif)" style="width:200px">
+      <button class="admin-btn" id="genButton" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z"/></svg>
+        Construire le prompt
+      </button>
+    </div>
+    <div class="msg" id="genMsg"></div>
+    <label class="gen-label" for="genPrompt">2. Prompt a donner a votre IA</label>
+    <textarea id="genPrompt" class="admin-textarea gen-output hidden" rows="12" readonly spellcheck="false" aria-label="Prompt a copier dans une IA"></textarea>
+    <div class="gen-row hidden" id="genCopyRow">
+      <button class="admin-btn ghost" id="genCopy" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+        Copier le prompt
+      </button>
+      <span class="gen-copied hidden" id="genCopied" role="status" aria-live="polite"></span>
+    </div>
+    <label class="gen-label" for="genCode">3. Collez ici la reponse de l'IA</label>
+    <textarea id="genCode" class="admin-textarea gen-code" rows="12" spellcheck="false" placeholder="Collez le script Luau renvoye par l'IA (les balises de code markdown sont retirees automatiquement). Le meme ID de jeu sert au prompt et a l'enregistrement."></textarea>
+    <div class="gen-row">
+      <button class="admin-btn" id="genSaveButton" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 13 4 4 10-10"/></svg>
+        Verifier et enregistrer en brouillon
+      </button>
+    </div>
+    <div class="msg" id="genSaveMsg"></div>
+    <div class="gen-report hidden" id="genSaveReport"></div>
+    <pre class="gen-error hidden" id="genSaveError"></pre>
   </div>
   <div class="admin-panel fade-up fade-up-d1">
     <h3><span class="icon">✏️</span> Editor</h3>

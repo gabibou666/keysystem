@@ -1128,6 +1128,230 @@ router.get('/changelog', async (req, res) => {
 });
 
 // ============================================================================
+// DEMANDES DE SCRIPTS ("Demande ton script")
+// ----------------------------------------------------------------------------
+// Un utilisateur connecte (Discord) demande un script pour un jeu qu'il veut
+// voir supporte. Objectif: la demande est PUBLIQUE en agregat (classement des
+// jeux les plus demandes, aucun pseudo), et disparait du classement des qu'un
+// script est publie pour ce PlaceId (admin/script/publish).
+// ============================================================================
+
+// Route sensible (ecriture + interrogation de l'API Roblox a la premiere
+// demande): meme famille de limite que /api/key/start.
+const requestsLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  message: { ok: false, error: 'too_many_requests' },
+});
+const requestsSeenLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  message: { ok: false, error: 'too_many_requests' },
+});
+
+const TOP_REQUESTS_LIMIT = 20;
+const NOTE_MAX = 500;
+
+// Noms/icones d'une liste de PlaceIds: cache game_info d'abord (lecture seule,
+// pas d'appel Roblox), service roblox sinon (il remplit le cache).
+async function nomsDesJeux(placeIds) {
+  const ids = [...new Set(placeIds.map((p) => parseInt(p, 10)).filter(Number.isFinite))];
+  const map = new Map();
+  if (!ids.length) return map;
+  const { rows } = await pool.query(
+    'SELECT place_id, name, icon_url FROM game_info WHERE place_id = ANY($1::bigint[])',
+    [ids]
+  );
+  for (const r of rows) {
+    map.set(parseInt(r.place_id, 10), { name: r.name, iconUrl: r.icon_url });
+  }
+  for (const id of ids) {
+    if (map.has(id)) continue;
+    const info = await getGameInfo(id).catch(() => null);
+    map.set(id, {
+      name: info ? info.name : `Game ${id}`,
+      iconUrl: info ? info.iconUrl : null,
+    });
+  }
+  return map;
+}
+
+// ---------- POST /api/requests ----------
+// Body: { placeId, note? } — connexion Discord obligatoire.
+router.post('/requests', requestsLimiter, requireDiscordUser, async (req, res) => {
+  try {
+    const placeId = parseInt(req.body?.placeId, 10);
+    if (!Number.isFinite(placeId) || placeId <= 0) {
+      return res.status(400).json({ ok: false, error: 'place_id_invalide' });
+    }
+    const noteBrute = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+    const note = noteBrute ? noteBrute.slice(0, NOTE_MAX) : null;
+
+    // Enregistre le nom du jeu (cache game_info, API Roblox si absente)
+    const info = await getGameInfo(placeId).catch(() => null);
+
+    // UserId Roblox: derniere cle liee a ce compte Discord, si connue
+    const lien = await pool
+      .query(
+        `SELECT bound_user_id FROM keys
+          WHERE owner_discord_id = $1 AND bound_user_id IS NOT NULL
+          ORDER BY id DESC LIMIT 1`,
+        [req.discordId]
+      )
+      .catch(() => ({ rows: [] }));
+
+    // L'index unique partiel (discord_id, place_id) WHERE status='pending' est
+    // le garde-fou: DO NOTHING rend le doublon detectable sans course possible.
+    const ins = await pool.query(
+      `INSERT INTO script_requests (place_id, discord_id, roblox_user_id, note, status)
+       VALUES ($1, $2, $3, $4, 'pending')
+       ON CONFLICT DO NOTHING
+       RETURNING id, created_at`,
+      [placeId, req.discordId, lien.rows[0] ? lien.rows[0].bound_user_id : null, note]
+    );
+    if (!ins.rows.length) {
+      return res.status(409).json({
+        ok: false,
+        reason: 'deja_demande',
+        error: 'Une demande est deja en attente pour ce jeu.',
+      });
+    }
+
+    res.json({
+      ok: true,
+      id: ins.rows[0].id,
+      placeId,
+      gameName: info ? info.name : null,
+      iconUrl: info ? info.iconUrl : null,
+      createdAt: ins.rows[0].created_at,
+    });
+  } catch (e) {
+    console.error('[requests]', e);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// ---------- GET /api/requests/top ----------
+// Classement PUBLIC (aucune connexion): les 20 jeux les plus demandes, en
+// attendant qu'un script soit publie pour eux. Nombres uniquement, pas de pseudo.
+router.get('/requests/top', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT r.place_id,
+              COUNT(*)::int AS demandes,
+              gi.name AS cache_name,
+              gi.icon_url AS cache_icon,
+              EXISTS (
+                SELECT 1 FROM script_builds b
+                 WHERE b.active = true AND b.place_id = r.place_id
+              ) AS dispo
+         FROM script_requests r
+         LEFT JOIN game_info gi ON gi.place_id = r.place_id
+        WHERE r.status = 'pending'
+        GROUP BY r.place_id, gi.name, gi.icon_url
+        ORDER BY demandes DESC, MAX(r.created_at) DESC
+        LIMIT $1`,
+      [TOP_REQUESTS_LIMIT]
+    );
+    const jeux = await Promise.all(
+      rows.map(async (r) => {
+        const placeId = parseInt(r.place_id, 10);
+        let name = r.cache_name;
+        let iconUrl = r.cache_icon;
+        if (!name) {
+          const info = await getGameInfo(placeId).catch(() => null);
+          name = info ? info.name : `Game ${placeId}`;
+          iconUrl = info ? info.iconUrl : null;
+        }
+        return {
+          placeId,
+          name,
+          iconUrl,
+          requests: r.demandes,
+          // Un script existe deja pour ce PlaceId (build actif) ?
+          available: !!r.dispo,
+        };
+      })
+    );
+    res.json({ ok: true, games: jeux });
+  } catch (e) {
+    console.error('[requests/top]', e);
+    res.json({ ok: true, games: [] });
+  }
+});
+
+// ---------- GET /api/requests/mine ----------
+// Mes demandes: celles en attente + celles servies mais pas encore notifiees
+// (le popup "ton script est pret" ne doit s'afficher qu'une fois).
+router.get('/requests/mine', requireDiscordUser, async (req, res) => {
+  try {
+    const [attente, servies] = await Promise.all([
+      pool.query(
+        `SELECT id, place_id, note, status, created_at FROM script_requests
+          WHERE discord_id = $1 AND status = 'pending'
+          ORDER BY created_at DESC`,
+        [req.discordId]
+      ),
+      pool.query(
+        `SELECT id, place_id, note, fulfilled_at FROM script_requests
+          WHERE discord_id = $1 AND status = 'fulfilled' AND notified_at IS NULL
+          ORDER BY fulfilled_at DESC`,
+        [req.discordId]
+      ),
+    ]);
+    const noms = await nomsDesJeux([
+      ...attente.rows.map((r) => r.place_id),
+      ...servies.rows.map((r) => r.place_id),
+    ]);
+    const jeu = (placeId) => noms.get(parseInt(placeId, 10)) || { name: `Game ${placeId}`, iconUrl: null };
+
+    res.json({
+      ok: true,
+      // En attente: un script n'existe pas encore pour ce jeu
+      pending: attente.rows.map((r) => ({
+        id: r.id,
+        placeId: parseInt(r.place_id, 10),
+        name: jeu(r.place_id).name,
+        iconUrl: jeu(r.place_id).iconUrl,
+        note: r.note || '',
+        status: r.status,
+        createdAt: r.created_at,
+      })),
+      // Servies: le script est publie, le popup n'a pas encore ete vu
+      fulfilled: servies.rows.map((r) => ({
+        id: r.id,
+        placeId: parseInt(r.place_id, 10),
+        name: jeu(r.place_id).name,
+        iconUrl: jeu(r.place_id).iconUrl,
+        note: r.note || '',
+        fulfilledAt: r.fulfilled_at,
+      })),
+    });
+  } catch (e) {
+    console.error('[requests/mine]', e);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// ---------- POST /api/requests/seen ----------
+// Le popup a ete affiche: marque mes demandes servies comme notifiees.
+router.post('/requests/seen', requestsSeenLimiter, requireDiscordUser, async (req, res) => {
+  try {
+    const maj = await pool.query(
+      `UPDATE script_requests SET notified_at = now()
+        WHERE discord_id = $1 AND status = 'fulfilled' AND notified_at IS NULL`,
+      [req.discordId]
+    );
+    res.json({ ok: true, seen: maj.rowCount });
+  } catch (e) {
+    console.error('[requests/seen]', e);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// ============================================================================
 // POST /api/v1/token -- CONTROLE DE SESSION (anti-dump)
 // ----------------------------------------------------------------------------
 // Le preambule ajoute a CHAQUE build appelle ce point regulierement. Sans reponse

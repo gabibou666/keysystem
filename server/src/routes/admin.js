@@ -7,6 +7,7 @@ const { decryptAES, encryptAES } = require('../services/crypto');
 const { notifyDiscord } = require('../services/notify');
 const { getGameInfo } = require('../services/roblox');
 const robuxOffers = require('../services/robux');
+const { buildScriptPrompt, verifierSyntaxe, nettoyerCode, resumerScript } = require('../services/ai');
 
 const router = express.Router();
 
@@ -451,6 +452,102 @@ router.post('/script/save', requireAdmin, async (req, res) => {
   }
 });
 
+// FABRIQUE DE PROMPT: cette route n'appelle PLUS aucun modele (aucun cout).
+// Elle construit localement, a partir de { brief, placeId }, le prompt complet
+// que l'admin copie dans l'IA de son choix. Rien n'est ecrit en base ici.
+// Reponses: { ok: true, prompt, tailleOctets, placeId }
+router.post('/generate-script', requireAdmin, (req, res) => {
+  try {
+    const brief = typeof req.body?.brief === 'string' ? req.body.brief.trim() : '';
+    const placeId = parseInt(req.body?.placeId, 10) || null;
+
+    if (brief.length < 10) {
+      return res.status(400).json({ ok: false, error: 'Description trop courte (10 caracteres minimum)' });
+    }
+    if (brief.length > 4000) {
+      return res.status(400).json({ ok: false, error: 'Description trop longue (4000 caracteres maximum)' });
+    }
+
+    // Aucun acces reseau: uniquement de la concatenation de texte locale.
+    const prompt = buildScriptPrompt({ brief, placeId });
+
+    res.json({
+      ok: true,
+      prompt,
+      tailleOctets: Buffer.byteLength(prompt, 'utf8'),
+      placeId,
+    });
+  } catch (e) {
+    console.error('[admin/generate-script]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// VERIFICATION ET ENREGISTREMENT du code colle (reponse de l'IA de l'admin):
+// les balises markdown sont retirees, puis luaparse controle la syntaxe. La
+// version n'est creee QUE si le code compile; sinon rien n'est ecrit et le
+// message du parseur est renvoye TEL QUEL. Meme structure que /script/save:
+// source chiffre (AES-256-GCM) + hash sha256 + published = false (brouillon).
+// Reponses: { ok: true, versionId, version, tailleOctets, resume, nettoye }
+//         | { ok: false, error: <message du parseur> }
+router.post('/script-from-text', requireAdmin, async (req, res) => {
+  try {
+    const brut = typeof req.body?.code === 'string' ? req.body.code : '';
+    const brief = typeof req.body?.brief === 'string' ? req.body.brief.trim().slice(0, 4000) : '';
+    const placeId = parseInt(req.body?.placeId, 10) || null;
+
+    if (brut.trim().length === 0) {
+      return res.status(400).json({ ok: false, error: "Code vide: collez la reponse de l'IA" });
+    }
+    if (brut.length > 500000) {
+      return res.status(400).json({ ok: false, error: 'Script trop volumineux (500 Ko max)' });
+    }
+
+    // Nettoyage AVANT tout controle: une reponse entouree de trois accents
+    // graves (balises de bloc markdown) est du code valide une fois nettoyee.
+    const source = nettoyerCode(brut);
+    if (source.trim().length < 5) {
+      return res.status(400).json({ ok: false, error: 'Code vide apres nettoyage des balises markdown' });
+    }
+
+    let controle;
+    try {
+      controle = verifierSyntaxe(source);
+    } catch (e) {
+      // luaparse absent: on refuse d'enregistrer un script non verifie.
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+    if (!controle.ok) {
+      return res.status(422).json({ ok: false, error: controle.message, phase: 'syntaxe' });
+    }
+
+    const note = (`[IA] ${brief || 'code colle depuis la fabrique de prompt'}`).slice(0, 500);
+    const hash = crypto.sha256(source);
+    const enc = encryptAES(source);
+
+    const last = await pool.query('SELECT COALESCE(MAX(version), 0) v FROM script_versions');
+    const version = last.rows[0].v + 1;
+
+    const ins = await pool.query(
+      `INSERT INTO script_versions (version, note, place_id, original_enc, original_iv, original_hash, published)
+       VALUES ($1, $2, $3, $4, $5, $6, false) RETURNING id`,
+      [version, note, placeId, enc.enc, enc.iv, hash]
+    );
+
+    res.json({
+      ok: true,
+      versionId: ins.rows[0].id,
+      version,
+      tailleOctets: Buffer.byteLength(source, 'utf8'),
+      resume: resumerScript(source),
+      nettoye: source !== brut,
+    });
+  } catch (e) {
+    console.error('[admin/script-from-text]', e);
+    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+  }
+});
+
 // Obtenir l'original deciffré (en memoire uniquement, pour l'editeur)
 router.get('/script/original/:version', requireAdmin, async (req, res) => {
   const { rows } = await pool.query(
@@ -549,7 +646,28 @@ router.post('/script/publish', requireAdmin, async (req, res) => {
     'UPDATE script_versions SET published = true, published_at = now() WHERE version = $1',
     [version]
   );
-  res.json({ success: true, removedOldVersions: removedVersions });
+
+  // DEMANDES DE SCRIPTS: publier un script pour un jeu SERT automatiquement
+  // toutes les demandes en attente de ce PlaceId (status fulfilled + date).
+  // notified_at reste NULL: c'est ce qui declenche le popup "ton script est
+  // pret" chez le demandeur, une seule fois.
+  let demandesServies = 0;
+  if (placeId != null) {
+    try {
+      const maj = await pool.query(
+        `UPDATE script_requests SET status = 'fulfilled', fulfilled_at = now()
+          WHERE place_id = $1 AND status = 'pending'`,
+        [placeId]
+      );
+      demandesServies = maj.rowCount;
+    } catch (e) {
+      // Table absente (migration pas encore appliquee): la publication reste
+      // valide, on ne la fait pas echouer pour autant.
+      console.error('[script/publish] demandes de scripts:', e.message);
+    }
+  }
+
+  res.json({ success: true, removedOldVersions: removedVersions, requestsFulfilled: demandesServies });
 });
 
 // ---------- STATS VENTES ROBUX (format attendu par l'onglet Revenue) ----------
