@@ -36,6 +36,7 @@ const nodeCrypto = require('crypto');
 
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const { Client } = require('pg');
+const { sslOptions, urlSansSslmode } = require('../src/db-ssl');
 
 const ORDRE_TABLES = `
   SELECT table_name FROM information_schema.tables
@@ -59,8 +60,11 @@ function empreinte(txt) {
   fs.mkdirSync(path.join(dossier, 'data'), { recursive: true });
 
   const client = new Client({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
+    // urlSansSslmode + sslOptions: le `sslmode` de l'URL ecraserait l'option
+    // `ssl` (et vaut aujourd'hui `verify-full`), ce qui casse la connexion chez
+    // un hebergeur dont l'autorite est privee (Aiven) en SELF_SIGNED_CERT_IN_CHAIN.
+    connectionString: urlSansSslmode(process.env.DATABASE_URL),
+    ssl: sslOptions(process.env.DATABASE_URL),
   });
 
   const manifest = {

@@ -129,6 +129,21 @@ for (const file of walk(SERVER)) {
   }
 }
 
+// ---------- 6. Toute connexion a la base passe par le helper TLS ----------
+// `sslmode=require` dans l'URL ecrase l'option `ssl` du client et equivaut
+// aujourd'hui a `verify-full`: un client qui construit son SSL a la main echoue
+// en SELF_SIGNED_CERT_IN_CHAIN chez un hebergeur a autorite privee (Aiven).
+// Ce controle evite de reproduire l'oubli qui a casse la sauvegarde.
+for (const fichier of [...walk(SERVER), ...walk(path.join(ROOT, 'server', 'scripts'))]) {
+  const src = fs.readFileSync(fichier, 'utf8');
+  const rel = path.relative(ROOT, fichier).replace(/\\/g, '/');
+  if (/new (Client|Pool)\s*\(/.test(src) && !/urlSansSslmode/.test(src) && !/db-ssl/.test(src)) {
+    problems.push(
+      `${rel}: connexion a la base sans le helper TLS (utiliser urlSansSslmode + sslOptions de src/db-ssl.js)`
+    );
+  }
+}
+
 // ---------- Verdict ----------
 if (warnings.length) warnings.forEach((w) => console.warn(`⚠️  check-cost: ${w}`));
 if (problems.length) {
