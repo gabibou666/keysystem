@@ -259,15 +259,36 @@ app.post('/api/csp-report', (req, res) => {
     const now = Date.now();
     if (now - cspAlertState.lastAt > 10 * 60 * 1000) {
       cspAlertState.lastAt = now;
+      // Le conseil depend de la directive ET de l'etat reel du serveur: envoyer
+      // "active la valve" a quelqu'un qui l'a deja activee fait tourner en rond.
+      const estScript = /script/i.test(directive);
+      const dejaPermissif = /^(img-src|media-src|frame-src)$/i.test(directive.trim());
+      let conseil;
+      if (estScript && ALLOW_INLINE_SCRIPTS) {
+        conseil =
+          "La valve est DEJA active sur ce serveur (script-src contient 'unsafe-inline'): cette violation vient donc d'autre chose. Une variable Render ne reglera pas ce cas — autoriser le domaine bloque ci-dessus dans la directive concernee (src/index.js).";
+      } else if (estScript) {
+        conseil =
+          'Script publicitaire ? definir CSP_ALLOW_INLINE_SCRIPTS=1 dans Render (valve de secours prevue pour ce cas). Apres enregistrement, Render redeploie: cette alerte doit disparaitre au demarrage suivant.';
+      } else if (/connect-src/i.test(directive)) {
+        conseil =
+          "Ajouter l'origine bloquee a connectSrc dans src/index.js (avec les autres domaines publicitaires). Aucune variable Render ne modifie la CSP: elle est construite dans le code.";
+      } else if (dejaPermissif) {
+        conseil =
+          'Cette directive est deja permissive (*): la ressource vient probablement d\'une page hors du site (iframe d\'annonceur) — verifier l\'URL bloquee ci-dessus avant de modifier quoi que ce soit.';
+      } else {
+        conseil =
+          "Autoriser le domaine bloque dans la directive concernee (src/index.js), ou retirer la ressource. Les variables Render ne modifient pas la CSP.";
+      }
       notifyDiscord({
         title: '🛡️ CSP : ressource bloquee',
         color: 'warn',
         description: `Directive : \`${directive}\`\nBloque : \`${String(blocked).slice(0, 120)}\`\nPage : ${String(page).slice(0, 120)}`,
         fields: [
+          { name: 'Que faire ?', value: conseil },
           {
-            name: 'Que faire ?',
-            value:
-              "Script publicitaire ? definir `CSP_ALLOW_INLINE_SCRIPTS=1` dans Render. Autre domaine legitime ? l'ajouter a la directive concernee dans src/index.js.",
+            name: 'Etat du serveur',
+            value: `valve inline-scripts: ${ALLOW_INLINE_SCRIPTS ? 'ACTIVE' : 'inactive'} · assets ${ASSET_VERSION}`,
           },
         ],
       }).catch(() => {});

@@ -36,6 +36,19 @@ const IMPORTANT = [
 
 const HEX64 = ['HMAC_SECRET', 'AES_KEY'];
 
+// Commande a donner a l'utilisateur pour produire une valeur acceptee.
+const GENERER_HEX64 = 'node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"';
+
+// Decrit POURQUOI une valeur est refusee, sans jamais la divulguer: l'utilisateur
+// qui vient de coller sa variable dans Render a besoin de savoir si le probleme
+// est l'absence, la longueur ou le jeu de caracteres. Un message qui ne dit que
+// "non defini" quand la variable EST definie envoie dans une boucle sans fin.
+function decrireValeur(value) {
+  if (!value) return 'absente';
+  const estHex = /^[0-9a-f]+$/i.test(value);
+  return `presente mais invalide: ${value.length} caracteres${estHex ? '' : ', avec des caracteres non hexadecimaux'}, 64 attendus`;
+}
+
 const ephemeral = new Map();
 
 function isHex64(value) {
@@ -90,10 +103,14 @@ function checkConfig() {
       if (!process.env[key] && !HEX64.includes(key)) warnings.push(`${key} manquant`);
     }
     if (process.env.HMAC_SECRET && !isHex64(process.env.HMAC_SECRET)) {
-      warnings.push('HMAC_SECRET n\'est pas 64 caracteres hex (recommande, genere avec la commande du README)');
+      warnings.push(
+        `HMAC_SECRET ${decrireValeur(process.env.HMAC_SECRET)}. Generer une valeur valide: ${GENERER_HEX64}`
+      );
     }
     if (process.env.AES_KEY && !isHex64(process.env.AES_KEY)) {
-      warnings.push('AES_KEY n\'est pas 64 caracteres hex: une cle est derivee de facon deterministe (les originaux chiffres restent lisibles)');
+      warnings.push(
+        `AES_KEY ${decrireValeur(process.env.AES_KEY)}. Une cle derivee est utilisee (les originaux chiffres restent lisibles). Generer une valeur valide: ${GENERER_HEX64}`
+      );
     }
     if (process.env.HMAC_SECRET && process.env.HMAC_SECRET === process.env.AES_KEY) {
       critical.push('HMAC_SECRET et AES_KEY doivent etre differents');
@@ -103,7 +120,8 @@ function checkConfig() {
     }
     if (!process.env.LOOTLABS_POSTBACK_SECRET) {
       warnings.push(
-        'LOOTLABS_POSTBACK_SECRET manquant: le postback LootLabs ne peut plus etre authentifie cryptographiquement (anti-bypass affaibli)'
+        'LOOTLABS_POSTBACK_SECRET absent: le postback ne peut pas etre authentifie par signature ' +
+          '(anti-bypass affaibli). A recuperer dans le dashboard LootLabs, puis ajouter la variable dans Render.'
       );
     }
   }
