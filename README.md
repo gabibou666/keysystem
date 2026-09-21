@@ -97,9 +97,12 @@ keysystem/
 - **Réveil de Render** : [cron-job.org](https://cron-job.org) → job toutes les 10-30 min → `https://TONSITE.onrender.com/ping`
 - **Surveillance** : [UptimeRobot](https://uptimerobot.com), **deux moniteurs** :
   - `/ping` toutes les **5 min** → disponibilité du site, **zéro requête SQL** ;
-  - `/healthz` toutes les **heures** → contrôle aussi la base (503 si Neon est injoignable) ; le
-    résultat est mis en cache 60 min, donc même un moniteur trop fréquent ne coûte qu'une requête
-    par heure (voir *Consommation de la base* plus bas).
+  - `/healthz` toutes les **6 h** au maximum → contrôle aussi la base (503 si Neon est injoignable) ;
+    son résultat est mis en cache `HEALTHZ_DEEP_TTL_MIN` (360 min par défaut), donc même un moniteur
+    trop fréquent ne coûte qu'une sonde toutes les 6 h.
+  - La détection d'une panne ne dépend plus de la sonde : **les alertes Discord** (`services/alerts.js`)
+    préviennent en quelques minutes quand une erreur serveur ou une base injoignable se produit — et
+    elles ne coûtent **aucun** quota tant que tout va bien.
 - ⚠️ **Ne jamais pointer un moniteur fréquent vers une route qui lit la base** (`/healthz`,
   `/api/stats/public`… ) : cela garde Neon éveillé 24 h/24 et épuise le quota gratuit. Le garde-fou
   `npm run check` refuse ce cas — c'est exactement l'erreur qui a consommé le quota.
@@ -163,6 +166,8 @@ après 5 minutes d'inactivité**. D'où une conséquence contre-intuitive :
 |---|---|---|---|
 | Ping toutes les 5 min vers une route qui lit la base | 288/jour | ~182 | ❌ quota épuisé vers le 16 |
 | Ping toutes les 30 min vers une route qui lit la base | 48/jour | ~182 | ❌ idem : la base ne dort jamais |
+| Sonde profonde `/healthz` toutes les heures | 24/jour | ~15 | ⚠️ possible, mais 15 % du quota pour rien |
+| Sonde profonde `/healthz` toutes les 6 h (défaut) | 4/jour | ~2,5 | ✅ |
 | Visites réelles + surveillance sur `/ping` | ~10/jour | < 5 | ✅ confortable |
 
 Quand le quota est dépassé, Neon **suspend le calcul jusqu'à la période suivante** (ou jusqu'à un
@@ -173,8 +178,11 @@ période de facturation. Suivi : console Neon → projet → **Monitoring / Usag
 - les moniteurs et keep-alive visent `/ping` ou `/api/keepalive` : **aucune requête SQL**, donc la
   base peut dormir entre deux visites réelles — c'est tout l'intérêt du plan gratuit ;
 - `/healthz` est la sonde **profonde** : son résultat est mis en cache `HEALTHZ_DEEP_TTL_MIN`
-  minutes (60 par défaut), donc l'appeler en boucle ne coûte qu'une requête SQL par heure.
+  minutes (**360 par défaut**), donc l'appeler en boucle ne coûte qu'une sonde toutes les 6 h.
   `?deep=1` force une sonde réelle (diagnostic) ;
+- la détection de panne vient des **alertes événementielles** (`src/services/alerts.js`), pas de la
+  sonde : elles partent vers Discord quand une erreur serveur non gérée survient ou quand la base
+  devient injoignable (une alerte par bug et par 10 min, plafond d'une alerte/minute) ;
 - une base en panne n'est **pas** mise en cache une heure : nouvelle sonde au bout de **60 s**, pour
   détecter la reprise rapidement ;
 - les tâches planifiées qui touchent la base restent espacées : purge **quotidienne**, audit LootLabs

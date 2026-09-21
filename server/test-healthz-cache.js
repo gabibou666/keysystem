@@ -29,7 +29,9 @@ function check(label, cond, detail) {
 async function boot(env, port) {
   const child = spawn(process.execPath, ['src/index.js'], {
     cwd: __dirname,
-    env: { ...process.env, PORT: String(port), SCHEDULERS: 'off', PUBLIC_URL: '', ...env },
+    // NODE_ENV=test: les alertes d'erreurs sont inactives hors production, un
+    // test ne doit jamais envoyer de notification Discord reelle.
+    env: { ...process.env, PORT: String(port), SCHEDULERS: 'off', PUBLIC_URL: '', NODE_ENV: 'test', ...env },
     stdio: 'ignore',
   });
   for (let i = 0; i < 80; i++) {
@@ -82,7 +84,7 @@ const get = async (port, route) => {
   }
 
   // ---------- Scenario 2: base reelle ----------
-  console.log('\n[2] Base reelle — une seule requete SQL par heure');
+  console.log('\n[2] Base reelle — la sonde profonde est mise en cache (quota gratuit)');
   child = await boot({}, 3142);
   try {
     const h1 = await get(3142, '/healthz');
@@ -91,7 +93,7 @@ const get = async (port, route) => {
 
     const h2 = await get(3142, '/healthz');
     check('2e appel NE touche PAS la base (cached:true)', h2.body.cached === true, JSON.stringify(h2.body));
-    check('prochaine sonde dans ~1 h', h2.body.nextDeepCheckInSec > 3500, `nextDeepCheckInSec=${h2.body.nextDeepCheckInSec}`);
+    check('prochaine sonde dans ~6 h (delai par defaut, quota gratuit)', h2.body.nextDeepCheckInSec > 3500, `nextDeepCheckInSec=${h2.body.nextDeepCheckInSec}`);
 
     let cachedCount = 0;
     for (let i = 0; i < 20; i++) {

@@ -94,6 +94,21 @@ if (!/cached/.test(indexSrc)) {
 if (!/query\.deep/.test(indexSrc)) {
   problems.push("index.js: /healthz doit conserver la sonde forcee ?deep=1 (diagnostic ponctuel).");
 }
+// Le delai par defaut de la sonde profonde conditionne la consommation: une
+// sonde horaire coute ~15 CU-hours/mois sur les 100 du plan gratuit.
+const defautTtl = (indexSrc.match(/HEALTHZ_DEEP_TTL_MIN[^\n]{0,40}?\|\|\s*(\d+)/) || [])[1];
+if (!defautTtl || Number(defautTtl) < 300) {
+  problems.push(
+    `index.js: delai par defaut de la sonde profonde trop court (${defautTtl || 'absent'} min) — ` +
+      'une sonde horaire consomme ~15 CU-hours/mois sur 100. Garder >= 300 min.'
+  );
+}
+
+// Les alertes evementielles remplacent la surveillance couteuse: si elles
+// disparaissent, on perd la detection de panne sans rien gagner en quota.
+if (!/alerts\.install\(\)/.test(indexSrc) || !/alerts\.report\(/.test(indexSrc)) {
+  problems.push('index.js: les alertes d\'erreurs (services/alerts.js) doivent rester installees et branchees.');
+}
 
 // ---------- 5. Aucune requete SQL periodique plus frequente que la veille Neon ----------
 for (const file of walk(SERVER)) {

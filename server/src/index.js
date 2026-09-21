@@ -19,6 +19,7 @@ const pool = require('./db');
 const { startPurgeScheduler } = require('./services/purge');
 const { auditRecentSessions } = require('./services/lootlabs-verify');
 const { notifyDiscord } = require('./services/notify');
+const alerts = require('./services/alerts');
 
 // Schedulers desactivables (utile pour lancer un serveur local de test sans
 // declencher purge + audit + self-ping sur la base / le site de production).
@@ -285,7 +286,12 @@ app.post('/api/csp-report', (req, res) => {
 // depuis le cache. Les moniteurs FREQUENTS visent /ping (aucune requete SQL).
 //   ?deep=1 -> sonde forcee (diagnostic ponctuel)
 // Si la base est en panne, le delai retombe a 60 s pour detecter la reprise.
-const HEALTHZ_DEEP_TTL_MS = Math.max(5, Number(process.env.HEALTHZ_DEEP_TTL_MIN) || 60) * 60 * 1000;
+// Delai par defaut volontairement large (6 h): un plan gratuit ne peut pas se
+// permettre de sonder la base toutes les heures (chaque reveil coute ~5 min de
+// calcul, soit ~15 CU-hours/mois pour une sonde horaire, sur 100 disponibles).
+// La detection rapide d'une panne ne vient pas de la sonde mais des alertes
+// evementielles (services/alerts.js): cout nul tant que tout va bien.
+const HEALTHZ_DEEP_TTL_MS = Math.max(5, Number(process.env.HEALTHZ_DEEP_TTL_MIN) || 360) * 60 * 1000;
 const healthzState = { checkedAt: 0, ok: false, latencyMs: null, error: null };
 
 app.get('/healthz', async (req, res) => {
@@ -313,6 +319,7 @@ app.get('/healthz', async (req, res) => {
     Object.assign(healthzState, { checkedAt: Date.now(), ok: true, latencyMs: Date.now() - started, error: null });
   } catch (e) {
     Object.assign(healthzState, { checkedAt: Date.now(), ok: false, latencyMs: null, error: e.message });
+    alerts.report(new Error(`base injoignable: ${e.message}`), { where: 'healthz', route: '/healthz' }).catch(() => {});
   }
   res.status(healthzState.ok ? 200 : 503).json({
     ok: healthzState.ok,
@@ -400,6 +407,9 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   console.error('[server]', err);
+  // Alerte Discord (anti-inondation) sur les 500 non geres: sans cela, une panne
+  // de la base ne se voit que par les utilisateurs ou dans les logs Render.
+  alerts.report(err, { where: 'express', route: req.originalUrl }).catch(() => {});
   if (res.headersSent) return next(err);
   res.status(500).json({ success: false, error: 'Erreur interne' });
 });
@@ -414,6 +424,9 @@ app.use((err, req, res, next) => {
 const SELF_PING_URL = process.env.PUBLIC_URL
   ? process.env.PUBLIC_URL.replace(/\/$/, '') + '/api/keepalive'
   : null;
+
+// Alertes d'erreurs non gerees -> Discord (cout nul tant que tout va bien).
+alerts.install();
 
 app.listen(PORT, () => {
   console.log(`[server] KeySystem en ligne sur le port ${PORT}`);
