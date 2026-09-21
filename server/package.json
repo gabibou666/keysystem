@@ -16,6 +16,8 @@
     "check:cost": "node scripts/check-cost.js",
     "check:schema": "node scripts/check-schema.js",
     "db:target": "node scripts/db-target.js",
+    "db:verify": "node scripts/verify-db.js",
+    "db:capture-ca": "node scripts/capture-ca.js",
     "backup": "node scripts/backup-db.js",
     "restore": "node scripts/restore-db.js",
     "test": "node test-crypto-config.js && node test-healthz-cache.js && node test-alerts.js",

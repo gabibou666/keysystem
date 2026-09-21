@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
 const { resoudreUrl } = require('../scripts/lib-db-url');
+const { sslOptions, urlSansSslmode } = require('./db-ssl');
 
 // ============================================================================
 // Application du schema COMPLET sur la base cible.
@@ -50,8 +51,8 @@ async function migrate() {
   }
 
   const pool = new Pool({
-    connectionString: cible.url,
-    ssl: cible.url.includes('localhost') ? false : { rejectUnauthorized: false },
+    connectionString: urlSansSslmode(cible.url),
+    ssl: sslOptions(cible.url),
   });
 
   try {

@@ -24,6 +24,7 @@ const nodeCrypto = require('crypto');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const { Client } = require('pg');
 const { resoudreUrl } = require('./lib-db-url');
+const { sslOptions, urlSansSslmode } = require('../src/db-ssl');
 
 const args = process.argv.slice(2);
 const dossier = args.find((a) => !a.startsWith('--'));
@@ -130,10 +131,7 @@ const TYPES_SIMPLE = (v) => v === null || typeof v === 'number' || typeof v === 
   }
 
   console.log(`[restore] cible: ${cible.cible} (source ${cible.source})`);
-  const client = new Client({
-    connectionString: cible.url,
-    ssl: cible.url.includes('localhost') ? false : { rejectUnauthorized: false },
-  });
+  const client = new Client({ connectionString: urlSansSslmode(cible.url), ssl: sslOptions(cible.url) });
   await client.connect();
   try {
     // La cible doit contenir TOUTES les tables de la sauvegarde. Sinon la
@@ -186,33 +184,69 @@ const TYPES_SIMPLE = (v) => v === null || typeof v === 'number' || typeof v === 
     }
 
     await client.query('BEGIN');
+    // Insertion par LOTS: un seul INSERT multi-lignes par paquet de 200 lignes.
+    // Un INSERT par ligne (3 819 allers-retours) a deja fait perdre une
+    // transaction entiere: trop long, et le COMMIT peut alors s'appliquer a une
+    // autre connexion sans que rien ne signale l'echec — la base reste vide
+    // alors que le script annonce un succes.
+    const TAILLE_LOT = 200;
     let insere = 0;
     for (const t of ordre) {
       const lignes = donnees[t];
       if (!lignes.length) continue;
       const colonnes = Object.keys(lignes[0]);
-      const mauvais = lignes.find((l) => Object.values(l).some((v) => !TYPES_SIMPLE(v)));
+      const mauvais = lignes.find((l) => colonnes.some((c) => !TYPES_SIMPLE(l[c])));
       if (mauvais) throw new Error(`${t}: type de valeur non gere dans la sauvegarde`);
-      for (const ligne of lignes) {
-        const params = colonnes.map((_, i) => `$${i + 1}`).join(', ');
-        await client.query(`INSERT INTO "${t}" (${colonnes.map((c) => `"${c}"`).join(', ')}) VALUES (${params})`, colonnes.map((c) => ligne[c]));
-        insere++;
+      const listeColonnes = colonnes.map((c) => `"${c}"`).join(', ');
+      for (let i = 0; i < lignes.length; i += TAILLE_LOT) {
+        const params = [];
+        const valeurs = lignes
+          .slice(i, i + TAILLE_LOT)
+          .map((ligne) => `(${colonnes.map((c) => { params.push(ligne[c]); return `$${params.length}`; }).join(', ')})`)
+          .join(', ');
+        await client.query(`INSERT INTO "${t}" (${listeColonnes}) VALUES ${valeurs}`, params);
+        insere += params.length / colonnes.length;
       }
-      console.log(`  ${t.padEnd(22)} ${lignes.length} lignes inserees`);
+      // Lecture de controle: ce qui compte n'est pas le nombre d'insertions
+      // envoyees, mais le nombre de lignes REELLEMENT presentes.
+      const n = (await client.query(`SELECT count(*)::int n FROM "${t}"`)).rows[0].n;
+      if (n !== lignes.length) throw new Error(`${t}: ${n} lignes en base apres insertion, ${lignes.length} attendues`);
+      console.log(`  ${t.padEnd(22)} ${String(n).padStart(5)} lignes verifiees en base`);
     }
-    // Les sequences doivent repartir apres le dernier id insere, sinon la
-    // premiere insertion applicative echoue sur une cle deja prise.
+    await client.query('COMMIT');
+
+    // VERIFICATION APRES COMMIT — la seule qui compte.
+    // Un COMMIT sur une transaction avortee rend la main SANS erreur (Postgres se
+    // contente d'un avertissement): sans cette relecture apres commit, un echec
+    // total passe pour un succes. C'est exactement ce qui s'est produit ici.
+    let ecarts = 0;
+    for (const t of ordre) {
+      const attendu = donnees[t].length;
+      const n = (await client.query(`SELECT count(*)::int n FROM "${t}"`)).rows[0].n;
+      if (n !== attendu) {
+        ecarts++;
+        console.error(`  ✗ ${t}: ${n} lignes APRES commit, ${attendu} attendues`);
+      }
+    }
+    if (ecarts) {
+      throw new Error(
+        `${ecarts} table(s) non persistees apres commit — la transaction a ete annulee (une erreur avalee suffit)`
+      );
+    }
+
+    // Sequences: HORS transaction, et chaque echec est VISIBLE. Une erreur avalee
+    // a l'interieur d'une transaction l'avorte entierement, sans le signaler.
     for (const t of ordre) {
       try {
         await client.query(
           `SELECT setval(pg_get_serial_sequence('"${t}"', 'id'), COALESCE((SELECT max(id) FROM "${t}"), 1))`
         );
-      } catch {
-        /* table sans colonne id auto-incrementee */
+      } catch (e) {
+        console.log(`  (sequence de ${t} non recalibree: ${e.message.split('\n')[0].slice(0, 70)})`);
       }
     }
-    await client.query('COMMIT');
-    console.log(`\n[restore] TERMINE: ${insere} lignes reinjectees (sequences recalibrees).`);
+
+    console.log(`\n[restore] TERMINE: ${insere} lignes reinjectees ET relues apres commit (sequences recalibrees).`);
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('[restore] ECHEC, transaction annulee (base inchangee):', e.message);
