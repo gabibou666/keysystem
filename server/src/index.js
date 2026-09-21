@@ -301,6 +301,7 @@ app.get('/healthz', async (req, res) => {
       checkedAgeSec: Math.round(age / 1000),
       nextDeepCheckInSec: Math.round((ttl - age) / 1000),
       assets: ASSET_VERSION,
+      node: process.version,
       uptimeSec: Math.round(process.uptime()),
       ...(healthzState.error ? { error: healthzState.error } : {}),
     });
@@ -317,6 +318,7 @@ app.get('/healthz', async (req, res) => {
     ok: healthzState.ok,
     db: healthzState.ok ? 'up' : 'down',
     cached: false,
+    node: process.version,
     ...(healthzState.latencyMs !== null ? { latencyMs: healthzState.latencyMs } : {}),
     ...(healthzState.error ? { error: healthzState.error } : {}),
     assets: ASSET_VERSION,
