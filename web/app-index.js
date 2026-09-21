@@ -116,32 +116,6 @@ function filterExecutors(platform, btn) {
 }
 
 // ===== Script Configurator (Standard vs Auto-Key) =====
-let currentScriptMode = 'std';
-function switchScriptMode(mode) {
-  currentScriptMode = mode;
-  const btnStd = document.getElementById('btnModeStd');
-  const btnAuto = document.getElementById('btnModeAuto');
-  if (btnStd) btnStd.classList.toggle('active', mode === 'std');
-  if (btnAuto) btnAuto.classList.toggle('active', mode === 'auto');
-  updateLoaderSnippet();
-}
-
-function updateLoaderSnippet() {
-  const codeEl = document.getElementById('loaderCode');
-  const btn = document.getElementById('loaderCardBtn');
-  if (!codeEl) return;
-  if (currentScriptMode === 'std') {
-    codeEl.textContent = `loadstring(game:HttpGet("${location.origin}/api/v1/loader"))()`;
-    if (btn) btn.innerHTML = '📋 Copy Loader Script';
-  } else {
-    const box = document.getElementById('keybox');
-    const savedKey = (localStorage.getItem(KEY_STORAGE) || (box ? box.value : '') || '').trim();
-    const keyStr = savedKey || 'YOUR_KEY_HERE';
-    codeEl.textContent = `getgenv().Key = "${keyStr}"\nloadstring(game:HttpGet("${location.origin}/api/v1/loader"))()`;
-    if (btn) btn.innerHTML = '⚡ Copy Auto-Key Script';
-  }
-}
-
 // ===== Supported games & Live Search =====
 let allGamesCache = [];
 let currentSearchQuery = '';
@@ -248,7 +222,6 @@ function onKeyInput(val) {
     if (val.length >= 10) {
       localStorage.setItem(KEY_STORAGE, val);
       loadKeyInfo(val);
-      updateLoaderSnippet();
     }
   }, 400);
 }
@@ -289,7 +262,6 @@ async function loadKeyInfo(customKey) {
       // Confetti feedback when key is active
       setTimeout(window.launchConfetti, 250);
     }
-    updateLoaderSnippet();
   } catch {
     setStatus('Could not verify your key right now.', 'err');
   }
@@ -346,16 +318,6 @@ function copyLuauScriptFromKey(rawKey) {
     prompt('Copy this script into your executor:', script);
   });
 }
-
-function copyLoader() {
-  navigator.clipboard.writeText(document.getElementById('loaderCode').textContent);
-  setStatus(currentScriptMode === 'std' ? 'Loader copied!' : 'Auto-Key script copied!', 'ok');
-  if (window.showToast) showToast(currentScriptMode === 'std' ? '📋 Loader copied to clipboard!' : '⚡ Auto-Key script copied!');
-  flashCopied(document.getElementById('loaderCardBtn'), currentScriptMode === 'std' ? '📋 Copy Loader Script' : '⚡ Copy Auto-Key Script');
-}
-
-
-
 function copyHeroLoader() {
   const code = `loadstring(game:HttpGet("${location.origin}/api/v1/loader"))()`;
   navigator.clipboard.writeText(code).then(() => {
@@ -410,8 +372,6 @@ const heroCodeEl = document.getElementById('heroTerminalCode');
 if (heroCodeEl) {
   heroCodeEl.innerHTML = `<span class="code-comment">-- AUDIT HUB Universal Script Loader</span>\n<span class="code-keyword">loadstring</span>(game:<span class="code-fn">HttpGet</span>(<span class="code-str">"${location.origin}/api/v1/loader"</span>))()`;
 }
-
-updateLoaderSnippet();
 loadStats();
 loadKeyInfo();
 loadGames();
