@@ -18,7 +18,7 @@ const MAX_SIGNATURES = 200; // borne memoire (purge si depassee)
 // Signature stable d'une erreur: message + fichier d'origine. Deux occurrences du
 // meme bug se regroupent; deux bugs differents restent distincts.
 function signature(err) {
-  const message = String((err && (err.message || err)) || 'inconnu').slice(0, 160);
+  const message = String((err && (err.message || err)) || 'unknown').slice(0, 160);
   const frame = String((err && err.stack) || '')
     .split('\n')
     .find((l) => l.includes(' at ') && !l.includes('node:'));
@@ -32,7 +32,7 @@ function createReporter({ send = notifyDiscord, now = Date.now, actif = process.
   const stats = { envoyees: 0, regroupees: 0, ignoreesHorsProd: 0 };
 
   async function report(err, contexte = {}) {
-    const message = String((err && (err.message || err)) || 'inconnu').slice(0, 400);
+    const message = String((err && (err.message || err)) || 'unknown').slice(0, 400);
     // Toujours visible dans les logs Render, quoi qu'il arrive.
     console.error(`[alerte${contexte.where ? ':' + contexte.where : ''}]`, message);
 
@@ -58,11 +58,11 @@ function createReporter({ send = notifyDiscord, now = Date.now, actif = process.
     stats.envoyees++;
 
     await send({
-      title: '🚨 Erreur serveur',
+      title: '🚨 Server error',
       color: 'ddos',
       description: `\`\`\`\n${message}\n\`\`\``,
       fields: [
-        { name: 'Origine', value: contexte.where || 'inconnue' },
+        { name: 'Origin', value: contexte.where || 'unknown' },
         { name: 'Route', value: contexte.route || '—' },
         { name: 'Runtime', value: `${process.version} · ${process.env.NODE_ENV || 'dev'}` },
       ],

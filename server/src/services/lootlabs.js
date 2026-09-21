@@ -2,8 +2,8 @@ const LOOTLABS_ENDPOINT = 'https://creators.lootlabs.gg/api/public/content_locke
 
 // Durees -> checkpoints (number_of_tasks LootLabs)
 const DURATIONS = {
-  12: { tasks: 1, label: '12 heures' },
-  24: { tasks: 2, label: '24 heures' },
+  12: { tasks: 1, label: '12 hours' },
+  24: { tasks: 2, label: '24 hours' },
 };
 
 function httpPostJson(url, body, headers = {}) {
@@ -21,7 +21,7 @@ function httpPostJson(url, body, headers = {}) {
 // Cree un lien LootLabs vers le callback avec le puid attache
 async function createMonetizedLink({ durationHours, puid }) {
   const config = DURATIONS[durationHours];
-  if (!config) throw new Error('Duree invalide');
+  if (!config) throw new Error('Invalid duration');
 
   const callbackUrl = `${process.env.PUBLIC_URL}/getkey/callback`;
 

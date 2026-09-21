@@ -284,12 +284,12 @@ async function loadUsers() {
   const q = document.getElementById('userSearchInput')?.value.trim() || '';
   const tbody = document.getElementById('usersTableBody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--admin-muted);">Chargement des utilisateurs en cours...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--admin-muted);">Loading users...</td></tr>';
 
   try {
     const data = await api('/users' + (q ? '?q=' + encodeURIComponent(q) : ''));
     if (!data.success) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--admin-err);">${esc(data.error || 'Erreur')}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--admin-err);">${esc(data.error || 'Error')}</td></tr>`;
       return;
     }
 
@@ -310,7 +310,7 @@ async function loadUsers() {
     if (statActive) statActive.textContent = activeKeysCount;
 
     if (users.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--admin-muted);">Aucun utilisateur trouvé.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--admin-muted);">No users found.</td></tr>';
       return;
     }
 
@@ -324,22 +324,22 @@ async function loadUsers() {
       const ads = u.ads_last_12h || 0;
       let adsBadge = '';
       if (ads >= 2) {
-        adsBadge = `<span class="badge red" style="background:#be185d26; color:#f472b6; border:1px solid #be185d55;">${ads} / 2 (Limite 🔴)</span>`;
+        adsBadge = `<span class="badge red" style="background:#be185d26; color:#f472b6; border:1px solid #be185d55;">${ads} / 2 (Limit 🔴)</span>`;
       } else if (ads === 1) {
-        adsBadge = `<span class="badge yellow" style="background:#eab30826; color:#facc15; border:1px solid #eab30855;">1 / 2 (En cours)</span>`;
+        adsBadge = `<span class="badge yellow" style="background:#eab30826; color:#facc15; border:1px solid #eab30855;">1 / 2 (In progress)</span>`;
       } else {
-        adsBadge = `<span class="badge green" style="background:#10b98126; color:#34d399; border:1px solid #10b98155;">0 / 2 (Disponible)</span>`;
+        adsBadge = `<span class="badge green" style="background:#10b98126; color:#34d399; border:1px solid #10b98155;">0 / 2 (Available)</span>`;
       }
 
       const activeKey = u.active_key_kid 
         ? `<span style="color:#c084fc; font-family:monospace; font-size:12px;">🔑 ${esc(u.active_key_kid.slice(0, 10))}...</span>`
-        : `<span style="color:var(--admin-muted); font-size:12px;">Aucune</span>`;
+        : `<span style="color:var(--admin-muted); font-size:12px;">None</span>`;
 
       return `<tr>
         <td>
           <div style="display:flex; align-items:center; gap:10px;">
             <img src="${avatarUrl}" alt="User Avatar" style="width:32px; height:32px; border-radius:50%; object-fit:cover; border:1px solid var(--admin-border);" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'" />
-            <b>${esc(u.username || 'Inconnu')}</b>
+            <b>${esc(u.username || 'Unknown')}</b>
           </div>
         </td>
         <td><code style="font-size:12px; color:var(--admin-muted);">${esc(u.discord_id)}</code></td>
@@ -349,18 +349,18 @@ async function loadUsers() {
         <td>${activeKey}</td>
         <td>
           <button class="admin-btn small ${ads >= 2 ? 'green' : 'ghost'}" data-user-name="${esc(u.username || '')}" onclick="resetUserAdLimit('${esc(u.discord_id)}', this.dataset.userName)">
-            🔄 Reset limite (0/2)
+            🔄 Reset limit (0/2)
           </button>
         </td>
       </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--admin-err);">Erreur de chargement: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--admin-err);">Loading error: ${esc(e.message)}</td></tr>`;
   }
 }
 
 async function resetUserAdLimit(discordId, username) {
-  if (!confirm(`Réinitialiser la limite de 2 pubs pour ${username || discordId} ?\nCet utilisateur pourra immédiatement relancer des sessions de clés.`)) {
+  if (!confirm(`Reset the 2-ad limit for ${username || discordId}?\nThis user will be able to start key sessions again immediately.`)) {
     return;
   }
   try {
@@ -369,10 +369,10 @@ async function resetUserAdLimit(discordId, username) {
       alert(`✅ ${data.message}`);
       loadUsers();
     } else {
-      alert(`❌ Erreur: ${data.error || 'Échec de la réinitialisation'}`);
+      alert(`❌ Error: ${data.error || 'Reset failed'}`);
     }
   } catch (e) {
-    alert(`❌ Erreur: ${e.message}`);
+    alert(`❌ Error: ${e.message}`);
   }
 }
 
@@ -413,7 +413,7 @@ async function loadAntiDdos() {
 
     const list = s.jailedList || [];
     if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--admin-muted-2);">Aucune IP bannie actuellement. Le réseau est sain.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--admin-muted-2);">No IP banned right now. The network is healthy.</td></tr>';
       return;
     }
 
@@ -429,18 +429,18 @@ async function loadAntiDdos() {
         <td><span class="mono" style="font-size:12px; color:var(--admin-glow);">${esc(item.targetPath)}</span></td>
         <td>
           <button class="admin-btn small green" data-ip="${esc(item.ip)}" onclick="unbanDdosIp(this.dataset.ip)">
-            🔓 Débannir IP
+            🔓 Unban IP
           </button>
         </td>
       </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--admin-err);">Erreur: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--admin-err);">Error: ${esc(e.message)}</td></tr>`;
   }
 }
 
 async function unbanDdosIp(ip) {
-  if (!confirm(`Débannir l'adresse IP ${ip} immédiatement ?`)) return;
+  if (!confirm(`Unban the IP address ${ip} immediately?`)) return;
   try {
     const res = await api('/antiddos/unban', {
       method: 'POST',
@@ -449,10 +449,10 @@ async function unbanDdosIp(ip) {
     if (res.success) {
       loadAntiDdos();
     } else {
-      alert(`❌ Erreur: ${res.error || 'Échec'}`);
+      alert(`❌ Error: ${res.error || 'Failed'}`);
     }
   } catch (e) {
-    alert(`❌ Erreur: ${e.message}`);
+    alert(`❌ Error: ${e.message}`);
   }
 }
 
@@ -460,11 +460,11 @@ async function unbanDdosIp(ip) {
 async function loadGameStatuses() {
   const tbody = document.getElementById('gamesStatusBody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--admin-muted-2);">Chargement des jeux...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--admin-muted-2);">Loading games...</td></tr>';
   try {
     const d = await api('/script/games');
     if (!d.success || !d.games || !d.games.length) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--admin-muted-2);">Aucun jeu configuré pour le moment. Vous pouvez en ajouter un ci-dessus.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--admin-muted-2);">No game configured yet. You can add one above.</td></tr>';
       return;
     }
     tbody.innerHTML = d.games.map(g => {
@@ -494,12 +494,12 @@ async function loadGameStatuses() {
           <input id="note-status-${g.placeId}" class="admin-input" value="${esc(g.statusNote || '')}" placeholder="Note (ex: Update v2)" style="width:160px; padding:4px 8px; font-size:12px;">
         </td>
         <td>
-          <button class="admin-btn small green" onclick="saveGameStatus(${g.placeId})">💾 Sauvegarder</button>
+          <button class="admin-btn small green" onclick="saveGameStatus(${g.placeId})">💾 Save</button>
         </td>
       </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--admin-err);">Erreur: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--admin-err);">Error: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -518,10 +518,10 @@ async function saveGameStatus(placeId) {
     if (res.success) {
       loadGameStatuses();
     } else {
-      alert(`❌ Erreur: ${res.error || 'Échec'}`);
+      alert(`❌ Error: ${res.error || 'Failed'}`);
     }
   } catch (e) {
-    alert(`❌ Erreur: ${e.message}`);
+    alert(`❌ Error: ${e.message}`);
   }
 }
 
@@ -531,7 +531,7 @@ async function addNewGameStatus() {
   const noteInput = document.getElementById('newStatusNote');
   const placeId = parseInt(pInput?.value, 10);
   if (!Number.isFinite(placeId) || placeId <= 0) {
-    alert('Veuillez entrer un PlaceId Roblox valide.');
+    alert('Please enter a valid Roblox PlaceId.');
     return;
   }
   const status = sel ? sel.value : 'safe';
@@ -547,10 +547,10 @@ async function addNewGameStatus() {
       if (noteInput) noteInput.value = '';
       loadGameStatuses();
     } else {
-      alert(`❌ Erreur: ${res.error || 'Échec'}`);
+      alert(`❌ Error: ${res.error || 'Failed'}`);
     }
   } catch (e) {
-    alert(`❌ Erreur: ${e.message}`);
+    alert(`❌ Error: ${e.message}`);
   }
 }
 
@@ -678,15 +678,15 @@ async function construirePrompt() {
   confirmation.classList.add('hidden');
 
   if (brief.length < 10) {
-    afficherMsg(msg, 'Decrivez le script en 10 caracteres minimum.', 'err');
+    afficherMsg(msg, 'Describe the script in at least 10 characters.', 'err');
     return;
   }
   if (placeIdBrut && !/^[0-9]+$/.test(placeIdBrut)) {
-    afficherMsg(msg, "L'ID du jeu doit etre numerique (ou laisse vide).", 'err');
+    afficherMsg(msg, "The game ID must be numeric (or left empty).", 'err');
     return;
   }
 
-  afficherMsg(msg, 'Construction du prompt...', '');
+  afficherMsg(msg, 'Building the prompt...', '');
   bouton.disabled = true;
 
   try {
@@ -704,14 +704,14 @@ async function construirePrompt() {
       rangeeCopie.classList.remove('hidden');
       afficherMsg(
         msg,
-        `Prompt pret (${d.tailleOctets} octets). Copiez-le et donnez-le a l'IA de votre choix : ce site ne contacte aucun modele.`,
+        `Prompt ready (${d.tailleOctets} bytes). Copy it and give it to the AI of your choice: this site contacts no model.`,
         'ok'
       );
     } else {
-      afficherMsg(msg, d.error || 'Prompt impossible a construire.', 'err');
+      afficherMsg(msg, d.error || 'Could not build the prompt.', 'err');
     }
   } catch (e) {
-    afficherMsg(msg, 'Erreur reseau pendant la construction du prompt : ' + e.message, 'err');
+    afficherMsg(msg, 'Network error while building the prompt: ' + e.message, 'err');
   } finally {
     bouton.disabled = false;
   }
@@ -725,8 +725,8 @@ async function copierPrompt() {
   const ok = await copierTexte(sortie.value, sortie);
   confirmation.className = ok ? 'gen-copied' : 'gen-copied err';
   confirmation.textContent = ok
-    ? 'Prompt copie dans le presse-papiers.'
-    : 'Copie impossible : selectionnez le texte puis Ctrl+C.';
+    ? 'Prompt copied to the clipboard.'
+    : 'Copy failed: select the text then press Ctrl+C.';
   clearTimeout(_copieTimer);
   _copieTimer = setTimeout(() => confirmation.classList.add('hidden'), 3000);
 }
@@ -744,15 +744,15 @@ async function enregistrerCodeColle() {
   erreurEl.classList.add('hidden');
 
   if (!code.trim()) {
-    afficherMsg(msg, "Collez la reponse de l'IA avant de verifier.", 'err');
+    afficherMsg(msg, 'Paste the AI response before validating.', 'err');
     return;
   }
   if (placeIdBrut && !/^[0-9]+$/.test(placeIdBrut)) {
-    afficherMsg(msg, "L'ID du jeu doit etre numerique (ou laisse vide).", 'err');
+    afficherMsg(msg, "The game ID must be numeric (or left empty).", 'err');
     return;
   }
 
-  afficherMsg(msg, 'Verification de la syntaxe puis enregistrement en brouillon...', '');
+  afficherMsg(msg, 'Validating the syntax, then saving as draft...', '');
   bouton.disabled = true;
 
   try {
@@ -768,21 +768,21 @@ async function enregistrerCodeColle() {
     if (d.ok) {
       afficherMsg(
         msg,
-        `Code valide : brouillon v${d.version} enregistre (NON publie)${d.nettoye ? ', balises markdown retirees' : ''}.`,
+        `Valid code: draft v${d.version} saved (NOT published)${d.nettoye ? ', markdown fences stripped' : ''}.`,
         'ok'
       );
-      rapport.textContent = `Validation : ${d.tailleOctets} octets. Contenu : ${d.resume}`;
+      rapport.textContent = `Validation: ${d.tailleOctets} bytes. Content: ${d.resume}`;
       rapport.classList.remove('hidden');
       loadVersions();
     } else {
       // Aucun enregistrement: le message du parseur est affiche TEL QUEL
       // (textContent: jamais interprete comme HTML).
-      afficherMsg(msg, "Code refuse : rien n'a ete enregistre en base.", 'err');
-      erreurEl.textContent = d.error || 'Erreur inconnue';
+      afficherMsg(msg, 'Code rejected: nothing was written to the database.', 'err');
+      erreurEl.textContent = d.error || 'Unknown error';
       erreurEl.classList.remove('hidden');
     }
   } catch (e) {
-    afficherMsg(msg, 'Erreur reseau pendant la verification : ' + e.message, 'err');
+    afficherMsg(msg, 'Network error during validation: ' + e.message, 'err');
   } finally {
     bouton.disabled = false;
   }
@@ -859,7 +859,7 @@ async function loadBot() {
 
     if (alertEl) alertEl.classList.add('hidden');
     const data = res.data;
-    if (statStatus) { statStatus.textContent = 'En ligne 🟢'; statStatus.style.color = 'var(--admin-ok)'; }
+    if (statStatus) { statStatus.textContent = 'Online 🟢'; statStatus.style.color = 'var(--admin-ok)'; }
     if (statLatency) statLatency.textContent = `${data.ws_latency_ms} ms`;
     if (statGuilds) statGuilds.textContent = `${data.guilds ? data.guilds.length : 0}`;
 
@@ -873,7 +873,7 @@ async function loadBot() {
 
     _botGuilds = data.guilds || [];
     if (guildSelect) {
-      guildSelect.innerHTML = _botGuilds.map(g => `<option value="${g.id}">${esc(g.name)} (${g.member_count} membres)</option>`).join('');
+      guildSelect.innerHTML = _botGuilds.map(g => `<option value="${g.id}">${esc(g.name)} (${g.member_count} members)</option>`).join('');
       if (_botGuilds.length > 0) {
         onBotGuildChange();
       }
@@ -881,7 +881,7 @@ async function loadBot() {
   } catch (e) {
     console.error('[loadBot error]', e);
     if (alertEl) alertEl.classList.remove('hidden');
-    if (statStatus) { statStatus.textContent = 'Erreur'; statStatus.style.color = 'var(--admin-err)'; }
+    if (statStatus) { statStatus.textContent = 'Error'; statStatus.style.color = 'var(--admin-err)'; }
   }
 }
 
@@ -896,21 +896,21 @@ async function onBotGuildChange() {
   const categories = guild.categories || [];
   const roles = guild.roles || [];
 
-  const fillSelect = (id, items, defaultText = '-- Aucun --') => {
+  const fillSelect = (id, items, defaultText = '-- None --') => {
     const el = document.getElementById(id);
     if (!el) return;
     el.innerHTML = `<option value="">${defaultText}</option>` +
       items.map(it => `<option value="${it.id}"># ${esc(it.name)}</option>`).join('');
   };
 
-  const fillRoleSelect = (id, items, defaultText = '-- Aucun --') => {
+  const fillRoleSelect = (id, items, defaultText = '-- None --') => {
     const el = document.getElementById(id);
     if (!el) return;
     el.innerHTML = `<option value="">${defaultText}</option>` +
       items.map(it => `<option value="${it.id}">@ ${esc(it.name)}</option>`).join('');
   };
 
-  const fillCatSelect = (id, items, defaultText = '-- Aucune --') => {
+  const fillCatSelect = (id, items, defaultText = '-- None --') => {
     const el = document.getElementById(id);
     if (!el) return;
     el.innerHTML = `<option value="">${defaultText}</option>` +
@@ -965,7 +965,7 @@ async function saveBotSettings() {
   const statusEl = document.getElementById('botSaveStatus');
   if (!guildId) return;
 
-  statusEl.textContent = '⏳ Enregistrement en cours...';
+  statusEl.textContent = '⏳ Saving...';
   statusEl.style.color = 'var(--admin-muted)';
 
   const payload = {
@@ -996,15 +996,15 @@ async function saveBotSettings() {
       body: JSON.stringify(payload),
     });
     if (res.success) {
-      statusEl.textContent = '✅ Configuration enregistrée avec succès sur le bot !';
+      statusEl.textContent = '✅ Configuration saved to the bot successfully!';
       statusEl.style.color = 'var(--admin-ok)';
       setTimeout(() => { statusEl.textContent = ''; }, 4000);
     } else {
-      statusEl.textContent = '❌ Erreur : ' + (res.error || 'Impossible d enregistrer');
+      statusEl.textContent = '❌ Error: ' + (res.error || 'Could not save');
       statusEl.style.color = 'var(--admin-err)';
     }
   } catch (e) {
-    statusEl.textContent = '❌ Erreur réseau lors de l enregistrement';
+    statusEl.textContent = '❌ Network error while saving';
     statusEl.style.color = 'var(--admin-err)';
   }
 }
@@ -1021,11 +1021,11 @@ async function deployBotPanel(panelType) {
   }
 
   if (!channelId) {
-    alert('Veuillez d abord sélectionner un salon pour ce panneau avant de le déployer.');
+    alert('Please select a channel for this panel before deploying it.');
     return;
   }
 
-  if (!confirm(`Confirmer le déploiement du panneau "${panelType}" dans le salon sélectionné ?`)) {
+  if (!confirm(`Deploy the "${panelType}" panel to the selected channel?`)) {
     return;
   }
 
@@ -1035,12 +1035,12 @@ async function deployBotPanel(panelType) {
       body: JSON.stringify({ panel_type: panelType, channel_id: channelId }),
     });
     if (res.success) {
-      alert(`✅ Panneau "${panelType}" envoyé avec succès sur Discord !`);
+      alert(`✅ "${panelType}" panel sent to Discord successfully!`);
     } else {
-      alert(`❌ Erreur : ${res.error || 'Échec du déploiement'}`);
+      alert(`❌ Error: ${res.error || 'Deployment failed'}`);
     }
   } catch (e) {
-    alert(`❌ Erreur réseau : ${e.message}`);
+    alert(`❌ Network error: ${e.message}`);
   }
 }
 
@@ -1053,15 +1053,15 @@ async function sendBotAnnouncement() {
   const statusEl = document.getElementById('botAnnounceStatus');
 
   if (!channelId) {
-    alert('Veuillez sélectionner un salon de destination pour l annonce.');
+    alert('Please select a destination channel for the announcement.');
     return;
   }
   if (!desc) {
-    alert('Veuillez saisir le texte de votre annonce.');
+    alert('Please enter the text of your announcement.');
     return;
   }
 
-  statusEl.textContent = '⏳ Envoi en cours...';
+  statusEl.textContent = '⏳ Sending...';
   statusEl.style.color = 'var(--admin-muted)';
 
   try {
@@ -1075,17 +1075,17 @@ async function sendBotAnnouncement() {
       }),
     });
     if (res.success) {
-      statusEl.textContent = '✅ Annonce envoyée avec succès sur Discord !';
+      statusEl.textContent = '✅ Announcement sent to Discord successfully!';
       statusEl.style.color = 'var(--admin-ok)';
       document.getElementById('botAnnounceTitle').value = '';
       document.getElementById('botAnnounceDesc').value = '';
       setTimeout(() => { statusEl.textContent = ''; }, 4000);
     } else {
-      statusEl.textContent = '❌ Erreur : ' + (res.error || 'Échec de l envoi');
+      statusEl.textContent = '❌ Error: ' + (res.error || 'Send failed');
       statusEl.style.color = 'var(--admin-err)';
     }
   } catch (e) {
-    statusEl.textContent = '❌ Erreur réseau lors de l envoi';
+    statusEl.textContent = '❌ Network error while sending';
     statusEl.style.color = 'var(--admin-err)';
   }
 }

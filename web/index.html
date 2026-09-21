@@ -386,8 +386,8 @@
   <!-- ===== DEMANDES DE SCRIPTS : classement (tier list) + formulaire ===== -->
   <section class="requests-section" id="requests" aria-labelledby="requestsTitle">
     <div class="requests-head">
-      <h2 class="reveal" id="requestsTitle">Jeux les plus demandés</h2>
-      <p class="sub reveal d1">Le classement se met à jour à chaque demande. La pastille « Script prêt » signale les jeux dont le script est déjà publié.</p>
+      <h2 class="reveal" id="requestsTitle">Most requested games</h2>
+      <p class="sub reveal d1">The leaderboard updates with every request. The "Script ready" badge marks games whose script is already published.</p>
     </div>
 
     <div class="requests-layout">
@@ -404,23 +404,23 @@
           <svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
           Demander un script
         </h3>
-        <p class="sub">Indique l'identifiant (PlaceId) du jeu : il entre dans le classement et tu es prévenu dès que le script sort.</p>
+        <p class="sub">Enter the game ID (PlaceId): it joins the leaderboard and you get notified as soon as the script is out.</p>
 
         <div class="requests-login hidden" id="reqLoggedOut">
-          <p>Les demandes sont liées à ton compte Discord — c'est ce qui nous permet de te prévenir quand ton script est prêt.</p>
+          <p>Requests are tied to your Discord account — that is how we notify you when your script is ready.</p>
           <a class="btn small" id="reqLoginBtn" href="/getkey">
             <svg class="icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/></svg>
-            Se connecter avec Discord
+            Sign in with Discord
           </a>
         </div>
 
         <form class="requests-form hidden" id="reqForm" novalidate>
-          <label class="requests-label" for="reqPlaceId">Identifiant du jeu (PlaceId)</label>
+          <label class="requests-label" for="reqPlaceId">Game ID (PlaceId)</label>
           <input type="text" id="reqPlaceId" name="placeId" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="ex. 2753915549">
-          <label class="requests-label" for="reqNote">Note (facultatif)</label>
-          <textarea id="reqNote" name="note" rows="3" maxlength="240" placeholder="Pourquoi ce jeu ? Une précision utile ?"></textarea>
+          <label class="requests-label" for="reqNote">Note (optional)</label>
+          <textarea id="reqNote" name="note" rows="3" maxlength="240" placeholder="Why this game? Anything useful to add?"></textarea>
           <div class="requests-actions">
-            <button class="btn small" type="submit" id="reqSubmitBtn">Envoyer la demande</button>
+            <button class="btn small" type="submit" id="reqSubmitBtn">Send request</button>
           </div>
           <p class="requests-feedback" id="reqFeedback" role="status"></p>
         </form>
@@ -484,12 +484,12 @@
     <div class="modal-icon req-seen-icon">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
     </div>
-    <h2 id="reqSeenTitle">Ton script est prêt !</h2>
-    <p class="modal-sub" id="reqSeenDesc">Le script que tu avais demandé vient d'être ajouté :</p>
+    <h2 id="reqSeenTitle">Your script is ready!</h2>
+    <p class="modal-sub" id="reqSeenDesc">The script you requested has just been added:</p>
     <ul class="req-seen-list" id="reqSeenList"></ul>
     <div class="modal-actions">
-      <a class="btn small" id="reqSeenOpen" href="/#games">Voir les jeux supportés</a>
-      <button class="btn small secondary" id="reqSeenClose" type="button">Plus tard</button>
+      <a class="btn small" id="reqSeenOpen" href="/#games">See supported games</a>
+      <button class="btn small secondary" id="reqSeenClose" type="button">Later</button>
     </div>
   </div>
 </div>

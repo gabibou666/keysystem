@@ -18,7 +18,7 @@ function adminRedirectUri(req) {
 // Middleware: exige une session admin
 async function requireAdmin(req, res, next) {
   const session = await auth.getSession(req);
-  if (!session) return res.status(401).json({ success: false, error: 'Non autorise' });
+  if (!session) return res.status(401).json({ success: false, error: 'Unauthorized' });
   req.admin = session;
   next();
 }
@@ -31,14 +31,14 @@ router.get('/auth/login', (req, res) => {
 router.get('/auth/callback', async (req, res) => {
   try {
     const { code, state } = req.query;
-    if (!code) return res.status(400).send('code manquant');
+    if (!code) return res.status(400).send('missing code');
     if (!auth.verifyState(state)) {
-      return res.status(403).send('Session expirée ou requête invalide (erreur anti-CSRF). Veuillez réessayer de vous connecter.');
+      return res.status(403).send('Session expired or invalid request (anti-CSRF error). Please sign in again.');
     }
     const tokenData = await auth.exchangeCode(code, adminRedirectUri(req));
     const user = await auth.fetchDiscordUser(tokenData.access_token);
     if (!auth.getAdminIds().includes(user.id)) {
-      return res.status(403).send('Ce compte Discord n est pas administrateur.');
+      return res.status(403).send('This Discord account is not an administrator.');
     }
     const token = await auth.createSession(user.id);
     // secure: base sur la requete reelle (Render = toujours HTTPS) plutot que NODE_ENV
@@ -53,7 +53,7 @@ router.get('/auth/callback', async (req, res) => {
     res.redirect('/admin/');
   } catch (e) {
     console.error('[admin/callback]', e);
-    res.status(500).send('Erreur OAuth Discord');
+    res.status(500).send('Discord OAuth error');
   }
 });
 
@@ -104,7 +104,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
     });
   } catch (e) {
     console.error('[admin/stats]', e);
-    res.status(500).json({ success: false, error: 'Erreur serveur' });
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
@@ -127,7 +127,7 @@ router.get('/keys', requireAdmin, async (req, res) => {
     res.json({ success: true, keys: rows });
   } catch (e) {
     console.error('[admin/keys]', e);
-    res.status(500).json({ success: false, error: 'Erreur serveur' });
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
@@ -137,7 +137,7 @@ router.post('/keys/:id/revoke', requireAdmin, async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     console.error('[admin/revoke]', e);
-    res.status(500).json({ success: false, error: 'Erreur serveur' });
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
@@ -147,7 +147,7 @@ router.post('/keys/:id/unrevoke', requireAdmin, async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     console.error('[admin/unrevoke]', e);
-    res.status(500).json({ success: false, error: 'Erreur serveur' });
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
@@ -246,7 +246,7 @@ router.get('/bans', requireAdmin, async (req, res) => {
 
 router.post('/bans', requireAdmin, async (req, res) => {
   const userId = parseInt(req.body?.userId, 10);
-  if (!Number.isFinite(userId)) return res.status(400).json({ success: false, error: 'userId invalide' });
+  if (!Number.isFinite(userId)) return res.status(400).json({ success: false, error: 'invalid userId' });
   const reason = (req.body?.reason || '').slice(0, 200);
   await pool.query(
     `INSERT INTO bans (user_id, reason) VALUES ($1, $2)
@@ -350,10 +350,10 @@ router.post('/script/game-status', requireAdmin, async (req, res) => {
     const note = (req.body?.note || '').slice(0, 255);
 
     if (!Number.isFinite(placeId) || placeId <= 0) {
-      return res.status(400).json({ success: false, error: 'PlaceId invalide' });
+      return res.status(400).json({ success: false, error: 'Invalid PlaceId' });
     }
     if (!['safe', 'updating', 'detected'].includes(status)) {
-      return res.status(400).json({ success: false, error: 'Statut invalide (safe, updating, detected)' });
+      return res.status(400).json({ success: false, error: 'Invalid status (safe, updating, detected)' });
     }
 
     await pool.query(
@@ -366,11 +366,11 @@ router.post('/script/game-status', requireAdmin, async (req, res) => {
     if (notifyDiscord) {
       const statusLabels = {
         safe: '🟢 Undetected (Safe)',
-        updating: '🟡 Updating (Mise à jour)',
-        detected: '🔴 Detected (Risque / Maintenance)',
+        updating: '🟡 Updating (patch in progress)',
+        detected: '🔴 Detected (risk / maintenance)',
       };
       notifyDiscord(
-        `🎮 **Statut de script modifié**\nPlaceId: \`${placeId}\`\nNouveau statut: **${statusLabels[status] || status}**${note ? `\nNote: _${note}_` : ''}`
+        `🎮 **Script status changed**\nPlaceId: \`${placeId}\`\nNew status: **${statusLabels[status] || status}**${note ? `\nNote: _${note}_` : ''}`
       ).catch(() => {});
     }
 
@@ -388,10 +388,10 @@ router.post('/script/save', requireAdmin, async (req, res) => {
     const note = (req.body?.note || '').slice(0, 500);
     const placeId = parseInt(req.body?.placeId, 10) || null;
     if (typeof source !== 'string' || source.trim().length < 5) {
-      return res.status(400).json({ success: false, error: 'Source vide ou trop courte' });
+      return res.status(400).json({ success: false, error: 'Empty or too short source' });
     }
     if (source.length > 500000) {
-      return res.status(400).json({ success: false, error: 'Script trop volumineux (500 Ko max)' });
+      return res.status(400).json({ success: false, error: 'Script too large (500 KB max)' });
     }
 
     // Numero de version (global) + numero de version par jeu
@@ -416,7 +416,7 @@ router.post('/script/save', requireAdmin, async (req, res) => {
     } catch (e) {
       return res.status(422).json({
         success: false,
-        error: `Pipeline echoue: ${e.message}`,
+        error: `Pipeline failed: ${e.message}`,
         versionId,
       });
     }
@@ -448,7 +448,7 @@ router.post('/script/save', requireAdmin, async (req, res) => {
     });
   } catch (e) {
     console.error('[script/save]', e);
-    res.status(500).json({ success: false, error: 'Erreur serveur' });
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
@@ -462,10 +462,10 @@ router.post('/generate-script', requireAdmin, (req, res) => {
     const placeId = parseInt(req.body?.placeId, 10) || null;
 
     if (brief.length < 10) {
-      return res.status(400).json({ ok: false, error: 'Description trop courte (10 caracteres minimum)' });
+      return res.status(400).json({ ok: false, error: 'Description too short (10 characters minimum)' });
     }
     if (brief.length > 4000) {
-      return res.status(400).json({ ok: false, error: 'Description trop longue (4000 caracteres maximum)' });
+      return res.status(400).json({ ok: false, error: 'Description too long (4000 characters maximum)' });
     }
 
     // Aucun acces reseau: uniquement de la concatenation de texte locale.
@@ -497,17 +497,17 @@ router.post('/script-from-text', requireAdmin, async (req, res) => {
     const placeId = parseInt(req.body?.placeId, 10) || null;
 
     if (brut.trim().length === 0) {
-      return res.status(400).json({ ok: false, error: "Code vide: collez la reponse de l'IA" });
+      return res.status(400).json({ ok: false, error: 'Empty code: paste the AI response' });
     }
     if (brut.length > 500000) {
-      return res.status(400).json({ ok: false, error: 'Script trop volumineux (500 Ko max)' });
+      return res.status(400).json({ ok: false, error: 'Script too large (500 KB max)' });
     }
 
     // Nettoyage AVANT tout controle: une reponse entouree de trois accents
     // graves (balises de bloc markdown) est du code valide une fois nettoyee.
     const source = nettoyerCode(brut);
     if (source.trim().length < 5) {
-      return res.status(400).json({ ok: false, error: 'Code vide apres nettoyage des balises markdown' });
+      return res.status(400).json({ ok: false, error: 'Empty code after stripping markdown fences' });
     }
 
     let controle;
@@ -544,7 +544,7 @@ router.post('/script-from-text', requireAdmin, async (req, res) => {
     });
   } catch (e) {
     console.error('[admin/script-from-text]', e);
-    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+    res.status(500).json({ ok: false, error: 'Server error' });
   }
 });
 
@@ -555,25 +555,25 @@ router.get('/script/original/:version', requireAdmin, async (req, res) => {
     [parseInt(req.params.version, 10)]
   );
   const v = rows[0];
-  if (!v) return res.status(404).json({ success: false, error: 'Version inconnue' });
+  if (!v) return res.status(404).json({ success: false, error: 'Unknown version' });
   try {
     const source = decryptAES(v.original_enc, v.original_iv);
     if (crypto.sha256(source) !== v.original_hash) {
-      return res.status(500).json({ success: false, error: 'Integrite compromise (hash mismatch)' });
+      return res.status(500).json({ success: false, error: 'Integrity compromised (hash mismatch)' });
     }
     res.json({ success: true, source });
   } catch {
-    res.status(500).json({ success: false, error: 'AES_KEY incorrecte ou donnees corrompues' });
+    res.status(500).json({ success: false, error: 'Wrong AES_KEY or corrupted data' });
   }
 });
 
 // Publier une version (build actif)
 router.post('/script/publish', requireAdmin, async (req, res) => {
   const version = parseInt(req.body?.version, 10);
-  if (!Number.isFinite(version)) return res.status(400).json({ success: false, error: 'version requise' });
+  if (!Number.isFinite(version)) return res.status(400).json({ success: false, error: 'version required' });
 
   const ver = await pool.query('SELECT id, place_id FROM script_versions WHERE version = $1', [version]);
-  if (!ver.rows[0]) return res.status(404).json({ success: false, error: 'Version inconnue' });
+  if (!ver.rows[0]) return res.status(404).json({ success: false, error: 'Unknown version' });
   const placeId = ver.rows[0].place_id;
 
   // Patches IA rejects appliques? Verifie qu'aucun patch pending pour ce build
@@ -586,7 +586,7 @@ router.post('/script/publish', requireAdmin, async (req, res) => {
   if (pending.rows[0].c > 0) {
     return res.status(409).json({
       success: false,
-      error: `${pending.rows[0].c} patch(s) IA en attente de review. Approuve-les ou rejette-les d'abord.`,
+      error: `${pending.rows[0].c} AI patch(es) pending review. Approve or reject them first.`,
     });
   }
 
@@ -638,7 +638,7 @@ router.post('/script/publish', requireAdmin, async (req, res) => {
     if (!rebuilt) {
       return res.status(409).json({
         success: false,
-        error: 'Cette version n\'a pas de build — re-save le script puis publie.',
+        error: 'This version has no build — re-save the script then publish it.',
       });
     }
   }
@@ -749,7 +749,7 @@ router.get('/robux-stats', requireAdmin, async (req, res) => {
     });
   } catch (e) {
     console.error('[admin/robux-stats]', e);
-    res.status(500).json({ success: false, error: 'Erreur serveur' });
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
@@ -785,7 +785,7 @@ router.post('/watermark/decode', requireAdmin, async (req, res) => {
     });
   } catch (e) {
     console.error('[watermark/decode]', e);
-    res.status(500).json({ success: false, error: 'Erreur serveur' });
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
@@ -806,7 +806,7 @@ router.post('/patches/:id/approve', requireAdmin, async (req, res) => {
       [req.params.id]
     );
     const patch = rows[0];
-    if (!patch) return res.status(404).json({ success: false, error: 'Patch inconnu' });
+    if (!patch) return res.status(404).json({ success: false, error: 'Unknown patch' });
 
     // Reconstruit le build avec tous les patches approuves
     const build = await pool.query('SELECT version_id, version FROM script_builds WHERE id = $1', [patch.build_id]);
@@ -940,7 +940,7 @@ router.get('/robux-stats', requireAdmin, async (req, res) => {
     });
   } catch (e) {
     console.error('[admin/robux-stats]', e);
-    res.status(500).json({ success: false, error: 'Erreur serveur' });
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
@@ -983,7 +983,7 @@ router.get('/antiddos', requireAdmin, (req, res) => {
 
 router.post('/antiddos/unban', requireAdmin, (req, res) => {
   const { ip } = req.body;
-  if (!ip) return res.status(400).json({ success: false, error: 'IP requise' });
+  if (!ip) return res.status(400).json({ success: false, error: 'IP required' });
   const removed = antiddos.unbanIP(ip);
   res.json({ success: true, unbanned: removed });
 });
@@ -1079,7 +1079,7 @@ router.post('/users/:discordId/reset-limit', requireAdmin, async (req, res) => {
 
     res.json({
       success: true,
-      message: `Limite de 2 pubs réinitialisée avec succès (${updateRes.rowCount} session(s) effacée(s))`,
+      message: `2-ad limit reset successfully (${updateRes.rowCount} session(s) cleared)`,
       resetSessionsCount: updateRes.rowCount,
     });
   } catch (e) {
@@ -1127,7 +1127,7 @@ router.get('/bot/status', requireAdmin, async (req, res) => {
       success: false,
       offline: true,
       apiUrl: BOT_API_URL,
-      error: 'Le bot Discord est hors-ligne ou injoignable.',
+      error: 'The Discord bot is offline or unreachable.',
       details: e.message,
     });
   }

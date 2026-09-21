@@ -102,7 +102,7 @@ function streamChatCompletions({ baseUrl, apiKey, model, messages, maxTokens, ti
 
 async function requestCompatibilityPatches(source, compatReport) {
   if (!process.env.AI_API_KEY) {
-    return { patches: [], skipped: 'IA non configuree (AI_API_KEY manquant) - builds shims-seuls uniquement' };
+    return { patches: [], skipped: 'AI not configured (AI_API_KEY missing) - shim-only builds' };
   }
 
   const baseUrl = process.env.AI_BASE_URL || 'https://api.tokenrouter.com/v1';
@@ -174,30 +174,30 @@ Propose patches for executor-specific calls NOT covered by the prelude. JSON arr
 // ============================================================================
 
 const PROMPT_TETE =
-  'Tu es un ingenieur Luau senior. Ecris UN script Luau complet et autonome qui construit une interface graphique (GUI) pour un executeur Roblox.';
+  'You are a senior Luau engineer. Write ONE complete, self-contained Luau script that builds a graphical interface (GUI) for a Roblox executor.';
 
 // Contraintes techniques: chacune repond a une panne observee (code qui ne
 // compile pas, fenetre qui s'empile, passerelle cassee par un require tiers).
 // test-admin-generate.js verifie qu'aucune ne disparait du prompt.
-const PROMPT_REGLES = `REGLES DE SORTIE (absolues)
-- Reponds avec LE CODE SOURCE UNIQUEMENT: aucun texte avant ou apres, aucune explication, aucune balise de bloc de code markdown, aucun JSON, jamais une phrase du genre "voici votre script".
-- Le code doit etre syntaxiquement valide pour un analyseur Lua 5.1: pas d'affectation composee (+=, -=, ..=, *=, /=), pas d'annotations de type, pas de continue, pas de goto, pas d'operateur //, pas de chaine interpolee entre accents graves.
-- Le code doit etre directement executable tel quel dans un executeur Roblox: table de configuration en haut, fonctions utilitaires, puis la construction. Aucun placeholder, aucun "...", aucun TODO, aucune fonction vide.
+const PROMPT_REGLES = `OUTPUT RULES (absolute)
+- Reply with THE SOURCE CODE ONLY: no text before or after, no explanation, no markdown code fence, no JSON, never a sentence like "here is your script".
+- The code must be syntactically valid for a Lua 5.1 parser: no compound assignment (+=, -=, ..=, *=, /=), no type annotations, no continue, no goto, no // operator, no backtick-interpolated string.
+- The code must be directly executable as-is inside a Roblox executor: configuration table at the top, utility functions, then the build. No placeholder, no "...", no TODO, no empty function.
 
-CE QUE L'INTERFACE DOIT CONTENIR
-- Un ScreenGui parente au PlayerGui du joueur local (l'affectation passe par un pcall).
-- Un cadre principal DEPLACABLE a la souris: implemente le deplacement toi-meme (UserInputService ou InputChanged sur l'en-tete).
-- Des boutons bascule dont l'APPARENCE reflete l'etat (couleur ON differente de la couleur OFF), organises en SECTIONS avec un titre et un separateur.
-- Des animations douces d'ouverture, de fermeture et de bascule avec TweenService (durees courtes, aucune boucle infinie).
-- La palette violet et noir: fonds #08070c et #12101a, accents violets #8b5cf6, #c084fc, #a78bfa, texte blanc.
-- Une FERMETURE PROPRE: le bouton de fermeture detruit le ScreenGui avec :Destroy(), deconnecte la connexion de deplacement, et plus rien ne continue de tourner ensuite.
-- Uniquement task.wait et task.spawn (jamais wait, spawn, delay ni sleep des globales historiques).
-- pcall autour des appels fragiles (PlayerGui, creation d'Instance, acces au personnage).
-- AUCUNE dependance externe: jamais require(id) d'un asset tiers, jamais loadstring d'un contenu distant, aucun telechargement HTTP. Services Roblox uniquement.
-- Detruis toute instance existante du meme nom avant de creer la nouvelle, pour qu'executer le script deux fois n'empile pas deux fenetres.
+WHAT THE INTERFACE MUST CONTAIN
+- A ScreenGui parented to the local player's PlayerGui (the assignment goes through a pcall).
+- A main frame DRAGGABLE with the mouse: implement the dragging yourself (UserInputService or InputChanged on the header).
+- Toggle buttons whose APPEARANCE reflects the state (ON colour different from the OFF colour), organised in SECTIONS with a title and a separator.
+- Smooth opening, closing and toggle animations with TweenService (short durations, no infinite loop).
+- The purple and black palette: backgrounds #08070c and #12101a, purple accents #8b5cf6, #c084fc, #a78bfa, white text.
+- A CLEAN CLOSE: the close button destroys the ScreenGui with :Destroy(), disconnects the dragging connection, and nothing keeps running afterwards.
+- Only task.wait and task.spawn (never the legacy globals wait, spawn, delay or sleep).
+- pcall around fragile calls (PlayerGui, Instance creation, character access).
+- NO external dependency: never require(id) a third-party asset, never loadstring remote content, no HTTP download. Roblox services only.
+- Destroy any existing instance with the same name before creating the new one, so running the script twice does not stack two windows.
 
 STYLE
-- Bloc de commentaires en tete decrivant l'interface, bannieres de commentaires entre les sections, noms de variables explicites. Moins de 600 lignes.`;
+- Header comment block describing the interface, comment banners between sections, explicit variable names. Under 600 lines.`;
 
 // Fabrique le prompt complet a remettre a une IA, a partir de la description de
 // l'admin et (facultativement) d'un ID de jeu. Purement local: aucune lecture
@@ -205,17 +205,17 @@ STYLE
 function buildScriptPrompt({ brief, placeId } = {}) {
   const description = String(brief == null ? '' : brief).trim();
   if (!description) {
-    throw new Error('Description vide: impossible de construire le prompt');
+    throw new Error('Empty description: cannot build the prompt');
   }
 
-  const blocs = [`CE QUE L'INTERFACE DOIT FAIRE\n${description}`];
+  const blocs = [`WHAT THE INTERFACE MUST DO\n${description}`];
 
   // Le PlaceId n'est qu'un contexte: il ne doit pas finir code en dur dans le
   // script (un meme script peut servir plusieurs jeux).
   const id = Number.parseInt(placeId, 10);
   if (Number.isFinite(id) && id > 0) {
     blocs.push(
-      `ID DU JEU CIBLE (contexte seulement: ne code aucune logique de jeu en dur et n'ecris pas cet identifiant dans le script)\n${id}`
+      `TARGET GAME ID (context only: do not hardcode any game logic and do not write this identifier into the script)\n${id}`
     );
   }
 
@@ -235,7 +235,7 @@ function analyseurLua() {
     }
   }
   if (!_luaparse) {
-    throw new Error('luaparse absent (npm install): impossible de garantir la syntaxe du script');
+    throw new Error('luaparse missing (npm install): cannot guarantee the script syntax');
   }
   return _luaparse;
 }
@@ -272,15 +272,15 @@ function resumerScript(source) {
   const marqueurs = [
     ['ScreenGui', /ScreenGui/],
     ['TweenService', /TweenService/],
-    ['fenetre deplacable', /UserInputService|InputChanged|InputBegan/],
-    ['boutons bascule', /TextButton|ImageButton|Toggle/],
+    ['draggable frame', /UserInputService|InputChanged|InputBegan/],
+    ['toggle buttons', /TextButton|ImageButton|Toggle/],
     ['task.spawn', /task\.spawn/],
     ['pcall', /pcall\s*\(/],
-    ['fermeture propre', /:Destroy\(\)/],
+    ['clean close', /:Destroy\(\)/],
   ]
     .filter(([, motif]) => motif.test(source))
     .map(([nom]) => nom);
-  return `${lignes} lignes, ${octets} octets${marqueurs.length ? ' - ' + marqueurs.join(', ') : ''}`;
+  return `${lignes} lines, ${octets} bytes${marqueurs.length ? ' - ' + marqueurs.join(', ') : ''}`;
 }
 
 module.exports = {

@@ -47,11 +47,11 @@
   // (401/409/429) ou d'un jeton `reason`/`error` : on couvre les deux
   // conventions (contrat écrit et implémentation en place).
   var REASONS = {
-    auth_required: 'Connecte-toi avec Discord pour envoyer une demande.',
-    invalid_place_id: "Cet identifiant de jeu n'existe pas — vérifie le PlaceId.",
-    already_requested: 'Tu as déjà demandé un script pour ce jeu.',
-    rate_limited: 'Trop de demandes d\u2019un coup — réessaie dans quelques minutes.',
-    error: "La demande n'a pas pu être enregistrée — réessaie plus tard.",
+    auth_required: 'Sign in with Discord to send a request.',
+    invalid_place_id: 'That game ID does not exist — check the PlaceId.',
+    already_requested: 'You already requested a script for this game.',
+    rate_limited: 'Too many requests at once — try again in a few minutes.',
+    error: 'The request could not be saved — try again later.',
   };
 
   function reasonFor(status, d) {
@@ -110,12 +110,12 @@
     var name = document.createElement('span');
     name.className = 'requests-name';
     // textContent : un nom renvoyé par l'API ne peut pas injecter de HTML.
-    name.textContent = typeof item.name === 'string' && item.name ? item.name : 'Jeu ' + item.placeId;
+    name.textContent = typeof item.name === 'string' && item.name ? item.name : 'Game ' + item.placeId;
     name.title = name.textContent;
 
     var count = document.createElement('span');
     count.className = 'requests-count';
-    count.textContent = plural(Number(item.count) || 0, 'demande', 'demandes');
+    count.textContent = plural(Number(item.count) || 0, 'request', 'requests');
 
     li.appendChild(pos);
     li.appendChild(iconFor(item));
@@ -125,9 +125,9 @@
     if (item.hasScript) {
       var flag = document.createElement('span');
       flag.className = 'requests-flag';
-      flag.title = 'Un script existe déjà pour ce jeu';
+      flag.title = 'A script already exists for this game';
       flag.innerHTML = CHECK_GLYPH;
-      flag.appendChild(document.createTextNode('Script prêt'));
+      flag.appendChild(document.createTextNode('Script ready'));
       li.appendChild(flag);
     }
     return li;
@@ -164,7 +164,7 @@
     if (!list.length) {
       var empty = document.createElement('p');
       empty.className = 'requests-empty';
-      empty.textContent = "Aucune demande pour l'instant : sois le premier à réclamer un script.";
+      empty.textContent = 'No requests yet — be the first to ask for a script.';
       box.appendChild(empty);
       return;
     }
@@ -194,7 +194,7 @@
     if (list.length > shown.length) {
       var note = document.createElement('p');
       note.className = 'requests-note';
-      note.textContent = plural(list.length, 'jeu demandé au total', 'jeux demandés au total');
+      note.textContent = plural(list.length, 'game requested in total', 'games requested in total');
       box.appendChild(note);
     }
   }
@@ -205,7 +205,7 @@
     clearTopBox(box);
     var p = document.createElement('p');
     p.className = 'requests-error';
-    p.textContent = 'Impossible de charger le classement pour le moment.';
+    p.textContent = 'Could not load the leaderboard right now.';
     box.appendChild(p);
   }
 
@@ -252,7 +252,7 @@
     var label = btn ? btn.textContent : '';
     if (btn) {
       btn.disabled = true;
-      btn.textContent = 'Envoi…';
+      btn.textContent = 'Sending…';
     }
     setFeedback('', '');
     return fetch(REQUEST_URL, {
@@ -276,8 +276,8 @@
         if (res.status >= 200 && res.status < 300 && d.ok !== false) {
           setFeedback(
             d.gameName
-              ? 'Demande envoyée pour « ' + d.gameName + ' » ! Tu es prévenu ici dès que le script est publié.'
-              : 'Demande envoyée ! Tu es prévenu ici dès que le script est publié.',
+              ? 'Request sent for "' + d.gameName + '"! You will be notified here as soon as the script is published.'
+              : 'Request sent! You will be notified here as soon as the script is published.',
             'ok'
           );
           var id = document.getElementById('reqPlaceId');
@@ -292,7 +292,7 @@
         setFeedback(REASONS[reason], 'err');
       })
       .catch(function () {
-        setFeedback('Connexion impossible — vérifie ton réseau et réessaie.', 'err');
+        setFeedback('Connection failed — check your network and try again.', 'err');
       })
       .then(function () {
         if (btn) {
@@ -308,7 +308,7 @@
     var noteEl = document.getElementById('reqNote');
     var raw = idEl ? String(idEl.value).trim() : '';
     if (!/^\d{3,}$/.test(raw)) {
-      setFeedback('Identifiant invalide : indique le PlaceId du jeu (chiffres uniquement).', 'err');
+      setFeedback('Invalid ID: enter the game PlaceId (digits only).', 'err');
       if (idEl) idEl.focus();
       return;
     }
@@ -361,7 +361,7 @@
       list.textContent = '';
       items.forEach(function (it) {
         var li = document.createElement('li');
-        li.textContent = it.name || 'Jeu ' + it.placeId;
+        li.textContent = it.name || 'Game ' + it.placeId;
         list.appendChild(li);
       });
     }
@@ -369,8 +369,8 @@
     if (desc) {
       desc.textContent =
         items.length > 1
-          ? "Les scripts que tu avais demandés viennent d'être ajoutés :"
-          : "Le script que tu avais demandé vient d'être ajouté :";
+          ? 'The scripts you requested have just been added:'
+          : 'The script you requested has just been added:';
     }
     lastFocused = document.activeElement;
     ov.classList.add('open');

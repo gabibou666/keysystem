@@ -109,15 +109,15 @@ async function triggerDdosAlert(ip, count, durationMs, targetPath, userAgent) {
   const rps = (count / durationSec).toFixed(1);
 
   await notifyDiscord({
-    title: '🚨 Anti-DDoS : Attaque Détectée & Bloquée',
-    description: `Une tentative d'inondation HTTP (Layer-7 Flood) a été interceptée. L'IP source a été immédiatement bannie.`,
+    title: '🚨 Anti-DDoS: attack detected & blocked',
+    description: 'A Layer-7 HTTP flood attempt was intercepted and the source IP was banned immediately.',
     color: 'ddos',
     fields: [
-      { name: '🌐 IP Attaquant', value: `\`${ip}\``, inline: true },
-      { name: '🎯 Route Ciblée', value: `\`${targetPath.slice(0, 100)}\``, inline: true },
-      { name: '⚡ Intensité', value: `**${count}** requêtes en **${durationSec.toFixed(1)}s** (~${rps} req/s)`, inline: true },
-      { name: '🤖 User-Agent', value: `\`${(userAgent || 'inconnu').slice(0, 100)}\``, inline: false },
-      { name: '🚫 Sanction', value: `IP en prison (Jail) pour **15 minutes**`, inline: true },
+      { name: '🌐 Attacker IP', value: `\`${ip}\``, inline: true },
+      { name: '🎯 Targeted route', value: `\`${targetPath.slice(0, 100)}\``, inline: true },
+      { name: '⚡ Intensity', value: `**${count}** requests in **${durationSec.toFixed(1)}s** (~${rps} req/s)`, inline: true },
+      { name: '🤖 User-Agent', value: `\`${(userAgent || 'unknown').slice(0, 100)}\``, inline: false },
+      { name: '🚫 Sanction', value: 'IP jailed for **15 minutes**', inline: true },
       { name: '🕒 Horodatage', value: `<t:${Math.floor(now / 1000)}:R>`, inline: true },
     ],
   });

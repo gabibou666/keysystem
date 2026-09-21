@@ -974,7 +974,7 @@ router.get('/v1/windui', (req, res) => {
     res.set('Cache-Control', 'public, max-age=3600');
     res.send(fs.readFileSync(p, 'utf8'));
   } catch {
-    res.status(503).send('-- windui indisponible');
+    res.status(503).send('-- windui unavailable');
   }
 });
 
@@ -988,7 +988,7 @@ router.get('/v1/loader', (req, res) => {
   try {
     res.send(fs.readFileSync(loaderPath, 'utf8'));
   } catch {
-    res.status(503).send('-- loader indisponible: loader/loader.luau manquant');
+    res.status(503).send('-- loader unavailable: loader/loader.luau missing');
   }
 });
 
@@ -1215,7 +1215,7 @@ router.post('/requests', requestsLimiter, requireDiscordUser, async (req, res) =
       return res.status(409).json({
         ok: false,
         reason: 'deja_demande',
-        error: 'Une demande est deja en attente pour ce jeu.',
+        error: 'A request is already pending for this game.',
       });
     }
 

@@ -84,18 +84,18 @@ const CODE_ENTOURE = '```lua\n' + CODE_VALIDE + '\n```\n';
 // Une contrainte qui disparait = un script casse chez l'utilisateur: c'est
 // exactement ce que ce test doit empecher.
 const CONTRAINTES = [
-  ['code source uniquement, sans explication', /LE CODE SOURCE UNIQUEMENT/],
-  ['interdiction des balises markdown', /balise de bloc de code markdown/],
+  ['code source uniquement, sans explication', /THE SOURCE CODE ONLY/],
+  ['interdiction des balises markdown', /markdown code fence/],
   ['compatibilite Lua 5.1 annoncee', /Lua 5\.1/],
   ['interdiction de +=', /\+=/],
-  ['interdiction des annotations de type', /annotations de type/],
-  ['interdiction de continue', /pas de continue/],
-  ['interdiction de goto', /pas de goto/],
+  ['interdiction des type annotations', /type annotations/],
+  ['interdiction de continue', /no continue/],
+  ['interdiction de goto', /no goto/],
   ['ScreenGui', /ScreenGui/],
   ['parentage au PlayerGui', /PlayerGui/],
-  ['cadre principal deplacable', /DEPLACABLE/],
+  ['cadre principal deplacable', /DRAGGABLE/],
   ['deplacement implemente (UserInputService/InputChanged)', /UserInputService|InputChanged/],
-  ['boutons bascule', /boutons bascule/i],
+  ['toggle buttons', /toggle buttons/i],
   ['sections titrees', /SECTIONS/],
   ['TweenService', /TweenService/],
   ['palette noir (#08070c, #12101a)', /#08070c[\s\S]*#12101a/],
@@ -104,9 +104,9 @@ const CONTRAINTES = [
   ['task.wait et task.spawn', /task\.wait[\s\S]*task\.spawn/],
   ['pcall autour des appels fragiles', /pcall/],
   ['interdiction de require(id) tiers', /require\(id\)/],
-  ['interdiction de loadstring distant', /loadstring[\s\S]{0,80}distant/],
-  ['code directement executable', /directement executable/i],
-  ['aucun placeholder ni TODO', /Aucun placeholder[\s\S]{0,120}TODO/],
+  ['interdiction de loadstring distant', /loadstring[\s\S]{0,80}remote/],
+  ['code directly executable', /directly executable/i],
+  ['aucun placeholder ni TODO', /No placeholder[\s\S]{0,120}TODO/],
 ];
 
 let PLACE_ID = 0;
@@ -260,7 +260,7 @@ process.stdout.write(JSON.stringify({ appelsReseau, sorties }));
       verifie('ID de jeu present dans le prompt quand il est fourni',
         sonde.sorties[0].prompt.includes(String(PLACE_ID)) && sonde.sorties[1].prompt.includes('5551234'));
       verifie('aucune section ID de jeu quand il est omis',
-        !/ID DU JEU CIBLE/.test(sonde.sorties[2].prompt));
+        !/TARGET GAME ID/.test(sonde.sorties[2].prompt));
       verifie('descriptions differentes -> prompts differents',
         new Set(sonde.sorties.map((s) => s.prompt)).size === sonde.sorties.length);
     }
@@ -352,7 +352,7 @@ process.stdout.write(JSON.stringify({ appelsReseau, sorties }));
 
     const sansId = await appel('POST', '/api/admin/generate-script', { brief: BRIEF }, cookieAdmin);
     verifie('prompt sans ID de jeu: aucune section ID dans le texte',
-      sansId.status === 200 && sansId.corps.ok === true && !/ID DU JEU CIBLE/.test(sansId.corps.prompt));
+      sansId.status === 200 && sansId.corps.ok === true && !/TARGET GAME ID/.test(sansId.corps.prompt));
 
     // ---------- 4. Code colle: droits d'administration exiges ----------
     const avant4 = await maxId();
