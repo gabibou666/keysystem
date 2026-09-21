@@ -174,6 +174,26 @@ app.use(antiDdosMiddleware);
 // sans redeploiement: si un partenaire publicitaire injectait un jour un script
 // inline, il suffit de mettre CSP_ALLOW_INLINE_SCRIPTS=1 dans les variables
 // d'environnement Render pour restaurer l'ancien comportement en 10 secondes.
+// ============================================================================
+// CSP stricte (voir la configuration Helmet plus bas).
+// `report-uri` remonte les violations sur /api/csp-report: on decouvre un
+// partenaire publicitaire qui a besoin d'une exception depuis le navigateur des
+// visiteurs, au lieu de le decouvrir en perdant du revenu.
+// ============================================================================
+
+// Origines supplementaires pour connect-src, sans modification de code:
+//   CSP_EXTRA_CONNECT_SRC=https://a.com,https://b.com
+// Utile quand un regisseur publicitaire change de domaine de telemetrie.
+function originesSupplementaires() {
+  return String(process.env.CSP_EXTRA_CONNECT_SRC || '')
+    .split(',')
+    .map((d) => d.trim())
+    .filter(Boolean)
+    .map((d) => (/^[a-z]+:\/\//i.test(d) ? d : `https://${d}`));
+}
+
+// Valve de secours (voir README): autorise les scripts inline en 10 secondes,
+// sans redeployer de code.
 const ALLOW_INLINE_SCRIPTS = process.env.CSP_ALLOW_INLINE_SCRIPTS === '1';
 
 app.use(
@@ -197,13 +217,28 @@ app.use(
         // Les creatives publicitaires arrivent depuis des domaines CDN tournants
         // impossibles a lister: images/frames/tracking ouverts (aucun risque de
         // script via img/frame; la protection XSS reste sur scriptSrc).
-        imgSrc: ['*'],
+        // `data:`/`blob:` doivent etre listes explicitement: `*` ne couvre QUE
+        // les schemas reseau (http/https/ws/wss) — sans eux, une icone SVG
+        // embarquee (drapeau, pastille) est bloquee par le navigateur.
+        imgSrc: ['*', 'data:', 'blob:'],
         frameSrc: ['*'],
         mediaSrc: ['*'],
         // Polices auto-hebergees (/fonts): plus aucun appel a Google Fonts
         // (conformite RGPD/CNIL + suppression d'une chaine bloquante).
         fontSrc: ["'self'", 'data:'],
-        connectSrc: ["'self'", 'https://discord.com', 'https://www.highrevenueformat.com', 'https://*.highrevenueformat.com'],
+        connectSrc: [
+          "'self'",
+          'https://discord.com',
+          'https://www.highrevenueformat.com',
+          'https://*.highrevenueformat.com',
+          // Telemetrie du regisseur publicitaire, constatee dans la console du
+          // navigateur: sans ces origines le script s'initialise puis echoue, ce
+          // qui se paie en revenu. Extensible sans redeployer de code via
+          // CSP_EXTRA_CONNECT_SRC (voir README).
+          'https://protrafficinspector.com',
+          'https://kettledroopingcontinuation.com',
+          ...originesSupplementaires(),
+        ],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         formAction: ["'self'"],
