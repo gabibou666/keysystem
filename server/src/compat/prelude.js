@@ -2,9 +2,186 @@
 // Pure ADDITION: le corps du script utilisateur reste identique octet par octet.
 // Toutes les globals non universales y sont definies avec des fallbacks + degradations.
 
-function buildPrelude() {
+function buildPrelude(options) {
+  // Controle de session (anti-dump). L'adresse publique est injectee a la
+  // generation; sans elle, aucun controle n'est ajoute (un build local de
+  // developpement doit rester executable tel quel).
+  // Une adresse fournie explicitement fait foi, y compris vide: c'est ce qui
+  // permet de generer un build SANS controle (developpement, tests).
+  const site = String(
+    options && typeof options.siteUrl === 'string' ? options.siteUrl : (process.env.PUBLIC_URL || '')
+  ).replace(/\/+$/, '');
+  const session = !site ? '' : `-- ===== CONTROLE DE SESSION (anti-dump) =====
+-- POURQUOI: sans ce bloc, une copie extraite (dump) du script tourne sans cle et
+-- sans publicite, indefiniment. Aucune protection cote client n'est inviolable
+-- (le script s'execute chez l'utilisateur), mais ce controle transforme une copie
+-- gratuite et permanente en une copie qui cesse de fonctionner.
+-- REGLE DE TOLERANCE: seul un REFUS EXPLICITE du serveur arrete le script. Une
+-- absence de reponse (reseau, panne passagere) est toleree plusieurs fois, pour
+-- ne jamais couper un utilisateur legitime.
+local __KS_AVANT = {}
+local __KS_GENV = _G
+pcall(function()
+  if type(getgenv) == "function" then
+    local g = getgenv()
+    if type(g) == "table" then __KS_GENV = g end
+  end
+end)
+pcall(function()
+  for k in pairs(__KS_GENV) do __KS_AVANT[k] = true end
+end)
+local __KS_SITE = ${JSON.stringify(site)}
+local __KS_ARRET = false
+local __KS_WAIT = (type(task) == "table" and type(task.wait) == "function") and task.wait or wait
+local __KS_SPAWN = (type(task) == "table" and type(task.spawn) == "function") and task.spawn or spawn
+
+local function __KS_CLE()
+  local cle = nil
+  pcall(function()
+    if type(getgenv) == "function" then
+      local g = getgenv()
+      if type(g) == "table" then
+        if type(g.Key) == "string" then cle = g.Key end
+        if type(cle) ~= "string" and type(g.keysystem_key) == "string" then cle = g.keysystem_key end
+      end
+    end
+    if type(cle) ~= "string" and type(_G.Key) == "string" then cle = _G.Key end
+  end)
+  if type(cle) == "string" then
+    local propre = cle:gsub("%s+", "")
+    if #propre >= 10 then return propre end
+  end
+  return nil
+end
+
+local function __KS_USERID()
+  local id = ""
+  pcall(function()
+    local joueurs = game:GetService("Players")
+    local moi = joueurs.LocalPlayer
+    if moi then id = tostring(moi.UserId) end
+  end)
+  return id
+end
+
+local function __KS_NEUTRALISER(motif)
+  if __KS_ARRET then return end
+  __KS_ARRET = true
+  pcall(function()
+    if type(getgenv) == "function" then
+      local g = getgenv()
+      if type(g) == "table" then
+        g.Key = nil
+        g.KeySystemSession = false
+      end
+    end
+    _G.Key = nil
+  end)
+  -- Neutralisation: les fonctions que ce preambule a ajoutees pour rendre le
+  -- script compatible refusent desormais de servir. La copie extraite cesse de
+  -- fonctionner sans que le script lui-meme ait ete modifie.
+  local n = 0
+  pcall(function()
+    for k in pairs(__KS_GENV) do
+      if not __KS_AVANT[k] then
+        __KS_GENV[k] = function() error("[KeySystem] session invalide (" .. tostring(motif) .. ")", 0) end
+        n = n + 1
+      end
+    end
+  end)
+  pcall(function()
+    warn("[KeySystem] session invalide (" .. tostring(motif) .. "): " .. tostring(n) .. " fonctions neutralisees.")
+  end)
+end
+
+if __KS_SITE ~= "" then
+  local __KS_POST = nil
+  pcall(function()
+    if type(request) == "function" then
+      __KS_POST = request
+    elseif type(http_request) == "function" then
+      __KS_POST = http_request
+    elseif type(syn) == "table" and type(syn.request) == "function" then
+      __KS_POST = syn.request
+    elseif type(http) == "table" and type(http.request) == "function" then
+      __KS_POST = http.request
+    end
+  end)
+  if type(__KS_POST) == "function" and __KS_SITE ~= "" then
+    local function __KS_APPEL(cle)
+      local corps = '{"key":"' .. cle .. '","userId":"' .. __KS_USERID() .. '"}'
+      local ok, rep = pcall(function()
+        return __KS_POST({
+          Url = __KS_SITE .. "/api/v1/token",
+          Method = "POST",
+          Headers = { ["Content-Type"] = "application/json" },
+          Body = corps,
+        })
+      end)
+      if not ok or type(rep) ~= "table" then return nil end
+      local texte = rep.Body or rep.body
+      if type(texte) ~= "string" then return nil end
+      local okd, donnees = pcall(function()
+        return game:GetService("HttpService"):JSONDecode(texte)
+      end)
+      if okd and type(donnees) == "table" then return donnees end
+      if texte:find('"ok":true', 1, true) then return { ok = true } end
+      return { ok = false, reason = "unreadable" }
+    end
+
+    -- 1) Porte d'entree: un refus explicite empeche le script de demarrer.
+    local __KS_CLE_INIT = __KS_CLE()
+    if __KS_CLE_INIT then
+      local premiere = __KS_APPEL(__KS_CLE_INIT)
+      if premiere and premiere.ok ~= true and premiere.reason then
+        error("[KeySystem] cle refusee par le serveur (" .. tostring(premiere.reason) .. "): lance le script depuis le loader.", 0)
+      end
+    end
+
+    -- 2) Surveillance continue.
+    __KS_SPAWN(function()
+      local echecs = 0
+      local intervalle = 540
+      local premiereBoucle = true
+      while not __KS_ARRET do
+        __KS_WAIT(premiereBoucle and 45 or intervalle)
+        premiereBoucle = false
+        local cle = __KS_CLE()
+        if not cle then
+          -- Aucune cle: c'est le cas d'une copie extraite et relancee seule.
+          -- Tolerance courte au demarrage, puis arret.
+          echecs = echecs + 1
+          intervalle = 45
+          if echecs >= 2 then
+            __KS_NEUTRALISER("aucune cle")
+            break
+          end
+        else
+          local rep = __KS_APPEL(cle)
+          if rep and rep.ok == true then
+            echecs = 0
+            local i = tonumber(rep.intervalSec)
+            intervalle = (i and i >= 30) and i or 540
+          elseif rep and rep.reason then
+            __KS_NEUTRALISER(tostring(rep.reason))
+            break
+          else
+            -- Pas de reponse du tout: reseau. On tolere.
+            echecs = echecs + 1
+            if echecs >= 3 then
+              __KS_NEUTRALISER("serveur injoignable")
+              break
+            end
+          end
+        end
+      end
+    end)
+  end
+end
+
+`;
   return `-- [compat prelude]
-local __EXEC_NAME = (identifyexecutor and identifyexecutor()) or "Unknown"
+${session}local __EXEC_NAME = (identifyexecutor and identifyexecutor()) or "Unknown"
 local __HAS = {}
 local function __detect(names)
   for _, n in ipairs(names) do

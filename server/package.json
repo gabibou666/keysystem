@@ -22,7 +22,7 @@
     "backup": "node scripts/backup-db.js",
     "restore": "node scripts/restore-db.js",
     "watchdog": "node scripts/watchdog.js",
-    "test": "node test-crypto-config.js && node test-healthz-cache.js && node test-alerts.js && node test-session-token.js",
+    "test": "node test-crypto-config.js && node test-healthz-cache.js && node test-alerts.js && node test-session-token.js && node test-prelude-session.js",
     "invite:ensure": "node scripts/ensure-discord-invite.js",
     "fonts": "python scripts/selfhost-fonts.py",
     "og": "python scripts/make-og-image.py",
@@ -35,5 +35,8 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.12.0"
+  },
+  "devDependencies": {
+    "luaparse": "^0.3.1"
   }
 }
