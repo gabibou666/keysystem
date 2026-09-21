@@ -189,6 +189,29 @@ non vides** (`--force` pour un écrasement délibéré), insère dans l'ordre **
 étrangères réelles**, et recalibre les séquences — sans quoi la première clé créée après restauration
 entrerait en conflit avec un id déjà utilisé.
 
+### Migrer vers un autre hébergeur de base
+
+Le mot de passe de la nouvelle base n'a pas à être montré à quiconque, et une erreur de cible est
+impossible à commettre en silence :
+
+1. créer la base chez le nouvel hébergeur, puis copier sa chaîne de connexion complète ;
+2. l'écrire dans `server/.env.migration` (ignoré par git) :
+   `DATABASE_URL=postgres://utilisateur:motdepasse@hote:port/base`
+3. **vérifier la cible avant toute écriture** : `npm run db:target` — affiche `hote:port/base`, jamais les
+   identifiants, et indique si `.env.migration` est pris en compte ;
+4. créer le schéma, puis réinjecter les données :
+   ```bash
+   npm run migrate                                              # schema.sql + db/migration-*.sql
+   npm run restore -- ../keysystem-backups/<horodatage> --write
+   ```
+5. remplacer `DATABASE_URL` dans Render par la même chaîne, puis redéployer ;
+6. vérifier : `/healthz` (`db:"up"`), `/api/stats/public` (compteurs identiques), et la délivrance d'une clé ;
+7. supprimer `server/.env.migration`, et garder l'ancienne base quelques jours — revenir en arrière se
+   limite à rechanger une variable.
+
+Garde-fous : la restauration **refuse d'écrire dans une base non vide** et **vérifie que la cible contient
+les 21 tables** attendues (sinon elle s'arrête en indiquant qu'il faut lancer `npm run migrate`).
+
 ⚠️ **`script_versions.original_enc` est chiffré (AES-256-GCM)** : les originaux de scripts ne sont
 lisibles qu'avec **la même `AES_KEY`** que celle qui les a chiffrés. Conservez donc, hors du dépôt
 (gestionnaire de mots de passe), `AES_KEY` **et** `HMAC_SECRET` — sans le second, toutes les clés déjà

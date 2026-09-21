@@ -23,6 +23,7 @@ const nodeCrypto = require('crypto');
 
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const { Client } = require('pg');
+const { resoudreUrl } = require('./lib-db-url');
 
 const args = process.argv.slice(2);
 const dossier = args.find((a) => !a.startsWith('--'));
@@ -38,8 +39,13 @@ if (!fs.existsSync(path.join(dossier, 'manifest.json'))) {
   console.error(`manifest.json introuvable dans ${dossier}`);
   process.exit(1);
 }
-if (!process.env.DATABASE_URL) {
-  console.error('DATABASE_URL absent.');
+// Cible: server/.env.migration si present (migration vers un autre hebergeur),
+// sinon DATABASE_URL de .env. Jamais affichee en clair.
+let cible;
+try {
+  cible = resoudreUrl({ cibleMigration: true });
+} catch (e) {
+  console.error(e.message);
   process.exit(1);
 }
 
@@ -123,9 +129,29 @@ const TYPES_SIMPLE = (v) => v === null || typeof v === 'number' || typeof v === 
     return;
   }
 
-  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  console.log(`[restore] cible: ${cible.cible} (source ${cible.source})`);
+  const client = new Client({
+    connectionString: cible.url,
+    ssl: cible.url.includes('localhost') ? false : { rejectUnauthorized: false },
+  });
   await client.connect();
   try {
+    // La cible doit contenir TOUTES les tables de la sauvegarde. Sinon la
+    // restauration echoue a mi-parcours — et un schema incomplet vient de
+    // db/*.sql, pas de la sauvegarde.
+    const { rows: tbl } = await client.query(
+      "SELECT tablename FROM pg_tables WHERE schemaname='public'"
+    );
+    const presentes = new Set(tbl.map((r) => r.tablename));
+    const manquantes = tables.filter((t) => !presentes.has(t));
+    if (manquantes.length) {
+      console.error(
+        `\n[restore] ARRET: ${manquantes.length} table(s) absente(s) de la cible: ${manquantes.join(', ')}` +
+          "\n          Lancer d'abord: npm run migrate  (applique schema.sql ET db/migration-*.sql)"
+      );
+      return;
+    }
+
     // Dependances declarees en base (et non devinees).
     const fk = await client.query(`
       SELECT tc.table_name AS enfant, ccu.table_name AS parent

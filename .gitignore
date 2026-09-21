@@ -1,5 +1,7 @@
 node_modules/
 .env
+# URL de la base de DESTINATION pendant une migration: contient un secret.
+.env.migration
 
 # Lockfile racine: la racine n'a aucune dependance (simple delegateur vers server/).
 # Le lockfile qui fait foi est server/package-lock.json (npm ci en CI et sur Render).
