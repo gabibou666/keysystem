@@ -14,6 +14,8 @@
     "check": "node scripts/check-assets.js && node scripts/check-design.js && node scripts/check-cost.js",
     "check:design": "node scripts/check-design.js",
     "check:cost": "node scripts/check-cost.js",
+    "backup": "node scripts/backup-db.js",
+    "restore": "node scripts/restore-db.js",
     "test": "node test-crypto-config.js && node test-healthz-cache.js && node test-alerts.js",
     "invite:ensure": "node scripts/ensure-discord-invite.js",
     "fonts": "python scripts/selfhost-fonts.py",

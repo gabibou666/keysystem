@@ -454,6 +454,18 @@ app.listen(PORT, () => {
   console.log(`[server] PUBLIC_URL = ${process.env.PUBLIC_URL || '(non defini)'}`);
   console.log(`[server] assets=${ASSET_VERSION} · trust proxy=${app.get('trust proxy')}`);
 
+  // Empreinte (jamais la valeur) de la cle qui chiffre les originaux: permet de
+  // verifier qu'une sauvegarde est dechiffrable avec la cle actuellement en
+  // service, sans jamais exposer ni la cle ni permettre de la retrouver.
+  if (process.env.AES_KEY) {
+    const empreinteAes = nodeCrypto
+      .createHash('sha256')
+      .update(`keysystem:aes:${process.env.AES_KEY}`)
+      .digest('hex')
+      .slice(0, 16);
+    console.log(`[config] AES_KEY empreinte ${empreinteAes} (a comparer avec manifest.json des sauvegardes)`);
+  }
+
   const { warnings } = checkConfig();
   if (warnings.length && process.env.NODE_ENV === 'production') {
     notifyDiscord({

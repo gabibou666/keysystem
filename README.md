@@ -157,6 +157,44 @@ CI GitHub Actions (`.github/workflows/ci.yml`) : lance `npm ci`, `npm run check`
 un audit des dépendances et un **smoke test** qui démarre réellement le serveur
 puis vérifie les pages, `robots.txt`, `sitemap.xml`, le CSS et `healthz`.
 
+## Sauvegarde et restauration de la base
+
+`pg_dump` n'est pas nécessaire — et ne serait pas suffisant : la base gratuite peut être **suspendue à
+tout moment** (quota de calcul épuisé) et, dans ce cas, plus aucune connexion n'est possible, donc plus
+aucune sauvegarde. Les deux scripts fournis n'utilisent que la dépendance `pg` déjà présente.
+
+```bash
+npm run backup                       # uniquement des SELECT : n'écrit rien en base
+npm run backup -- D:/mes-sauvegardes # dossier de sortie personnalisé
+```
+
+Ce que produit une sauvegarde — par défaut `<Documents>/keysystem-backups/<horodatage>/`, **hors du
+dépôt git**, car elle contient des données utilisateurs :
+
+- `data/<table>.json` : un fichier par table du schéma `public`. La liste des tables est **lue en
+  base**, jamais codée en dur : une table ajoutée plus tard est sauvegardée automatiquement ;
+- `manifest.json` : horodatage, compte de lignes et empreinte sha256 par fichier, empreintes des
+  fichiers de schéma du dépôt, taille de la base, et l'**empreinte de l'`AES_KEY`** utilisée.
+
+Restauration, sur une base neuve :
+
+```bash
+npm run migrate                                                   # recrée le schéma
+npm run restore -- ../keysystem-backups/2026-09-21T16-09          # simulation
+npm run restore -- ../keysystem-backups/2026-09-21T16-09 --write  # écrit réellement
+```
+
+Le script de restauration vérifie les empreintes avant toute écriture, **refuse d'écrire dans des tables
+non vides** (`--force` pour un écrasement délibéré), insère dans l'ordre **calculé depuis les clés
+étrangères réelles**, et recalibre les séquences — sans quoi la première clé créée après restauration
+entrerait en conflit avec un id déjà utilisé.
+
+⚠️ **`script_versions.original_enc` est chiffré (AES-256-GCM)** : les originaux de scripts ne sont
+lisibles qu'avec **la même `AES_KEY`** que celle qui les a chiffrés. Conservez donc, hors du dépôt
+(gestionnaire de mots de passe), `AES_KEY` **et** `HMAC_SECRET` — sans le second, toutes les clés déjà
+délivrées deviennent invalides. Le démarrage du serveur affiche l'empreinte de la clé en service : elle
+doit correspondre à celle du `manifest.json` de la sauvegarde.
+
 ## Consommation de la base (plan gratuit Neon)
 
 Le plan gratuit Neon accorde **100 CU-hours par mois et par projet** et **met le calcul en veille

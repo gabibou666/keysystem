@@ -6,6 +6,8 @@
   "scripts": {
     "check": "npm --prefix server run check",
     "test": "npm --prefix server test",
+    "backup": "npm --prefix server run backup",
+    "restore": "npm --prefix server run restore",
     "start": "npm --prefix server start",
     "migrate": "npm --prefix server run migrate"
   }
