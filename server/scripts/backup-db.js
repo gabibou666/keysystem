@@ -115,6 +115,29 @@ function empreinte(txt) {
 
     console.log(`[backup] ${total} lignes sauvegardees · base ${taille} · manifest.json ecrit`);
     console.log(`[backup] dossier: ${dossier}`);
+
+    // ---------- Retention: garder les N sauvegardes les plus recentes ----------
+    const argKeep = (process.argv.find((a) => a.startsWith('--keep=')) || '').split('=')[1];
+    const garder = Math.max(1, Number(argKeep) || 14);
+    const dossiers = fs
+      .readdirSync(racine, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && /^\d{4}-\d{2}-\d{2}T/.test(e.name))
+      .map((e) => e.name)
+      .sort();
+    const aSupprimer = dossiers.slice(0, Math.max(0, dossiers.length - garder));
+    for (const nom of aSupprimer) {
+      fs.rmSync(path.join(racine, nom), { recursive: true, force: true });
+      console.log(`[backup] ancienne sauvegarde supprimee: ${nom}`);
+    }
+
+    // ---------- Journal ----------
+    // Une ligne par execution. Une automatisation qui echoue en silence ne sert a
+    // rien: ce fichier permet de verifier d'un coup d'oeil qu'elle a bien tourne.
+    fs.appendFileSync(
+      path.join(racine, 'backup.log'),
+      `${new Date().toISOString()} · ${total} lignes · base ${taille} · ${path.basename(dossier)}\n`
+    );
+    console.log(`[backup] ${dossiers.length - aSupprimer.length}/${garder} sauvegardes conservees (journal: backup.log)`);
     await client.end();
   } catch (e) {
     console.error('[backup] ECHEC:', e.message);

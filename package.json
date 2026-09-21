@@ -8,6 +8,7 @@
     "test": "npm --prefix server test",
     "backup": "npm --prefix server run backup",
     "restore": "npm --prefix server run restore",
+    "watchdog": "npm --prefix server run watchdog",
     "start": "npm --prefix server start",
     "migrate": "npm --prefix server run migrate"
   }

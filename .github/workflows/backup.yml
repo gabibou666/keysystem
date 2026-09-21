@@ -1,0 +1,62 @@
+name: Sauvegarde quotidienne de la base
+
+# ROLE: sauvegarder la base sans dependre du PC de l'utilisateur.
+# Le meme script sert en local (tache planifiee Windows) et ici.
+#
+# SECRETS A AJOUTER (Settings -> Secrets and variables -> Actions):
+#   DATABASE_URL          obligatoire
+#   AES_KEY               recommande (empreinte de la cle dans le manifest:
+#                         permet de verifier qu'une sauvegarde reste lisible)
+#   DISCORD_WEBHOOK_URL   optionnel (alerte si la sauvegarde echoue)
+#
+# L'artefact produit n'est telechargeable que par les personnes authentifiees
+# sur le depot: une sauvegarde contient des donnees utilisateurs.
+
+on:
+  schedule:
+    - cron: '17 3 * * *' # tous les jours a 03:17 UTC
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verification du secret requis
+        run: |
+          if [ -z "${{ secrets.DATABASE_URL }}" ]; then
+            echo "::error::Secret DATABASE_URL absent. Ajoute-le dans Settings -> Secrets and variables -> Actions -> New repository secret."
+            exit 1
+          fi
+
+      - name: Installation
+        working-directory: server
+        run: npm ci
+
+      - name: Sauvegarde
+        working-directory: server
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AES_KEY: ${{ secrets.AES_KEY }}
+        run: node scripts/backup-db.js ./sauvegardes --keep=7
+
+      - name: Publication de la sauvegarde
+        uses: actions/upload-artifact@v4
+        with:
+          name: sauvegarde-${{ github.run_number }}
+          path: server/sauvegardes/
+          retention-days: 30
+
+      - name: Alerte Discord en cas d'echec
+        if: failure()
+        run: |
+          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+            curl -s -H "Content-Type: application/json" \
+              -d '{"content":"🔴 Sauvegarde quotidienne de la base EN ECHEC — voir GitHub Actions (onglet Actions)."}' \
+              "${{ secrets.DISCORD_WEBHOOK_URL }}" >/dev/null || true
+          fi

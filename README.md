@@ -157,6 +157,39 @@ CI GitHub Actions (`.github/workflows/ci.yml`) : lance `npm ci`, `npm run check`
 un audit des dépendances et un **smoke test** qui démarre réellement le serveur
 puis vérifie les pages, `robots.txt`, `sitemap.xml`, le CSS et `healthz`.
 
+## Automatisation (sauvegarde et surveillance)
+
+| Tâche | Mécanisme | Cadence | Trace |
+|---|---|---|---|
+| Sauvegarde de la base | tâche planifiée Windows « KeySystem - sauvegarde base » | quotidienne à 20:00 | `…/keysystem-backups/backup.log` |
+| Sauvegarde de la base | `.github/workflows/backup.yml` | quotidienne 03:17 UTC | artefact GitHub (30 j) |
+| Surveillance du site | tâche planifiée « KeySystem - surveillance site » | toutes les 15 min | `…/keysystem-backups/watchdog.log` |
+| Surveillance du site | `.github/workflows/watchdog.yml` | toutes les 15 min | onglet Actions + Discord |
+
+Les deux tâches locales **fonctionnent sans compte ni secret** (elles lisent `.env`) : la sauvegarde
+s'exécute même si personne n'est devant l'écran, et la surveillance sonde `/ping` (aucune requête SQL)
+puis `/healthz`. Les workflows GitHub prennent le relais quand le PC est éteint ; ils demandent des
+secrets de dépôt (Settings → Secrets and variables → Actions) :
+
+- `DATABASE_URL` — **obligatoire** pour la sauvegarde hors PC ;
+- `AES_KEY` — recommandé : enregistre l'empreinte de la clé dans le manifest, ce qui permet de vérifier
+  plus tard qu'une sauvegarde reste déchiffrable ;
+- `DISCORD_WEBHOOK_URL` — optionnel : alerte en cas d'échec ou de site injoignable.
+
+**Vérifier que l'automatisation tourne vraiment** (une automatisation silencieuse ne sert à rien) :
+
+```bash
+tail -2 ../keysystem-backups/backup.log     # une ligne par sauvegarde
+tail -2 ../keysystem-backups/watchdog.log   # une ligne par sonde, avec les temps de réponse
+```
+
+À la main : `npm run backup`, `npm run watchdog -- --deep`. Rétention : `npm run backup -- --keep=14`
+(14 sauvegardes conservées par défaut, les plus anciennes sont supprimées).
+
+⚠️ Une sauvegarde contient des données utilisateurs (identifiants Discord, clés) : elle vit **hors du
+dépôt git**, et les artefacts GitHub ne sont téléchargeables que par les personnes authentifiées sur le
+dépôt.
+
 ## Sauvegarde et restauration de la base
 
 `pg_dump` n'est pas nécessaire — et ne serait pas suffisant : la base gratuite peut être **suspendue à

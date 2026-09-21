@@ -21,6 +21,7 @@
     "db:capture-ca": "node scripts/capture-ca.js",
     "backup": "node scripts/backup-db.js",
     "restore": "node scripts/restore-db.js",
+    "watchdog": "node scripts/watchdog.js",
     "test": "node test-crypto-config.js && node test-healthz-cache.js && node test-alerts.js",
     "invite:ensure": "node scripts/ensure-discord-invite.js",
     "fonts": "python scripts/selfhost-fonts.py",

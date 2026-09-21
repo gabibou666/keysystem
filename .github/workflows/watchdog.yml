@@ -1,0 +1,33 @@
+name: Surveillance du site
+
+# ROLE: verifier le site DEPUIS L'EXTERIEUR. Le site s'alerte deja sur ses
+# propres erreurs (services/alerts.js), mais il ne peut pas signaler qu'il est
+# INJOIGNABLE: quand le processus est mort, personne n'appelle Discord.
+#
+# SECRET OPTIONNEL: DISCORD_WEBHOOK_URL (pour recevoir l'alerte). Sans lui, le
+# job echoue quand meme visiblement dans l'onglet Actions.
+#
+# /ping ne fait AUCUNE requete SQL (voir README: quota Neon). /healthz verifie
+# aussi la base, avec son resultat mis en cache 6 h.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *' # toutes les 15 minutes
+  workflow_dispatch:
+
+jobs:
+  sondes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Sondes du site
+        working-directory: server
+        env:
+          PUBLIC_URL: https://keysystem-vv8b.onrender.com
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: node scripts/watchdog.js --deep

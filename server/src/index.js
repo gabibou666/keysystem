@@ -82,8 +82,12 @@ function computeAssetVersion() {
   const hash = nodeCrypto.createHash('sha1');
   try {
     for (const file of listStaticFiles(webDir).sort()) {
-      const st = fs.statSync(file);
-      hash.update(`${path.relative(webDir, file)}:${st.size}:${Math.floor(st.mtimeMs)}`);
+      // Empreinte du CONTENU, et non de la date de modification. Un deploiement
+      // reecrit les fichiers avec une nouvelle date: avec l'ancienne version, la
+      // version des assets changeait a chaque deploiement et forcait tous les
+      // visiteurs a retelecharger CSS, polices et JS sans qu'un octet ait bouge.
+      hash.update(`${path.relative(webDir, file)}:`);
+      hash.update(fs.readFileSync(file));
     }
   } catch (e) {
     console.warn('[assets] version partielle:', e.message);
