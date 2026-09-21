@@ -19,6 +19,17 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
+// Charge .env exactement comme le fait le serveur (index.js): sans cela, un test
+// lance depuis le depot ne verrait pas la base configuree pour le developpement,
+// et le scenario "base reelle" serait saute a tort. dotenv n'ecrase jamais une
+// variable deja presente dans l'environnement: passer DATABASE_URL='' permet
+// donc de simuler la CI (pas de base) sur un poste qui en a une.
+try {
+  require('dotenv').config({ path: path.join(__dirname, '.env') });
+} catch {
+  /* dotenv absent: on se fie a l'environnement */
+}
+
 const FAKE_DB = 'postgresql://user:pass@127.0.0.1:5432/absente';
 const results = [];
 function check(label, cond, detail) {
@@ -84,25 +95,35 @@ const get = async (port, route) => {
   }
 
   // ---------- Scenario 2: base reelle ----------
-  console.log('\n[2] Base reelle — la sonde profonde est mise en cache (quota gratuit)');
-  child = await boot({}, 3142);
-  try {
-    const h1 = await get(3142, '/healthz');
-    check('sonde profonde OK (db up)', h1.status === 200 && h1.body.db === 'up' && h1.body.cached === false, JSON.stringify(h1.body));
-    check('latence mesuree', typeof h1.body.latencyMs === 'number');
+  // Reserve a un environnement qui a VRAIMENT une base (poste de dev, prod).
+  // La CI n'en a pas: exiger une base ici faisait echouer la CI pour une raison
+  // qui n'a rien a voir avec le code teste. Le comportement de quota reste
+  // couvert sans base par le scenario [1] (2e appel servi depuis le cache).
+  const dbConfiguree = Boolean((process.env.DATABASE_URL || '').trim());
+  if (!dbConfiguree) {
+    console.log('\n[2] Base reelle — IGNORE (aucune base configuree dans cet environnement)');
+    console.log('    Le scenario [1] couvre l\'invariant de quota: /ping sans requete SQL et sonde servie depuis le cache.');
+  } else {
+    console.log('\n[2] Base reelle — la sonde profonde est mise en cache (quota gratuit)');
+    child = await boot({}, 3142);
+    try {
+      const h1 = await get(3142, '/healthz');
+      check('sonde profonde OK (db up)', h1.status === 200 && h1.body.db === 'up' && h1.body.cached === false, JSON.stringify(h1.body));
+      check('latence mesuree', typeof h1.body.latencyMs === 'number');
 
-    const h2 = await get(3142, '/healthz');
-    check('2e appel NE touche PAS la base (cached:true)', h2.body.cached === true, JSON.stringify(h2.body));
-    check('prochaine sonde dans ~6 h (delai par defaut, quota gratuit)', h2.body.nextDeepCheckInSec > 3500, `nextDeepCheckInSec=${h2.body.nextDeepCheckInSec}`);
+      const h2 = await get(3142, '/healthz');
+      check('2e appel NE touche PAS la base (cached:true)', h2.body.cached === true, JSON.stringify(h2.body));
+      check('prochaine sonde dans ~6 h (delai par defaut, quota gratuit)', h2.body.nextDeepCheckInSec > 3500, `nextDeepCheckInSec=${h2.body.nextDeepCheckInSec}`);
 
-    let cachedCount = 0;
-    for (let i = 0; i < 20; i++) {
-      const r = await get(3142, '/healthz');
-      if (r.body.cached) cachedCount++;
+      let cachedCount = 0;
+      for (let i = 0; i < 20; i++) {
+        const r = await get(3142, '/healthz');
+        if (r.body.cached) cachedCount++;
+      }
+      check('20 appels consecutifs = 0 requete SQL supplementaire', cachedCount === 20, `${cachedCount}/20 servis par le cache`);
+    } finally {
+      child.kill();
     }
-    check('20 appels consecutifs = 0 requete SQL supplementaire', cachedCount === 20, `${cachedCount}/20 servis par le cache`);
-  } finally {
-    child.kill();
   }
 
   const failed = results.filter((r) => !r.cond);
