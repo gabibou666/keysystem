@@ -183,7 +183,19 @@ app.use(antiDdosMiddleware);
 
 // Origines supplementaires pour connect-src, sans modification de code:
 //   CSP_EXTRA_CONNECT_SRC=https://a.com,https://b.com
+//   CSP_EXTRA_SCRIPT_SRC=https://a.com,'unsafe-eval'
 // Utile quand un regisseur publicitaire change de domaine de telemetrie.
+// Meme principe que ci-dessus pour la directive script-src: une variable
+// d environnement suffit, sans redeployer de code. Accepte une origine
+// (exemple https://exemple.com) ou un mot-cle CSP (exemple 'unsafe-eval').
+function valeursSupplementairesScript() {
+  return String(process.env.CSP_EXTRA_SCRIPT_SRC || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .map((v) => (v.charCodeAt(0) === 39 || v.startsWith('http') ? v : 'https://' + v));
+}
+
 function originesSupplementaires() {
   return String(process.env.CSP_EXTRA_CONNECT_SRC || '')
     .split(',')
@@ -206,7 +218,7 @@ app.use(
         // autorises via script-src-attr (tolerance temporaire, documentee:
         // toute injection HTML est bloquee par l'echappement strict cote front).
         scriptSrc: ALLOW_INLINE_SCRIPTS
-          ? ["'self'", "'unsafe-inline'", 'https://www.highrevenueformat.com']
+          ? ["'self'", "'unsafe-inline'", 'https://www.highrevenueformat.com', 'unsafe-eval', ...valeursSupplementairesScript()]
           : ["'self'", 'https://www.highrevenueformat.com'],
         scriptSrcAttr: ["'unsafe-inline'"],
         // Violations remontees sur /api/csp-report (log + alerte Discord):
@@ -237,6 +249,7 @@ app.use(
           // CSP_EXTRA_CONNECT_SRC (voir README).
           'https://protrafficinspector.com',
           'https://kettledroopingcontinuation.com',
+          'https://spendsdetachment.com',
           ...originesSupplementaires(),
         ],
         objectSrc: ["'none'"],
@@ -305,13 +318,13 @@ app.post('/api/csp-report', (req, res) => {
       let conseil;
       if (estScript && ALLOW_INLINE_SCRIPTS) {
         conseil =
-          "La valve est DEJA active sur ce serveur (script-src contient 'unsafe-inline'): cette violation vient donc d'autre chose. Une variable Render ne reglera pas ce cas — autoriser le domaine bloque ci-dessus dans la directive concernee (src/index.js).";
+          "Le script publicitaire a besoin de 'unsafe-eval' (deja autorise) ou d'une origine: variable Render CSP_EXTRA_SCRIPT_SRC pour l'ajouter, sinon src/index.js.";
       } else if (estScript) {
         conseil =
           'Script publicitaire ? definir CSP_ALLOW_INLINE_SCRIPTS=1 dans Render (valve de secours prevue pour ce cas). Apres enregistrement, Render redeploie: cette alerte doit disparaitre au demarrage suivant.';
       } else if (/connect-src/i.test(directive)) {
         conseil =
-          "Ajouter l'origine bloquee a connectSrc dans src/index.js (avec les autres domaines publicitaires). Aucune variable Render ne modifie la CSP: elle est construite dans le code.";
+          "Ajouter l'origine bloquee a connectSrc: variable Render CSP_EXTRA_CONNECT_SRC=https://le.domaine (sans redeployer de code) ou src/index.js.";
       } else if (dejaPermissif) {
         conseil =
           'Cette directive est deja permissive (*): la ressource vient probablement d\'une page hors du site (iframe d\'annonceur) — verifier l\'URL bloquee ci-dessus avant de modifier quoi que ce soit.';
