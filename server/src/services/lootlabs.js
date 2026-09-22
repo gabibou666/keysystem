@@ -6,6 +6,20 @@ const DURATIONS = {
   24: { tasks: 2, label: '24 hours' },
 };
 
+// Duree par defaut de la cle delivree apres UNE annonce LootLabs.
+// Surchargeable par LOOTLABS_DURATION_HOURS (ex: 12).
+const DEFAULT_DURATION_HOURS = 12;
+
+function durationHours() {
+  const value = parseInt(process.env.LOOTLABS_DURATION_HOURS || '', 10);
+  return Number.isFinite(value) && value > 0 && value <= 24 * 30 ? value : DEFAULT_DURATION_HOURS;
+}
+
+// Une annonce = 1 checkpoint; deux annonces (ou une duree >= 24 h) = 2 checkpoints.
+function tasksForDuration(hours) {
+  return hours >= 24 ? 2 : 1;
+}
+
 function httpPostJson(url, body, headers = {}) {
   return fetch(url, {
     method: 'POST',
@@ -19,9 +33,9 @@ function httpPostJson(url, body, headers = {}) {
 }
 
 // Cree un lien LootLabs vers le callback avec le puid attache
-async function createMonetizedLink({ durationHours, puid }) {
-  const config = DURATIONS[durationHours];
-  if (!config) throw new Error('Invalid duration');
+async function createMonetizedLink({ durationHours: hours, puid }) {
+  const wanted = hours || durationHours();
+  const config = DURATIONS[wanted] || { tasks: tasksForDuration(wanted) };
 
   const callbackUrl = `${process.env.PUBLIC_URL}/getkey/callback`;
 
@@ -58,4 +72,4 @@ async function createMonetizedLink({ durationHours, puid }) {
   return { lootUrl, tasksRequired: config.tasks };
 }
 
-module.exports = { createMonetizedLink, DURATIONS };
+module.exports = { createMonetizedLink, DURATIONS, durationHours, tasksForDuration, DEFAULT_DURATION_HOURS };

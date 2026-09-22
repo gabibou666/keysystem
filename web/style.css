@@ -2334,3 +2334,67 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @supports (padding: max(0px)) {
   .ks-cookie-banner { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
 }
+
+/* ============================================================
+   CHOIX DE LA REGIE PUBLICITAIRE (Step 2 de /getkey)
+   Deux cartes: nom de la regie, duree de la cle, icone SVG (stroke=currentColor).
+   La carte Work.ink reste masquee tant que /api/config/public ne l'annonce pas
+   disponible (.hidden = display:none !important): aucune carte morte affichee.
+   Jetons existants uniquement, aucune animation ajoutee.
+   ============================================================ */
+.provider-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.provider-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  position: relative;
+  font: inherit;
+  color: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+.provider-card:disabled { cursor: default; opacity: 0.55; }
+.provider-card .provider-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.22), rgba(139, 92, 246, 0.08));
+  border: 1px solid var(--color-border-violet);
+  color: var(--color-glow);
+}
+.provider-card .provider-name { font-size: 17px; font-weight: 700; color: var(--color-text); }
+.provider-card .provider-duration {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--color-glow);
+}
+.provider-card .provider-note { font-size: 13px; line-height: 1.5; color: var(--color-muted); }
+.provider-card .badge-pill { position: absolute; top: 12px; right: 12px; }
+.provider-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+  font-size: 14px;
+  color: var(--color-muted);
+}
+.provider-loading .ks-spinner {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  border-width: 2px;
+}
+@media (max-width: 560px) {
+  .provider-grid { grid-template-columns: 1fr; }
+}

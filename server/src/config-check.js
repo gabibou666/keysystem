@@ -76,6 +76,15 @@ function secret(name) {
   return ephemeral.get(name);
 }
 
+// Secret FACULTATIF (fournisseur/regie optionnelle): contrairement a secret(),
+// l'absence n'empeche JAMAIS le demarrage et ne produit aucun avertissement —
+// une regie non configuree doit seulement etre annoncee indisponible.
+// Retourne null quand la variable est absente ou vide.
+function optionalSecret(name) {
+  const value = process.env[name];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
 // Cle AES-256 (32 octets) pour les originaux chiffres.
 // Si AES_KEY n'est pas 64 caracteres hex, on en derive une cle DETERMINISTE
 // (sha256): une valeur inattendue ne doit ni casser la lecture des originaux,
@@ -150,4 +159,4 @@ function assertProdConfig() {
   return { critical, warnings };
 }
 
-module.exports = { IS_PROD, CRITICAL, IMPORTANT, secret, aesKey, isHex64, checkConfig, assertProdConfig };
+module.exports = { IS_PROD, CRITICAL, IMPORTANT, secret, optionalSecret, aesKey, isHex64, checkConfig, assertProdConfig };

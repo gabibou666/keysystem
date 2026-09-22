@@ -1,7 +1,8 @@
 // ===== Parametres =====
-// d=12/24 (duree) + k=1 (renouvellement, cle existante) — transmis par getkey.html
+// p=lootlabs|workink (regie choisie sur getkey.html) + k=1 (renouvellement, cle
+// existante). C'est le SERVEUR qui decide la duree de la cle d'apres la regie.
 const q = new URLSearchParams(location.search);
-const duration = parseInt(q.get('d'), 10) || 12;
+const provider = (q.get('p') || '').toLowerCase() === 'workink' ? 'workink' : 'lootlabs';
 const renewing = q.get('k') === '1';
 
 const KEY_STORAGE = 'keysystem_key';
@@ -85,9 +86,9 @@ async function runCheck() {
 let loopTimer = setInterval(runCheck, 5000);
 function stopLoop() { if (loopTimer) { clearInterval(loopTimer); loopTimer = null; } }
 
-// ===== Demarrage de la session LootLabs (meme logique que getkey.html) =====
+// ===== Demarrage de la session publicitaire (meme logique que getkey.html) =====
 async function startKeySession() {
-  let body = { duration };
+  let body = { provider };
   const existing = localStorage.getItem(KEY_STORAGE);
   if (renewing && existing) body.key = existing;
   const ref = localStorage.getItem('keysystem_ref');
@@ -101,13 +102,14 @@ async function startKeySession() {
     });
     const d = await r.json();
     if (!d.success) {
-      // Erreur metier (ad_limit, discord_required...): panneau d'erreur VISIBLE
+      // Erreur metier (ad_limit, discord_required, provider_unavailable...):
+      // panneau d'erreur VISIBLE avec le message du serveur.
       showError(d.error || 'Session could not start.', d.inviteUrl);
       return;
     }
     localStorage.setItem(PUID_STORAGE, d.puid);
     localStorage.setItem(PUID_STORAGE + '_time', Date.now().toString());
-    // Redirection DIRECTE (meme onglet) vers LootLabs:
+    // Redirection DIRECTE (meme onglet) vers l'annonce de la regie choisie.
     location.href = d.lootUrl;
   } catch (e) {
     showError('Network error — check your connection and retry.');

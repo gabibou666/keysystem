@@ -4,6 +4,76 @@ let pollTimer = null;
 let discordOk = false;
 let currentStep = 1;
 
+// ===== Regies publicitaires =====
+// La liste, les durees et la disponibilite viennent du serveur
+// (/api/config/public): une regie non configuree (Work.ink sans compte) est
+// annoncee available:false, sa carte reste masquee et son clic est sans effet
+// — jamais de bouton mort.
+const PROVIDER_BLOCKS = {
+  lootlabs: { card: 'providerLootlabs', hours: 'providerLootlabsHours', name: 'LootLabs' },
+  workink: { card: 'providerWorkink', hours: 'providerWorkinkHours', name: 'Work.ink' },
+};
+const providerState = {
+  lootlabs: { available: true, durationHours: 12 },
+  workink: { available: false, durationHours: 24 },
+};
+
+function renderProviders(list) {
+  if (!Array.isArray(list)) return;
+  for (const info of list) {
+    const block = PROVIDER_BLOCKS[info.id];
+    if (!block) continue;
+    providerState[info.id] = {
+      available: info.available === true,
+      durationHours: parseInt(info.durationHours, 10) || providerState[info.id].durationHours,
+    };
+    const card = document.getElementById(block.card);
+    const hours = document.getElementById(block.hours);
+    if (hours) hours.textContent = providerState[info.id].durationHours + '-hour key';
+    if (!card) continue;
+    if (providerState[info.id].available) {
+      card.classList.remove('hidden');
+      card.disabled = false;
+    } else {
+      // Indisponible: la carte disparait (aucun bouton mort, aucun 500 attendu).
+      card.classList.add('hidden');
+      card.disabled = true;
+    }
+  }
+}
+
+async function loadProviders() {
+  try {
+    const r = await fetch('/api/config/public');
+    const d = await r.json();
+    renderProviders(d.providers);
+  } catch {
+    // Serveur injoignable: LootLabs reste le choix par defaut affiche.
+  }
+}
+
+// Etat de chargement pendant la redirection vers la regie (l'utilisateur voit
+// que son clic a ete pris en compte, et ne peut pas cliquer deux fois).
+function setProviderLoading(on, provider) {
+  const grid = document.getElementById('providerGrid');
+  const wrap = document.getElementById('providerLoading');
+  const text = document.getElementById('providerLoadingText');
+  if (grid) grid.classList.toggle('hidden', !!on);
+  if (wrap) wrap.classList.toggle('hidden', !on);
+  for (const id of Object.keys(PROVIDER_BLOCKS)) {
+    const card = document.getElementById(PROVIDER_BLOCKS[id].card);
+    if (card && providerState[id].available) card.disabled = !!on;
+  }
+  if (on && text) {
+    text.textContent = 'Opening the ' + ((PROVIDER_BLOCKS[provider] || {}).name || 'ad') + ' ad page…';
+  }
+}
+
+for (const id of Object.keys(PROVIDER_BLOCKS)) {
+  const card = document.getElementById(PROVIDER_BLOCKS[id].card);
+  if (card) card.addEventListener('click', () => startSession(id));
+}
+
 // ===== Mobile nav =====
 function toggleNav() {
   const links = document.getElementById('navLinks');
@@ -293,26 +363,31 @@ document.getElementById('keyModal').addEventListener('click', (e) => {
 });
 
 // ===== Getkey flow =====
-async function start(duration) {
+// La regie choisie part vers /verify (verification anti-adblock), qui demarre la
+// session via POST /api/key/start { provider }.
+function startSession(provider) {
+  const status = document.getElementById('startStatus');
+  if (!PROVIDER_BLOCKS[provider]) return;
+  // Regie annoncee indisponible par le serveur: aucune action (pas de bouton mort).
+  if (providerState[provider].available !== true) return;
   if (!discordOk) {
-    const status = document.getElementById('startStatus');
-    status.textContent = '🔒 Sign in with Discord first (Step 1 above).';
+    status.textContent = 'Sign in with Discord first (Step 1 above).';
     status.className = 'status err';
     return;
   }
   if (window.discordInServer === false) {
-    const status = document.getElementById('startStatus');
-    status.innerHTML = '⚠️ You must join our Discord server to get a key!' + (window.discordInviteUrl ? ' <a href="' + window.discordInviteUrl + '" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;font-weight:bold;">Join Discord Server</a>' : window.ksInviteLink('Join Discord Server'));
+    status.innerHTML = 'You must join our Discord server to get a key.' + (window.discordInviteUrl ? ' <a href="' + window.discordInviteUrl + '" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;font-weight:bold;">Join Discord Server</a>' : window.ksInviteLink('Join Discord Server'));
     status.className = 'status err';
     return;
   }
-  // ANTI-ADBLOCK: passe par la page de verification.
-  // Elle detecte l'adblock (message blocant) et sinon demarre la session
-  // LootLabs instantanement, puis ramene l'utilisateur ici pour le resultat.
-  if (duration !== 12 && duration !== 24) return; // anti-URL forgee
+  // Etat de chargement pendant la redirection: le clic est pris en compte tout
+  // de suite et un second clic est impossible.
+  status.textContent = '';
+  status.className = 'status';
+  setProviderLoading(true, provider);
   const existing = localStorage.getItem(KEY_STORAGE);
   const renewing = existing ? '1' : '0';
-  location.href = '/verify?d=' + duration + '&k=' + renewing;
+  location.href = '/verify?p=' + encodeURIComponent(provider) + '&k=' + renewing;
 }
 
 function cancelPendingSession() {
@@ -412,8 +487,8 @@ async function poll(puid) {
     if (d.status === 'pending' && typeof d.tasksDone === 'number' && typeof d.tasksRequired === 'number' && d.tasksRequired > 1) {
       const remaining = d.tasksRequired - d.tasksDone;
       if (d.tasksDone > 0) {
-        document.getElementById('resultTitle').textContent = `⏳ Checkpoint ${d.tasksDone}/${d.tasksRequired} complete!`;
-        document.getElementById('resultSub').textContent = `Complete the next checkpoint (${remaining} remaining) on LootLabs to obtain your key.`;
+        document.getElementById('resultTitle').textContent = `Checkpoint ${d.tasksDone}/${d.tasksRequired} complete`;
+        document.getElementById('resultSub').textContent = `Complete the next checkpoint (${remaining} remaining) on the ad page to obtain your key.`;
       }
     }
 
@@ -494,3 +569,4 @@ loadCurrentKey();
 loadDiscordStatus();
 loadHwidStatus();
 loadReferralStats();
+loadProviders();
