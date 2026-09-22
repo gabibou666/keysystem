@@ -54,7 +54,7 @@ function durationHours() {
 }
 
 function linkEndpoint() {
-  return (process.env.WORKINK_LINK_ENDPOINT || '').trim();
+  return (process.env.WORKINK_LINK_URL || process.env.WORKINK_LINK_ENDPOINT || '').trim();
 }
 
 function verifyUrl() {
@@ -69,8 +69,10 @@ function postbackSecret() {
 // Raison EXACTE pour laquelle Work.ink n'est pas proposable (null = disponible).
 // Le front s'en sert pour masquer la carte; l'API la renvoie telle quelle.
 function unavailableReason() {
-  if (!optionalSecret('WORKINK_API_KEY')) return 'missing_api_key';
-  if (!linkEndpoint()) return 'missing_link_endpoint';
+  const endpoint = linkEndpoint();
+  const isDirectWorkinkLink = /^https?:\/\/(?:[a-z0-9-]+\.)?work\.ink\//i.test(endpoint);
+  if (!isDirectWorkinkLink && !optionalSecret('WORKINK_API_KEY')) return 'missing_api_key';
+  if (!endpoint) return 'missing_link_endpoint';
   return null;
 }
 
@@ -89,12 +91,18 @@ function providerError(message, reason) {
 function httpPostJson(url, body, headers = {}) {
   return fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers: {
+      'User-Agent': 'KeySystem/1.0 (Windows NT 10.0; Win64; x64)',
+      'Content-Type': 'application/json',
+      ...headers,
+    },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(15000),
   }).then(async (res) => {
-    const data = await res.json().catch(() => ({}));
-    return { status: res.status, data };
+    const text = await res.text().catch(() => '');
+    let data = {};
+    try { data = JSON.parse(text); } catch {}
+    return { status: res.status, data, text };
   });
 }
 
@@ -116,14 +124,19 @@ function extractLinkUrl(data) {
 
 // Cree un lien d'annonce Work.ink qui ramene l'utilisateur sur NOTRE postback
 // (puid = session, hash = token fourni par Work.ink apres la pub).
+// Supporte:
+// 1. Lien Work.ink direct (WORKINK_LINK_URL ou WORKINK_LINK_ENDPOINT = https://work.ink/...)
+//    -> Utilise l'API officielle Work.ink Override (GET https://work.ink/_api/v2/override?destination=...)
+// 2. Point d'entree Link API personnalise
+//    -> POST vers l'endpoint avec headers et API key
 async function createMonetizedLink({ durationHours: hours, puid }) {
-  const apiKey = optionalSecret('WORKINK_API_KEY');
-  if (!apiKey) throw providerError('API key missing (add WORKINK_API_KEY in Render).', 'missing_api_key');
-  const endpoint = linkEndpoint();
-  if (!endpoint) {
+  const reason = unavailableReason();
+  if (reason) {
     throw providerError(
-      'link API endpoint missing (copy it from the Work.ink dashboard into WORKINK_LINK_ENDPOINT).',
-      'missing_link_endpoint'
+      reason === 'missing_link_endpoint'
+        ? 'Work.ink link or API endpoint missing (set WORKINK_LINK_URL or WORKINK_LINK_ENDPOINT in Render).'
+        : 'Work.ink API key missing (set WORKINK_API_KEY in Render).',
+      reason
     );
   }
   if (typeof puid !== 'string' || !puid) throw providerError('missing session id', 'bad_request');
@@ -131,20 +144,60 @@ async function createMonetizedLink({ durationHours: hours, puid }) {
   const base = (process.env.PUBLIC_URL || '').replace(/\/$/, '');
   const destination = `${base}/api/workink/postback?puid=${encodeURIComponent(puid)}&hash={TOKEN}`;
 
-  const { status, data } = await httpPostJson(
-    endpoint,
-    // Corps minimal: notre destination contient deja tout ce dont la session a
-    // besoin (puid + token). A ajuster si le dashboard documente d'autres champs.
-    { destination },
-    { Authorization: `Bearer ${apiKey}` }
-  );
+  const endpoint = linkEndpoint();
+  const isDirectWorkinkLink = /^https?:\/\/(?:[a-z0-9-]+\.)?work\.ink\//i.test(endpoint);
+
+  // Cas 1: Lien direct Work.ink (ou dashboard) -> API officielle Override de Work.ink
+  if (isDirectWorkinkLink) {
+    try {
+      const overrideUrl = `https://work.ink/_api/v2/override?destination=${encodeURIComponent(destination)}`;
+      const res = await fetch(overrideUrl, {
+        headers: { 'User-Agent': 'KeySystem/1.0 (Windows NT 10.0; Win64; x64)' },
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data && data.sr) {
+        const sep = endpoint.includes('?') ? '&' : '?';
+        const finalUrl = `${endpoint}${sep}sr=${encodeURIComponent(data.sr)}`;
+        return {
+          lootUrl: finalUrl,
+          tasksRequired: ADS_PER_KEY,
+          ads: ADS_PER_KEY,
+          durationHours: hours || durationHours(),
+        };
+      }
+    } catch (e) {
+      console.warn('[workink] override API error, falling back to endpoint call:', e.message);
+    }
+  }
+
+  // Cas 2: Endpoint personnalise
+  const apiKey = optionalSecret('WORKINK_API_KEY');
+  const headers = {};
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+    headers['X-Api-Key'] = apiKey;
+  }
+
+  const { status, data, text } = await httpPostJson(endpoint, { destination }, headers);
 
   const url = extractLinkUrl(data);
   if (!url) {
+    // Si c'etait un lien direct work.ink dont l'override a failli, on attache le puid en fallback
+    if (isDirectWorkinkLink) {
+      const sep = endpoint.includes('?') ? '&' : '?';
+      return {
+        lootUrl: `${endpoint}${sep}puid=${encodeURIComponent(puid)}`,
+        tasksRequired: ADS_PER_KEY,
+        ads: ADS_PER_KEY,
+        durationHours: hours || durationHours(),
+      };
+    }
     const realError =
       (typeof data === 'string' && data) ||
       (data && typeof data.message === 'string' && data.message) ||
       (data && typeof data.error === 'string' && data.error) ||
+      (text && text.slice(0, 100)) ||
       `unexpected response (HTTP ${status})`;
     throw providerError(realError, 'bad_response');
   }

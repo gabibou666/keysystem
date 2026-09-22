@@ -265,6 +265,7 @@ const appelTier2Off = faireAppel(BASE_TIER2_OFF);
     // Regie Work.ink NON configuree (etat reel de l'utilisateur: pas de compte).
     WORKINK_API_KEY: '',
     WORKINK_LINK_ENDPOINT: '',
+    WORKINK_LINK_URL: '',
     // Verifications locales uniquement: le stub remplace l'API Work.ink.
     WORKINK_VERIFY_URL: `http://127.0.0.1:${STUB_PORT}/token/isValid`,
     // Signature du postback LootLabs: valeur de test, jamais affichee.
@@ -280,6 +281,7 @@ const appelTier2Off = faireAppel(BASE_TIER2_OFF);
   demarrerServeur(PORT_TIER2_OFF, {
     WORKINK_API_KEY: '',
     WORKINK_LINK_ENDPOINT: '',
+    WORKINK_LINK_URL: '',
     WORKINK_VERIFY_URL: `http://127.0.0.1:${STUB_PORT}/token/isValid`,
     LOOTLABS_POSTBACK_SECRET: LOOTLABS_SECRET_TEST,
     LOOTLABS_DURATION_HOURS: '12',
@@ -685,6 +687,7 @@ const appelTier2Off = faireAppel(BASE_TIER2_OFF);
     // pour ce test, quel que soit le contenu du .env local).
     delete process.env.WORKINK_API_KEY;
     delete process.env.WORKINK_LINK_ENDPOINT;
+    delete process.env.WORKINK_LINK_URL;
     delete process.env.LOOTLABS_DURATION_HOURS;
     delete process.env.LOOTLABS_DURATION_HOURS_2;
     delete process.env.WORKINK_DURATION_HOURS;

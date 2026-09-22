@@ -14,6 +14,8 @@ const wmService = require('../services/watermark');
 const { notifyDiscord } = require('../services/notify');
 const { getGameInfo, getUsersInfo } = require('../services/roblox');
 
+const ADMIN_DISCORD_IDS = new Set((process.env.ADMIN_DISCORD_IDS || '').split(',').map((x) => x.trim()).filter(Boolean));
+
 const router = express.Router();
 
 const startLimiter = rateLimit({
@@ -166,27 +168,31 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
     }
 
     // Ad limit: max 2 cles obtenues par IP par 12h (ne bloque PAS sur les sessions inachevées/abandonnées)
+    // Les administrateurs (ADMIN_DISCORD_IDS) sont exemptés pour pouvoir tester le système sans blocage.
     const ip = clientIp(req);
-    const [recent, byOwner] = await Promise.all([
-      pool.query(
-        `SELECT COUNT(*)::int AS c FROM ll_sessions
-         WHERE ip = $1 AND status IN ('completed', 'claimed') AND ad_limit_reset = false AND created_at > now() - interval '12 hours'`,
-        [ip]
-      ),
-      // ANTI-PROXY: limite aussi par COMPTE DISCORD — les proxies changent l'IP,
-      // pas le compte. 4 sessions complétées / 12h max par proprietaire Discord.
-      pool.query(
-        `SELECT COUNT(*)::int AS c FROM ll_sessions
-         WHERE owner_discord_id = $1 AND status IN ('completed', 'claimed') AND ad_limit_reset = false AND created_at > now() - interval '12 hours'`,
-        [req.discordId]
-      ),
-    ]);
-    if (recent.rows[0].c >= 2 || byOwner.rows[0].c >= 4) {
-      return res.status(429).json({
-        success: false,
-        reason: 'ad_limit',
-        error: 'Ad limit reached (2 keys max every 12 hours). Come back later.',
-      });
+    const isOwnerAdmin = ADMIN_DISCORD_IDS.has(String(req.discordId));
+    if (!isOwnerAdmin) {
+      const [recent, byOwner] = await Promise.all([
+        pool.query(
+          `SELECT COUNT(*)::int AS c FROM ll_sessions
+           WHERE ip = $1 AND status IN ('completed', 'claimed') AND ad_limit_reset = false AND created_at > now() - interval '12 hours'`,
+          [ip]
+        ),
+        // ANTI-PROXY: limite aussi par COMPTE DISCORD — les proxies changent l'IP,
+        // pas le compte. 4 sessions complétées / 12h max par proprietaire Discord.
+        pool.query(
+          `SELECT COUNT(*)::int AS c FROM ll_sessions
+           WHERE owner_discord_id = $1 AND status IN ('completed', 'claimed') AND ad_limit_reset = false AND created_at > now() - interval '12 hours'`,
+          [req.discordId]
+        ),
+      ]);
+      if (recent.rows[0].c >= 2 || byOwner.rows[0].c >= 4) {
+        return res.status(429).json({
+          success: false,
+          reason: 'ad_limit',
+          error: 'Ad limit reached (2 keys max every 12 hours). Come back later.',
+        });
+      }
     }
 
     // Invalide les anciennes sessions inachevées de cet utilisateur pour éviter tout conflit
@@ -404,11 +410,14 @@ router.get('/lootlabs/postback', async (req, res) => {
 
     // --- Delai anti-bot: un bypass automatique/script valide en < 2-3 secondes.
     // Un humain sur mobile ou PC met au minimum 12 à 15 secondes par tache.
-    // Le palier "2 pubs" demande forcement plus de temps qu'une seule pub.
-    const MIN_SECONDS = Math.max(12, requiredAds * 10);
+    // Pour un palier multi-pubs (ex: 2 pubs), le temps minimum requis est evalue
+    // d'apres la tache en cours de validation (tasks_done + 1), et non d'apres
+    // le total du palier des le premier postback.
+    const currentTask = (Number(session.tasks_done) || 0) + 1;
+    const MIN_SECONDS = Math.max(12, currentTask * 10);
     const elapsedSec = (Date.now() - new Date(session.started_at).getTime()) / 1000;
     if (elapsedSec < MIN_SECONDS) {
-      console.warn(`[postback] REJET robot instantané: ${elapsedSec.toFixed(1)}s < ${MIN_SECONDS}s requis (puid=${click_id.slice(0, 8)}...)`);
+      console.warn(`[postback] REJET robot instantané: ${elapsedSec.toFixed(1)}s < ${MIN_SECONDS}s requis (tâche ${currentTask}/${requiredAds}, puid=${click_id.slice(0, 8)}...)`);
       await pool.query(
         `UPDATE ll_sessions SET status = 'rejected_too_fast' WHERE id = $1 AND status = 'pending'`,
         [session.id]
@@ -498,11 +507,13 @@ router.get('/workink/postback', async (req, res) => {
     }
 
     const sourceIp = clientIp(req);
+    const isBrowserNav = typeof req.headers.accept === 'string' && req.headers.accept.includes('text/html');
 
     // Blacklist connue des serveurs de bots / bypass (meme liste que LootLabs)
     const BLOCKED_POSTBACK_IPS = new Set(['37.27.162.36']);
     if (BLOCKED_POSTBACK_IPS.has(sourceIp)) {
       console.warn(`[postback:workink] REJET IP blacklistee (src=${sourceIp}, puid=${puid.slice(0, 8)}...)`);
+      if (isBrowserNav) return res.redirect('/getkey?err=' + encodeURIComponent('Access denied (blacklisted IP).'));
       return res.status(403).send('rejected: blacklisted ip');
     }
 
@@ -510,6 +521,7 @@ router.get('/workink/postback', async (req, res) => {
     const secret = workink.verifyPostbackSecret(req.query.secret || req.headers['x-postback-secret']);
     if (!secret.ok) {
       console.warn(`[postback:workink] REJET secret invalide/absent (puid=${puid.slice(0, 8)}..., src=${sourceIp})`);
+      if (isBrowserNav) return res.redirect('/getkey?err=' + encodeURIComponent('Invalid postback signature.'));
       return res.status(403).send('rejected: invalid postback secret');
     }
     if (!secret.configured && process.env.NODE_ENV === 'production') {
@@ -518,19 +530,27 @@ router.get('/workink/postback', async (req, res) => {
 
     const sess = await pool.query('SELECT * FROM ll_sessions WHERE puid = $1 FOR UPDATE', [puid]);
     const session = sess.rows[0];
-    if (!session) return res.status(404).send('session not found');
+    if (!session) {
+      if (isBrowserNav) return res.redirect('/getkey?err=' + encodeURIComponent('Session not found.'));
+      return res.status(404).send('session not found');
+    }
 
     if (session.provider !== 'workink') {
       console.warn(`[postback:workink] REJET regie incompatible (provider=${session.provider}, puid=${puid.slice(0, 8)}...)`);
+      if (isBrowserNav) return res.redirect('/getkey?err=' + encodeURIComponent('Session belongs to another ad network.'));
       return res.status(403).send('rejected: session belongs to another ad network');
     }
 
     // Cle DEJA delivree: un rejeu du meme token ne doit jamais rouvrir la session.
     if (session.status === 'claimed') {
       console.warn(`[postback:workink] REJET cle deja delivree (puid=${puid.slice(0, 8)}...)`);
+      if (isBrowserNav) return res.redirect('/getkey/callback');
       return res.status(409).send('rejected: key already delivered');
     }
-    if (session.status === 'completed') return res.send('already ok');
+    if (session.status === 'completed') {
+      if (isBrowserNav) return res.redirect('/getkey/callback');
+      return res.send('already ok');
+    }
 
     // Palier de la session: Work.ink ne delivre qu'UNE annonce par cle. Une
     // session qui attendrait davantage de publicites (palier 2 pubs par
@@ -541,6 +561,7 @@ router.get('/workink/postback', async (req, res) => {
       console.warn(
         `[postback:workink] REJET palier incompatible (ad_count=${requiredAds}, attendu ${workink.ADS_PER_KEY}, puid=${puid.slice(0, 8)}...)`
       );
+      if (isBrowserNav) return res.redirect('/getkey?err=' + encodeURIComponent('Ad tier mismatch.'));
       return res.status(403).send('rejected: session ad tier mismatch');
     }
 
@@ -556,6 +577,7 @@ router.get('/workink/postback', async (req, res) => {
         `UPDATE ll_sessions SET status = 'rejected_too_fast' WHERE id = $1 AND status = 'pending'`,
         [session.id]
       );
+      if (isBrowserNav) return res.redirect('/getkey?err=' + encodeURIComponent('Verification completed too fast. Please take your time on the ad page.'));
       return res.status(429).send('rejected: completed too fast');
     }
 
@@ -563,7 +585,10 @@ router.get('/workink/postback', async (req, res) => {
     // verification en usage unique).
     const uniqueId = 'wi-' + token;
     const dup = await pool.query('SELECT id FROM postbacks WHERE unique_id = $1', [uniqueId]);
-    if (dup.rows[0]) return res.send('duplicate ok');
+    if (dup.rows[0]) {
+      if (isBrowserNav) return res.redirect('/getkey/callback');
+      return res.send('duplicate ok');
+    }
 
     // Verification officielle: sans ce verdict, AUCUNE cle n'est delivree.
     const check = await workink.verifyKeyToken(token);
@@ -571,6 +596,7 @@ router.get('/workink/postback', async (req, res) => {
       console.warn(
         `[postback:workink] REJET token invalide (puid=${puid.slice(0, 8)}..., motif=${check.reason || 'not_valid'})`
       );
+      if (isBrowserNav) return res.redirect('/getkey?err=' + encodeURIComponent('Invalid or expired Work.ink key token. Please restart verification.'));
       return res.status(403).send('rejected: invalid workink token');
     }
 
@@ -598,6 +624,9 @@ router.get('/workink/postback', async (req, res) => {
       );
     } else {
       await pool.query('UPDATE ll_sessions SET tasks_done = $1 WHERE id = $2', [done, session.id]);
+    }
+    if (isBrowserNav) {
+      return res.redirect('/getkey/callback');
     }
     res.send('ok');
   } catch (e) {
@@ -737,7 +766,7 @@ router.get('/key/status', statusLimiter, async (req, res) => {
       // Grave aussi le owner Discord de la session sur la clÃ© (le renouveleur
       // devient propriÃ©taire visible â€” anti-usurpation: seul le owner du cookie peut etre ici).
       const upd = await pool.query(
-        `UPDATE keys SET expires_at = now() + make_interval(hours => $1), duration_hours = $1,
+        `UPDATE keys SET expires_at = GREATEST(expires_at, now()) + make_interval(hours => $1), duration_hours = $1,
                 renewed_count = renewed_count + 1, owner_discord_id = $3
          WHERE id = $2 AND revoked = false RETURNING kid, signature, expires_at`,
         [duration, session.key_id, session.owner_discord_id]

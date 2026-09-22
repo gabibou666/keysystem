@@ -19,7 +19,7 @@ const OFFER_BLOCKS = {
 // masque tant que /api/config/public ne l'annonce pas disponible.
 const offerState = {
   lootlabs: { available: true, adCount: 1, durationHours: 12 },
-  lootlabs_2ads: { available: false, adCount: 2, durationHours: 24 },
+  lootlabs_2ads: { available: true, adCount: 2, durationHours: 24 },
   workink: { available: false, adCount: 1, durationHours: 24 },
 };
 
