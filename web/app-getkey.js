@@ -49,6 +49,28 @@ function renderOffers(list) {
       card.disabled = true;
     }
   }
+
+  // Bouton principal LootLabs (ouvre le choix du nombre de pubs)
+  const lootlabsAvailable = (offerState.lootlabs && offerState.lootlabs.available) || (offerState.lootlabs_2ads && offerState.lootlabs_2ads.available);
+  const mainLootlabs = document.getElementById('offerLootlabsMain');
+  if (mainLootlabs) {
+    if (lootlabsAvailable) {
+      mainLootlabs.classList.remove('hidden');
+      mainLootlabs.disabled = false;
+    } else {
+      mainLootlabs.classList.add('hidden');
+      mainLootlabs.disabled = true;
+    }
+  }
+
+  const mainDuration = document.getElementById('offerLootlabsMainDuration');
+  if (mainDuration) {
+    const d1 = (offerState.lootlabs && offerState.lootlabs.available) ? (offerState.lootlabs.durationHours + 'h') : null;
+    const d2 = (offerState.lootlabs_2ads && offerState.lootlabs_2ads.available) ? (offerState.lootlabs_2ads.durationHours + 'h') : null;
+    if (d1 && d2) mainDuration.textContent = d1 + ' · ' + d2;
+    else if (d1) mainDuration.textContent = d1;
+    else if (d2) mainDuration.textContent = d2;
+  }
 }
 
 async function loadOffers() {
@@ -60,6 +82,45 @@ async function loadOffers() {
     // Serveur injoignable: LootLabs 1 pub reste le choix par defaut affiche.
   }
 }
+
+// Modal de selection du nombre de pubs LootLabs
+function openLootlabsModal() {
+  const status = document.getElementById('startStatus');
+  if (!discordOk) {
+    if (status) {
+      status.textContent = 'Sign in with Discord first (Step 1 above).';
+      status.className = 'status err';
+    }
+    return;
+  }
+  if (window.discordInServer === false) {
+    if (status) {
+      status.innerHTML = 'You must join our Discord server to get a key.' + (window.discordInviteUrl ? ' <a href="' + window.discordInviteUrl + '" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;font-weight:bold;">Join Discord Server</a>' : window.ksInviteLink('Join Discord Server'));
+      status.className = 'status err';
+    }
+    return;
+  }
+  // Si un seul des deux paliers est active, on lance directement sans modal
+  const t1 = offerState.lootlabs && offerState.lootlabs.available;
+  const t2 = offerState.lootlabs_2ads && offerState.lootlabs_2ads.available;
+  if (t1 && !t2) {
+    startSession('lootlabs');
+    return;
+  }
+  if (t2 && !t1) {
+    startSession('lootlabs_2ads');
+    return;
+  }
+  const modal = document.getElementById('lootlabsModal');
+  if (modal) modal.classList.add('open');
+}
+
+function closeLootlabsModal() {
+  const modal = document.getElementById('lootlabsModal');
+  if (modal) modal.classList.remove('open');
+}
+window.openLootlabsModal = openLootlabsModal;
+window.closeLootlabsModal = closeLootlabsModal;
 
 // Etat de chargement pendant la redirection vers la regie (l'utilisateur voit
 // que son clic a ete pris en compte, et ne peut pas cliquer deux fois).
@@ -73,6 +134,8 @@ function setOfferLoading(on, offer) {
     const card = document.getElementById(OFFER_BLOCKS[id].card);
     if (card && offerState[id].available) card.disabled = !!on;
   }
+  const mainLootlabs = document.getElementById('offerLootlabsMain');
+  if (mainLootlabs) mainLootlabs.disabled = !!on;
   if (on && text) {
     const bloc = OFFER_BLOCKS[offer] || {};
     const etat = offerState[offer] || {};
@@ -83,7 +146,24 @@ function setOfferLoading(on, offer) {
 
 for (const id of Object.keys(OFFER_BLOCKS)) {
   const card = document.getElementById(OFFER_BLOCKS[id].card);
-  if (card) card.addEventListener('click', () => startSession(id));
+  if (card) {
+    card.addEventListener('click', () => {
+      closeLootlabsModal();
+      startSession(id);
+    });
+  }
+}
+
+const mainLootlabsCard = document.getElementById('offerLootlabsMain');
+if (mainLootlabsCard) {
+  mainLootlabsCard.addEventListener('click', openLootlabsModal);
+}
+
+const lootlabsModalOverlay = document.getElementById('lootlabsModal');
+if (lootlabsModalOverlay) {
+  lootlabsModalOverlay.addEventListener('click', (e) => {
+    if (e.target.id === 'lootlabsModal') closeLootlabsModal();
+  });
 }
 
 // ===== Mobile nav =====
@@ -408,6 +488,7 @@ function cancelPendingSession() {
     clearInterval(pollTimer);
     pollTimer = null;
   }
+  closeLootlabsModal();
   localStorage.removeItem(PUID_STORAGE);
   localStorage.removeItem(PUID_STORAGE + '_time');
   document.getElementById('result').classList.add('hidden');

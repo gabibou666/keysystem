@@ -132,24 +132,15 @@
     <h2>Step 2 · Choose your offer</h2>
     <p class="sub">Same key system, different number of ads: pick the key duration you want.</p>
     <div class="provider-grid" id="providerGrid">
-      <button type="button" class="card provider-card" id="offerLootlabs1" data-offer="lootlabs">
+      <button type="button" class="card provider-card" id="offerLootlabsMain">
+        <span class="badge-pill" style="position:absolute; top:12px; right:12px; background:rgba(139,92,246,0.18); color:#c084fc; border:1px solid rgba(139,92,246,0.35);">1 or 2 ads</span>
         <span class="provider-icon" aria-hidden="true">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"></rect><path d="M8 20.5h8"></path><path d="M12 17v3.5"></path><path d="m10.5 8 3.5 2.5-3.5 2.5z"></path></svg>
         </span>
         <span class="provider-name">LootLabs</span>
-        <span class="provider-ads" id="offerLootlabs1Ads">1 ad</span>
-        <span class="provider-duration" id="offerLootlabs1Hours">12-hour key</span>
-        <span class="provider-note">Shortest wait</span>
-      </button>
-      <button type="button" class="card provider-card" id="offerLootlabs2" data-offer="lootlabs_2ads">
-        <span class="badge-pill badge-popular" id="offerLootlabs2Badge">Best value</span>
-        <span class="provider-icon" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="7.5" rx="2"></rect><rect x="3" y="13.5" width="18" height="7.5" rx="2"></rect><path d="M8 6.75h6"></path><path d="M8 17.25h6"></path></svg>
-        </span>
-        <span class="provider-name">LootLabs</span>
-        <span class="provider-ads" id="offerLootlabs2Ads">2 ads</span>
-        <span class="provider-duration" id="offerLootlabs2Hours">24-hour key</span>
-        <span class="provider-note">Full day of access</span>
+        <span class="provider-ads">Choose ads</span>
+        <span class="provider-duration" id="offerLootlabsMainDuration">12h · 24h</span>
+        <span class="provider-note">Click to select number of ads</span>
       </button>
       <button type="button" class="card provider-card hidden" id="offerWorkink" data-offer="workink">
         <span class="provider-icon" aria-hidden="true">
@@ -247,6 +238,40 @@
     </div>
   </section>
 </main>
+
+<!-- LootLabs Ad Count Selection Modal -->
+<div class="modal-overlay" id="lootlabsModal" role="dialog" aria-modal="true" aria-labelledby="lootlabsModalTitle">
+  <div class="modal neon-frame" style="width: min(520px, calc(100vw - 32px));">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="provider-icon" style="width:36px; height:36px; border-radius:10px; display:inline-grid; place-items:center; background:rgba(139,92,246,0.18); border:1px solid var(--color-border-violet); color:var(--color-glow);" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"></rect><path d="M8 20.5h8"></path><path d="M12 17v3.5"></path><path d="m10.5 8 3.5 2.5-3.5 2.5z"></path></svg>
+        </span>
+        <h2 id="lootlabsModalTitle" style="font-size:18px; margin:0; text-align:left;">LootLabs · Choose ads count</h2>
+      </div>
+      <button type="button" class="btn small secondary" onclick="closeLootlabsModal()" aria-label="Close" style="padding:4px 10px; font-size:14px;">✕</button>
+    </div>
+    <p class="modal-sub" style="text-align:left; margin-bottom:16px;">
+      Select how many ads you want to complete to get your key:
+    </p>
+    <div class="provider-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px;">
+      <button type="button" class="card provider-card" id="offerLootlabs1" data-offer="lootlabs" style="padding:20px 14px;">
+        <span class="provider-ads" id="offerLootlabs1Ads">1 ad</span>
+        <span class="provider-duration" id="offerLootlabs1Hours">12-hour key</span>
+        <span class="provider-note">Shortest wait · 1 fast ad</span>
+      </button>
+      <button type="button" class="card provider-card" id="offerLootlabs2" data-offer="lootlabs_2ads" style="padding:20px 14px;">
+        <span class="badge-pill badge-popular" id="offerLootlabs2Badge">Best value</span>
+        <span class="provider-ads" id="offerLootlabs2Ads">2 ads</span>
+        <span class="provider-duration" id="offerLootlabs2Hours">24-hour key</span>
+        <span class="provider-note">Full day · 2 ads</span>
+      </button>
+    </div>
+    <div style="margin-top:16px; text-align:center;">
+      <button type="button" class="btn small secondary" onclick="closeLootlabsModal()" style="font-size:12.5px;">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <!-- Key modal -->
 <div class="modal-overlay" id="keyModal">
