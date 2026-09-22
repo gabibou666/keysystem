@@ -39,6 +39,11 @@ const { optionalSecret } = require('../config-check');
 // Duree de la cle delivree apres une annonce Work.ink (surchargeable).
 const DEFAULT_DURATION_HOURS = 24;
 
+// Work.ink ne propose QU'UN palier: 1 annonce = 1 cle. La valeur est gravee
+// dans la session (ad_count) et le postback exige exactement ce nombre
+// d'annonces terminees (voir routes/api.js).
+const ADS_PER_KEY = 1;
+
 // Point de verification des tokens (surchargeable: tests locaux sans reseau,
 // ou changement d'URL cote Work.ink).
 const DEFAULT_VERIFY_URL = 'https://work.ink/_api/v2/token/isValid';
@@ -144,7 +149,7 @@ async function createMonetizedLink({ durationHours: hours, puid }) {
     throw providerError(realError, 'bad_response');
   }
 
-  return { lootUrl: url, tasksRequired: 1, durationHours: hours || durationHours() };
+  return { lootUrl: url, tasksRequired: ADS_PER_KEY, ads: ADS_PER_KEY, durationHours: hours || durationHours() };
 }
 
 // Verifie un token de completion aupres de l'API officielle Work.ink.
@@ -187,5 +192,6 @@ module.exports = {
   unavailableReason,
   linkEndpoint,
   verifyUrl,
+  ADS_PER_KEY,
   DEFAULT_DURATION_HOURS,
 };

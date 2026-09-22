@@ -2337,14 +2337,23 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 
 /* ============================================================
    CHOIX DE LA REGIE PUBLICITAIRE (Step 2 de /getkey)
-   Deux cartes: nom de la regie, duree de la cle, icone SVG (stroke=currentColor).
-   La carte Work.ink reste masquee tant que /api/config/public ne l'annonce pas
+   Trois paliers: nom de la regie, nombre de publicites, duree de la cle, icone
+   SVG (stroke=currentColor). La grille est adaptative (auto-fit): deux ou trois
+   cartes visibles se placent sur une ligne, une carte seule prend la largeur.
+   Une carte non disponible (Work.ink sans compte, palier LootLabs "2 pubs"
+   desactive) reste masquee tant que /api/config/public ne l'annonce pas
    disponible (.hidden = display:none !important): aucune carte morte affichee.
    Jetons existants uniquement, aucune animation ajoutee.
    ============================================================ */
 .provider-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* Trois paliers possibles (LootLabs 1 pub, LootLabs 2 pubs, Work.ink):
+     auto-fit + minmax place les cartes sur une ligne des que la largeur le
+     permet, puis passe a deux colonnes puis une seule sans jamais laisser une
+     carte orpheline ni une troisieme carte ecrasee. Une carte masquee (.hidden
+     = display:none) ne compte pas comme piste: la grille se resserre seule
+     (deux cartes visibles -> deux colonnes, une seule -> pleine largeur). */
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 14px;
 }
 .provider-card {
@@ -2372,6 +2381,19 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   color: var(--color-glow);
 }
 .provider-card .provider-name { font-size: 17px; font-weight: 700; color: var(--color-text); }
+/* Nombre de publicites du palier (1 ad / 2 ads): pastille discrete, jetons
+   existants -- c'est l'information qui justifie la duree affichee en dessous. */
+.provider-card .provider-ads {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-violet);
+  background: rgba(139, 92, 246, 0.08);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-muted);
+}
 .provider-card .provider-duration {
   font-size: 26px;
   font-weight: 800;

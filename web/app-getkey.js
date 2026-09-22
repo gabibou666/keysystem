@@ -4,34 +4,43 @@ let pollTimer = null;
 let discordOk = false;
 let currentStep = 1;
 
-// ===== Regies publicitaires =====
-// La liste, les durees et la disponibilite viennent du serveur
-// (/api/config/public): une regie non configuree (Work.ink sans compte) est
-// annoncee available:false, sa carte reste masquee et son clic est sans effet
-// — jamais de bouton mort.
-const PROVIDER_BLOCKS = {
-  lootlabs: { card: 'providerLootlabs', hours: 'providerLootlabsHours', name: 'LootLabs' },
-  workink: { card: 'providerWorkink', hours: 'providerWorkinkHours', name: 'Work.ink' },
+// ===== Paliers publicitaires (offres) =====
+// La liste, le nombre de publicites, les durees et la disponibilite viennent du
+// serveur (/api/config/public): un palier non disponible (Work.ink sans compte,
+// ou LootLabs "2 pubs" desactive) est annonce available:false, sa carte reste
+// masquee et son clic est sans effet — jamais de bouton mort.
+// Trois offres: LootLabs 1 pub (12 h), LootLabs 2 pubs (24 h), Work.ink 1 pub (24 h).
+const OFFER_BLOCKS = {
+  lootlabs: { card: 'offerLootlabs1', ads: 'offerLootlabs1Ads', hours: 'offerLootlabs1Hours', name: 'LootLabs' },
+  lootlabs_2ads: { card: 'offerLootlabs2', ads: 'offerLootlabs2Ads', hours: 'offerLootlabs2Hours', name: 'LootLabs' },
+  workink: { card: 'offerWorkink', ads: 'offerWorkinkAds', hours: 'offerWorkinkHours', name: 'Work.ink' },
 };
-const providerState = {
-  lootlabs: { available: true, durationHours: 12 },
-  workink: { available: false, durationHours: 24 },
+// Etat par defaut (avant reponse du serveur): LootLabs 1 pub visible, le reste
+// masque tant que /api/config/public ne l'annonce pas disponible.
+const offerState = {
+  lootlabs: { available: true, adCount: 1, durationHours: 12 },
+  lootlabs_2ads: { available: false, adCount: 2, durationHours: 24 },
+  workink: { available: false, adCount: 1, durationHours: 24 },
 };
 
-function renderProviders(list) {
+function renderOffers(list) {
   if (!Array.isArray(list)) return;
   for (const info of list) {
-    const block = PROVIDER_BLOCKS[info.id];
+    const block = OFFER_BLOCKS[info.id];
     if (!block) continue;
-    providerState[info.id] = {
-      available: info.available === true,
-      durationHours: parseInt(info.durationHours, 10) || providerState[info.id].durationHours,
-    };
+    const etat = offerState[info.id];
+    etat.available = info.available === true;
+    etat.adCount = parseInt(info.adCount, 10) || etat.adCount;
+    etat.durationHours = parseInt(info.durationHours, 10) || etat.durationHours;
+    const adsEl = document.getElementById(block.ads);
+    const hoursEl = document.getElementById(block.hours);
+    // Nombre de publicites et duree affiches = ceux annonces par le serveur
+    // (aucune duree ni aucun palier code en dur dans la page).
+    if (adsEl) adsEl.textContent = etat.adCount === 1 ? '1 ad' : etat.adCount + ' ads';
+    if (hoursEl) hoursEl.textContent = etat.durationHours + '-hour key';
     const card = document.getElementById(block.card);
-    const hours = document.getElementById(block.hours);
-    if (hours) hours.textContent = providerState[info.id].durationHours + '-hour key';
     if (!card) continue;
-    if (providerState[info.id].available) {
+    if (etat.available) {
       card.classList.remove('hidden');
       card.disabled = false;
     } else {
@@ -42,35 +51,38 @@ function renderProviders(list) {
   }
 }
 
-async function loadProviders() {
+async function loadOffers() {
   try {
     const r = await fetch('/api/config/public');
     const d = await r.json();
-    renderProviders(d.providers);
+    renderOffers(d.providers);
   } catch {
-    // Serveur injoignable: LootLabs reste le choix par defaut affiche.
+    // Serveur injoignable: LootLabs 1 pub reste le choix par defaut affiche.
   }
 }
 
 // Etat de chargement pendant la redirection vers la regie (l'utilisateur voit
 // que son clic a ete pris en compte, et ne peut pas cliquer deux fois).
-function setProviderLoading(on, provider) {
+function setOfferLoading(on, offer) {
   const grid = document.getElementById('providerGrid');
   const wrap = document.getElementById('providerLoading');
   const text = document.getElementById('providerLoadingText');
   if (grid) grid.classList.toggle('hidden', !!on);
   if (wrap) wrap.classList.toggle('hidden', !on);
-  for (const id of Object.keys(PROVIDER_BLOCKS)) {
-    const card = document.getElementById(PROVIDER_BLOCKS[id].card);
-    if (card && providerState[id].available) card.disabled = !!on;
+  for (const id of Object.keys(OFFER_BLOCKS)) {
+    const card = document.getElementById(OFFER_BLOCKS[id].card);
+    if (card && offerState[id].available) card.disabled = !!on;
   }
   if (on && text) {
-    text.textContent = 'Opening the ' + ((PROVIDER_BLOCKS[provider] || {}).name || 'ad') + ' ad page…';
+    const bloc = OFFER_BLOCKS[offer] || {};
+    const etat = offerState[offer] || {};
+    const ads = etat.adCount === 1 ? '1 ad' : etat.adCount + ' ads';
+    text.textContent = 'Opening the ' + (bloc.name || 'ad') + ' page (' + ads + ')…';
   }
 }
 
-for (const id of Object.keys(PROVIDER_BLOCKS)) {
-  const card = document.getElementById(PROVIDER_BLOCKS[id].card);
+for (const id of Object.keys(OFFER_BLOCKS)) {
+  const card = document.getElementById(OFFER_BLOCKS[id].card);
   if (card) card.addEventListener('click', () => startSession(id));
 }
 
@@ -363,13 +375,14 @@ document.getElementById('keyModal').addEventListener('click', (e) => {
 });
 
 // ===== Getkey flow =====
-// La regie choisie part vers /verify (verification anti-adblock), qui demarre la
-// session via POST /api/key/start { provider }.
-function startSession(provider) {
+// Le palier choisi part vers /verify (verification anti-adblock), qui demarre la
+// session via POST /api/key/start { offer }. Le serveur decide le nombre de
+// publicites et la duree: la page ne les transmet jamais.
+function startSession(offer) {
   const status = document.getElementById('startStatus');
-  if (!PROVIDER_BLOCKS[provider]) return;
-  // Regie annoncee indisponible par le serveur: aucune action (pas de bouton mort).
-  if (providerState[provider].available !== true) return;
+  if (!OFFER_BLOCKS[offer]) return;
+  // Palier annonce indisponible par le serveur: aucune action (pas de bouton mort).
+  if (offerState[offer].available !== true) return;
   if (!discordOk) {
     status.textContent = 'Sign in with Discord first (Step 1 above).';
     status.className = 'status err';
@@ -384,10 +397,10 @@ function startSession(provider) {
   // de suite et un second clic est impossible.
   status.textContent = '';
   status.className = 'status';
-  setProviderLoading(true, provider);
+  setOfferLoading(true, offer);
   const existing = localStorage.getItem(KEY_STORAGE);
   const renewing = existing ? '1' : '0';
-  location.href = '/verify?p=' + encodeURIComponent(provider) + '&k=' + renewing;
+  location.href = '/verify?p=' + encodeURIComponent(offer) + '&k=' + renewing;
 }
 
 function cancelPendingSession() {
@@ -487,8 +500,8 @@ async function poll(puid) {
     if (d.status === 'pending' && typeof d.tasksDone === 'number' && typeof d.tasksRequired === 'number' && d.tasksRequired > 1) {
       const remaining = d.tasksRequired - d.tasksDone;
       if (d.tasksDone > 0) {
-        document.getElementById('resultTitle').textContent = `Checkpoint ${d.tasksDone}/${d.tasksRequired} complete`;
-        document.getElementById('resultSub').textContent = `Complete the next checkpoint (${remaining} remaining) on the ad page to obtain your key.`;
+        document.getElementById('resultTitle').textContent = `Ad ${d.tasksDone} of ${d.tasksRequired} watched`;
+        document.getElementById('resultSub').textContent = `Watch the next ad (${remaining} remaining) on the ad page to unlock your key.`;
       }
     }
 
@@ -569,4 +582,4 @@ loadCurrentKey();
 loadDiscordStatus();
 loadHwidStatus();
 loadReferralStats();
-loadProviders();
+loadOffers();
