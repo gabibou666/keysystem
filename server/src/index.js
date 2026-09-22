@@ -218,7 +218,7 @@ app.use(
         // autorises via script-src-attr (tolerance temporaire, documentee:
         // toute injection HTML est bloquee par l'echappement strict cote front).
         scriptSrc: ALLOW_INLINE_SCRIPTS
-          ? ["'self'", "'unsafe-inline'", 'https://www.highrevenueformat.com', 'unsafe-eval', ...valeursSupplementairesScript()]
+          ? ["'self'", "'unsafe-inline'", 'https://www.highrevenueformat.com', "'unsafe-eval'", ...valeursSupplementairesScript()]
           : ["'self'", 'https://www.highrevenueformat.com'],
         scriptSrcAttr: ["'unsafe-inline'"],
         // Violations remontees sur /api/csp-report (log + alerte Discord):
