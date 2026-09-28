@@ -2,20 +2,16 @@
    ainsi que la duree de la cle delivree pour chaque combinaison:
      - LootLabs 1 pub  -> cle de 12 h (non-regression du chemin le plus utilise);
      - LootLabs 2 pubs -> cle de 24 h, delivree SEULEMENT apres 2 postbacks
-       distincts (un seul postback ne doit JAMAIS delivrer la cle);
-     - Work.ink 1 pub  -> cle de 24 h.
-   Les refus sont couverts aussi: offre inconnue, palier indisponible
-   (LOOTLABS_TIER2_ENABLED=false, Work.ink non configuree), postback qui ne
-   correspond pas au palier grave dans la session, postback rejoue, token
-   Work.ink invalide.
+       distincts (un seul postback ne doit JAMAIS delivrer la cle).
+   Les refus sont couverts aussi: offre inconnue, regie retiree (Work.ink),
+   palier indisponible (LOOTLABS_TIER2_ENABLED=false), postback qui ne
+   correspond pas au palier grave dans la session, postback rejoue.
    Non-regression des sessions ANTERIEURES (ad_count NULL, creees avant la
    migration): elles doivent continuer a delivrer une cle de 12 h sans erreur.
 
    Le serveur est demarre par ce test lui-meme, sur des ports dedies (un second
    serveur, palier 2 pubs desactive, sert a prouver le refus cote HTTP). Les
-   postbacks sont simules via HTTP local: AUCUN appel reseau a une regie, la
-   verification du token Work.ink est servie par un stub local
-   (WORKINK_VERIFY_URL).
+   postbacks sont simules via HTTP local: AUCUN appel reseau a une regie.
    Sans DATABASE_URL (integration continue), le test s'annonce et se saute.
 
    Regle de fond: ce test n'affiche JAMAIS de secret (aucune valeur de .env, de
@@ -38,45 +34,15 @@ const PORT = 3204;
 const BASE = `http://127.0.0.1:${PORT}`;
 const PORT_TIER2_OFF = 3206; // 2e serveur: palier LootLabs "2 pubs" DESACTIVE
 const BASE_TIER2_OFF = `http://127.0.0.1:${PORT_TIER2_OFF}`;
-const STUB_PORT = 3205; // stub local de l'API de verification Work.ink
 const DISCORD_ID = '909000000000000004'; // utilisateur de test (compte fictif)
 
 // Secrets de test: generes ici, jamais affiches, jamais ceux de production.
 const LOOTLABS_SECRET_TEST = nodeCrypto.randomBytes(16).toString('hex');
-const WORKINK_TOKEN_VALIDE = 'stub-' + nodeCrypto.randomUUID();
 
 let echecs = 0;
 function verifie(intitule, condition, detail) {
   console.log(`${condition ? '  OK  ' : '  ECHEC'} ${intitule}${detail ? ' -> ' + detail : ''}`);
   if (!condition) echecs++;
-}
-
-// ---------- Stub local de l'API Work.ink (aucun appel reseau reel) ----------
-// Reproduit le contrat documente: GET /_api/v2/token/isValid/<token>[?deleteToken=1]
-// -> { valid, deleted, info: { token, createdAt, byIp, linkId } }
-function demarrerStub() {
-  const consommes = new Set();
-  const serveur = http.createServer((req, res) => {
-    const url = new URL(req.url, `http://127.0.0.1:${STUB_PORT}`);
-    const m = url.pathname.match(/^\/token\/isValid\/(.+)$/);
-    const token = m ? decodeURIComponent(m[1]) : null;
-    const singleUse = url.searchParams.get('deleteToken') === '1';
-    if (!token || token !== WORKINK_TOKEN_VALIDE || (singleUse && consommes.has(token))) {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ valid: false, deleted: false }));
-      return;
-    }
-    if (singleUse) consommes.add(token);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(
-      JSON.stringify({
-        valid: true,
-        deleted: singleUse,
-        info: { token, createdAt: Date.now(), byIp: '198.51.100.7', linkId: 10345 },
-      })
-    );
-  });
-  return new Promise((resolve) => serveur.listen(STUB_PORT, '127.0.0.1', () => resolve(serveur)));
 }
 
 // ---------- Serveurs de test ----------
@@ -179,17 +145,14 @@ const appelTier2Off = faireAppel(BASE_TIER2_OFF);
   const PUID_LOOTLABS_PALIER = 'test-llpalier-' + nodeCrypto.randomBytes(24).toString('hex');
   const PUID_LOOTLABS_ANCIEN = 'test-llancien-' + nodeCrypto.randomBytes(24).toString('hex');
   const PUID_LOOTLABS_LEGACY = 'test-lllegacy-' + nodeCrypto.randomBytes(24).toString('hex');
-  const PUID_WORKINK = 'test-wi-' + nodeCrypto.randomBytes(24).toString('hex');
-  const PUID_WORKINK_REJET = 'test-wi-' + nodeCrypto.randomBytes(24).toString('hex');
-  const TOKEN_REJET = 'stub-invalide-' + nodeCrypto.randomBytes(8).toString('hex');
+  const PUID_ALIEN = 'test-alien-' + nodeCrypto.randomBytes(24).toString('hex');
   const PUID_TRACES = [
     PUID_LOOTLABS,
     PUID_LOOTLABS_2ADS,
     PUID_LOOTLABS_PALIER,
     PUID_LOOTLABS_ANCIEN,
     PUID_LOOTLABS_LEGACY,
-    PUID_WORKINK,
-    PUID_WORKINK_REJET,
+    PUID_ALIEN,
   ];
   const UNIQUE_1ADS = 'test-uniq-' + nodeCrypto.randomBytes(8).toString('hex');
   const UNIQUE_2ADS_1 = 'test-uniq2a-' + nodeCrypto.randomBytes(8).toString('hex');
@@ -243,50 +206,30 @@ const appelTier2Off = faireAppel(BASE_TIER2_OFF);
   await insererSession({
     puid: PUID_LOOTLABS_PALIER, provider: 'lootlabs', durationHours: 24, ip: '203.0.113.22', ads: 2, tasksRequired: 1,
   });
-  // Work.ink 1 pub (24 h) + une seconde pour les refus.
+  // Session d'une autre regie (ex: alien): pour tester le rejet croise.
   await insererSession({
-    puid: PUID_WORKINK, provider: 'workink', durationHours: 24, ip: '203.0.113.12', ads: 1, tasksRequired: 1,
-  });
-  await insererSession({
-    puid: PUID_WORKINK_REJET, provider: 'workink', durationHours: 24, ip: '203.0.113.13', ads: 1, tasksRequired: 1,
+    puid: PUID_ALIEN, provider: 'alien', durationHours: 24, ip: '203.0.113.13', ads: 1, tasksRequired: 1,
   });
 
-  // ---------- Stubs + serveurs de test ----------
-  const stub = await demarrerStub();
-  const arretTout = () => {
-    arret();
-    try { stub.close(); } catch (_) { /* deja ferme */ }
-  };
+  // ---------- Serveurs de test ----------
+  const arretTout = () => arret();
   process.on('exit', arretTout);
 
-  // Serveur 1: regie Work.ink NON configuree (etat reel de l'utilisateur), palier
-  // LootLabs "2 pubs" ACTIF. Durees explicites par palier.
+  // Serveur 1: palier LootLabs "2 pubs" ACTIF. Durees explicites par palier.
   demarrerServeur(PORT, {
-    // Regie Work.ink NON configuree (etat reel de l'utilisateur: pas de compte).
-    WORKINK_API_KEY: '',
-    WORKINK_LINK_ENDPOINT: '',
-    WORKINK_LINK_URL: '',
-    // Verifications locales uniquement: le stub remplace l'API Work.ink.
-    WORKINK_VERIFY_URL: `http://127.0.0.1:${STUB_PORT}/token/isValid`,
     // Signature du postback LootLabs: valeur de test, jamais affichee.
     LOOTLABS_POSTBACK_SECRET: LOOTLABS_SECRET_TEST,
     // Durees par palier verifiees explicitement.
     LOOTLABS_DURATION_HOURS: '12',
     LOOTLABS_DURATION_HOURS_2: '24',
-    WORKINK_DURATION_HOURS: '24',
     LOOTLABS_TIER2_ENABLED: 'true',
   });
   // Serveur 2: palier LootLabs "2 pubs" DESACTIVE -> la carte est annoncee
   // indisponible et /api/key/start le refuse proprement (aucun 500).
   demarrerServeur(PORT_TIER2_OFF, {
-    WORKINK_API_KEY: '',
-    WORKINK_LINK_ENDPOINT: '',
-    WORKINK_LINK_URL: '',
-    WORKINK_VERIFY_URL: `http://127.0.0.1:${STUB_PORT}/token/isValid`,
     LOOTLABS_POSTBACK_SECRET: LOOTLABS_SECRET_TEST,
     LOOTLABS_DURATION_HOURS: '12',
     LOOTLABS_DURATION_HOURS_2: '24',
-    WORKINK_DURATION_HOURS: '24',
     LOOTLABS_TIER2_ENABLED: 'false',
   });
 
@@ -355,7 +298,8 @@ const appelTier2Off = faireAppel(BASE_TIER2_OFF);
     const ll = providers.find((p) => p.id === 'lootlabs');
     const ll2 = providers.find((p) => p.id === 'lootlabs_2ads');
     const wi = providers.find((p) => p.id === 'workink');
-    verifie('les trois paliers sont decrits (lootlabs, lootlabs_2ads, workink)', !!ll && !!ll2 && !!wi,
+    verifie('exactement deux paliers decrits (lootlabs, lootlabs_2ads) et workink absent',
+      providers.length === 2 && !!ll && !!ll2 && !wi,
       providers.map((p) => p.id).join(', '));
     verifie('LootLabs 1 pub disponible avec une cle de 12 h',
       ll && ll.available === true && ll.adCount === 1 && ll.durationHours === 12,
@@ -363,21 +307,13 @@ const appelTier2Off = faireAppel(BASE_TIER2_OFF);
     verifie('LootLabs 2 pubs disponible avec 2 pubs et une cle de 24 h',
       ll2 && ll2.available === true && ll2.adCount === 2 && ll2.durationHours === 24,
       ll2 ? `available=${ll2.available} pubs=${ll2.adCount} duree=${ll2.durationHours}` : '');
-    verifie('Work.ink NON configuree annoncee indisponible',
-      wi && wi.available === false, wi ? `available=${wi.available}` : '');
-    verifie('Work.ink indisponible avec une raison explicite',
-      wi && typeof wi.reason === 'string' && wi.reason.length > 0, wi ? String(wi.reason) : '');
-    verifie('Work.ink: 1 seule annonce, cle de 24 h',
-      wi && wi.adCount === 1 && wi.durationHours === 24, wi ? `pubs=${wi.adCount} duree=${wi.durationHours}` : '');
 
     // ---------- 2. Refus propres du demarrage de session ----------
     const refus = await appel('POST', '/api/key/start', { provider: 'workink' }, cookieUser);
-    verifie('demarrage Work.ink refuse sans erreur 500', refus.status !== 500, `HTTP ${refus.status}`);
-    verifie('refus explicite: provider_unavailable', refus.corps.reason === 'provider_unavailable',
+    verifie('demarrage Work.ink refuse comme fournisseur invalide (400, pas 500)',
+      refus.status === 400 && refus.corps.reason === 'invalid_provider',
       `HTTP ${refus.status} raison=${refus.corps.reason || 'aucune'}`);
-    verifie('refus: regie nommee dans la reponse', refus.corps.provider === 'workink');
-    verifie('refus: message lisible en anglais', typeof refus.corps.error === 'string' && refus.corps.error.length > 0);
-    verifie('refus: aucune session creee',
+    verifie('refus: aucune session creee pour workink',
       (await c.query(
         `SELECT COUNT(*)::int AS c FROM ll_sessions
           WHERE provider = 'workink' AND created_at > now() - interval '1 minute'`
@@ -388,14 +324,13 @@ const appelTier2Off = faireAppel(BASE_TIER2_OFF);
       inconnu.status === 400 && inconnu.corps.reason === 'invalid_provider',
       `HTTP ${inconnu.status} raison=${inconnu.corps.reason || 'aucune'}`);
 
-    // Postback LootLabs sur une session Work.ink: chaque regie ne delivre que
-    // les sessions de SON palier/protocole.
+    // Postback LootLabs sur une session d'une autre regie: refus 403.
     const croiseeLoot = await appel(
       'GET',
-      `/api/lootlabs/postback?click_id=${PUID_WORKINK_REJET}&unique_id=${UNIQUE_PALIER}-x` +
+      `/api/lootlabs/postback?click_id=${PUID_ALIEN}&unique_id=${UNIQUE_PALIER}-x` +
         `&ip=198.51.100.9&secret=${LOOTLABS_SECRET_TEST}`
     );
-    verifie('postback LootLabs refuse sur une session Work.ink (403)',
+    verifie('postback LootLabs refuse sur une session d\'une autre regie (403)',
       croiseeLoot.status === 403, `HTTP ${croiseeLoot.status}`);
 
     // ---------- 3. NON-REGRESSION: LootLabs 1 pub -> cle de 12 h ----------
@@ -536,49 +471,9 @@ const appelTier2Off = faireAppel(BASE_TIER2_OFF);
       `HTTP ${pb2adsTardif.status} ${pb2adsTardif.texte.slice(0, 40)}`);
     verifie('aucune seconde cle pour la session 2 pubs', (await nombreDeCles(PUID_LOOTLABS_2ADS)) === 1);
 
-    // ---------- 6. Work.ink 1 pub -> cle de 24 h ----------
-    // La regie est NON configuree (pas de cle API): le retour d'une session
-    // ouverte reste neanmoins verifiable par le token officiel.
-    const pbWi = await appel(
-      'GET',
-      `/api/workink/postback?puid=${PUID_WORKINK}&hash=${WORKINK_TOKEN_VALIDE}`
-    );
-    verifie('postback Work.ink accepte (token verifie, sans cle API configuree)',
-      pbWi.status === 200 && /ok/.test(pbWi.texte), `HTTP ${pbWi.status} ${pbWi.texte.slice(0, 40)}`);
-    const livraisonWi = await appel('GET', `/api/key/status?puid=${PUID_WORKINK}`, undefined, cookieUser);
-    verifie('cle Work.ink delivree', livraisonWi.status === 200 && !!livraisonWi.corps.key,
-      `HTTP ${livraisonWi.status} ${livraisonWi.corps.status || ''}`);
-    const cleWi = await cleDeLaSession(PUID_WORKINK);
-    verifie('cle Work.ink gravee avec duration_hours = 24',
-      cleWi.rows[0] && Number(cleWi.rows[0].duration_hours) === 24,
-      cleWi.rows[0] ? `duration_hours=${cleWi.rows[0].duration_hours}` : 'cle absente');
-    verifie('cle Work.ink expire dans ~24 h (expires_at)',
-      cleWi.rows[0] && Math.abs(minutesRestantes(cleWi.rows[0].expires_at, 24)) < 0.2,
-      cleWi.rows[0] ? `ecart=${minutesRestantes(cleWi.rows[0].expires_at, 24)} h` : '');
-    const etatWi = await etatSession(PUID_WORKINK);
-    verifie('session Work.ink tracee (provider, 1 annonce, duration_hours)',
-      etatWi.rows[0] && etatWi.rows[0].provider === 'workink' &&
-        Number(etatWi.rows[0].ad_count) === 1 && Number(etatWi.rows[0].duration_hours) === 24,
-      etatWi.rows[0] ? `provider=${etatWi.rows[0].provider} annonces=${etatWi.rows[0].ad_count} duree=${etatWi.rows[0].duration_hours}` : '');
-
-    const rejeuWi = await appel('GET', `/api/workink/postback?puid=${PUID_WORKINK}&hash=${WORKINK_TOKEN_VALIDE}`);
-    verifie('postback Work.ink rejoue apres livraison (409)',
-      rejeuWi.status === 409 && /already delivered/.test(rejeuWi.texte), `HTTP ${rejeuWi.status} ${rejeuWi.texte.slice(0, 40)}`);
-
-    // ---------- 7. Verification de postback: token Work.ink invalide refuse ----------
-    const pbInvalide = await appel('GET', `/api/workink/postback?puid=${PUID_WORKINK_REJET}&hash=${TOKEN_REJET}`);
-    verifie('token Work.ink invalide refuse (403)', pbInvalide.status === 403, `HTTP ${pbInvalide.status}`);
-    const reste = await c.query('SELECT status, tasks_done FROM ll_sessions WHERE puid = $1', [PUID_WORKINK_REJET]);
-    verifie('session non completee apres un token invalide',
-      reste.rows[0] && reste.rows[0].status === 'pending' && reste.rows[0].tasks_done === 0,
-      reste.rows[0] ? `${reste.rows[0].status}/${reste.rows[0].tasks_done}` : '');
-    const croiseeWi = await appel('GET', `/api/workink/postback?puid=${PUID_LOOTLABS}&hash=${TOKEN_REJET}`);
-    verifie('postback Work.ink refuse sur une session LootLabs (403)', croiseeWi.status === 403, `HTTP ${croiseeWi.status}`);
-    const croiseeWi2 = await appel('GET', `/api/workink/postback?puid=${PUID_LOOTLABS_2ADS}&hash=${TOKEN_REJET}`);
-    verifie('postback Work.ink refuse sur une session LootLabs 2 pubs (403)',
-      croiseeWi2.status === 403, `HTTP ${croiseeWi2.status}`);
-    const sansParam = await appel('GET', `/api/workink/postback?puid=${PUID_WORKINK_REJET}`);
-    verifie('postback Work.ink sans token refuse (400)', sansParam.status === 400, `HTTP ${sansParam.status}`);
+    // ---------- 6. Verification: route Work.ink postback supprimee (404) ----------
+    const pbWiSupprime = await appel('GET', `/api/workink/postback?puid=${PUID_LOOTLABS}&hash=test`);
+    verifie('route postback Work.ink supprimee (404)', pbWiSupprime.status === 404, `HTTP ${pbWiSupprime.status}`);
 
     // ---------- 8. NON-REGRESSION d'une session ANTERIEURE a 2 points de controle ----------
     // La migration backfill ad_count = GREATEST(tasks_required, 1): une session
@@ -682,15 +577,8 @@ const appelTier2Off = faireAppel(BASE_TIER2_OFF);
 
     // ---------- 11. Paliers et durees: controles locaux (aucun appel reseau) ----------
     const lootlabs = require(path.join(RACINE, 'src', 'services', 'lootlabs'));
-    const workink = require(path.join(RACINE, 'src', 'services', 'workink'));
-    // Etat de reference: aucun reglage optionnel, Work.ink NON configuree (comme
-    // pour ce test, quel que soit le contenu du .env local).
-    delete process.env.WORKINK_API_KEY;
-    delete process.env.WORKINK_LINK_ENDPOINT;
-    delete process.env.WORKINK_LINK_URL;
     delete process.env.LOOTLABS_DURATION_HOURS;
     delete process.env.LOOTLABS_DURATION_HOURS_2;
-    delete process.env.WORKINK_DURATION_HOURS;
     delete process.env.LOOTLABS_TIER2_ENABLED;
 
     verifie('deux paliers LootLabs declares, pas plus (1 pub, 2 pubs)',
@@ -701,24 +589,19 @@ const appelTier2Off = faireAppel(BASE_TIER2_OFF);
     verifie('duree sans palier precise = 12 h (palier historique inchange)',
       lootlabs.durationHours() === 12 && lootlabs.DEFAULT_DURATION_HOURS === 12,
       `${lootlabs.durationHours()} h`);
-    verifie('Work.ink: une seule annonce par cle, 24 h',
-      workink.ADS_PER_KEY === 1 && workink.durationHours() === 24,
-      `${workink.ADS_PER_KEY} annonce / ${workink.durationHours()} h`);
     verifie('bornes documentees number_of_tasks (1 a 5) conservees',
       lootlabs.MIN_TASKS === 1 && lootlabs.MAX_TASKS === 5,
       `${lootlabs.MIN_TASKS}..${lootlabs.MAX_TASKS}`);
 
     process.env.LOOTLABS_DURATION_HOURS = '18';
     process.env.LOOTLABS_DURATION_HOURS_2 = '30';
-    process.env.WORKINK_DURATION_HOURS = '36';
-    verifie('durees surchargeables INDEPENDAMMENT par palier (18 / 30 / 36 h)',
-      lootlabs.durationHours(1) === 18 && lootlabs.durationHours(2) === 30 && workink.durationHours() === 36,
-      `${lootlabs.durationHours(1)} / ${lootlabs.durationHours(2)} / ${workink.durationHours()}`);
+    verifie('durees surchargeables INDEPENDAMMENT par palier (18 / 30 h)',
+      lootlabs.durationHours(1) === 18 && lootlabs.durationHours(2) === 30,
+      `${lootlabs.durationHours(1)} / ${lootlabs.durationHours(2)}`);
     verifie('surcharger le palier 2 pubs ne change PAS le palier 1 pub',
       lootlabs.durationHours(1) === 18, `${lootlabs.durationHours(1)} h`);
     delete process.env.LOOTLABS_DURATION_HOURS;
     delete process.env.LOOTLABS_DURATION_HOURS_2;
-    delete process.env.WORKINK_DURATION_HOURS;
 
     verifie('palier inconnu (3 pubs) annonce indisponible, raison explicite',
       lootlabs.unavailableReason(3) === 'unknown_ads_count' && lootlabs.isAvailable(3) === false,
@@ -757,16 +640,6 @@ const appelTier2Off = faireAppel(BASE_TIER2_OFF);
     verifie('un palier refuse n\'entraine AUCUN appel reseau a la regie',
       appelsReseau === 0, `${appelsReseau} appel(s)`);
     delete process.env.LOOTLABS_TIER2_ENABLED;
-
-    verifie('regie Work.ink non configuree -> indisponible avec raison',
-      workink.isConfigured() === false && typeof workink.unavailableReason() === 'string',
-      String(workink.unavailableReason()));
-    const sansCle = await workink
-      .createMonetizedLink({ durationHours: 24, puid: PUID_WORKINK })
-      .then(() => null)
-      .catch((e) => e);
-    verifie('creation de lien Work.ink sans configuration: echec propre, aucun appel reseau',
-      !!sansCle && sansCle.reason === 'missing_api_key');
   } catch (e) {
     console.error('  ECHEC:', e.message);
     echecs++;
@@ -779,7 +652,7 @@ const appelTier2Off = faireAppel(BASE_TIER2_OFF);
 
   console.log(
     `\n  VERDICT: ${echecs === 0
-      ? 'les trois paliers (LootLabs 1 pub = 12 h, LootLabs 2 pubs = 24 h, Work.ink 1 pub = 24 h), leurs refus propres et la non-regression du palier historique (sessions anterieures comprises) se comportent comme prevu'
+      ? 'les deux paliers LootLabs (1 pub = 12 h, 2 pubs = 24 h), leurs refus propres et la non-regression du palier historique se comportent comme prevu'
       : echecs + ' probleme(s)'}`
   );
   process.exit(echecs === 0 ? 0 : 1);

@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="strix-verification" content="strix-verify-42e4da9a3a54da5e2ebc69b15eee17ed">
 <title>Get a Free Key — AUDIT HUB</title>
-<meta name="description" content="Pick your offer (LootLabs = 12-hour key with 1 ad, or 24-hour key with 2 ads; Work.ink = 24-hour key with 1 ad), sign in with Discord and get your Roblox key instantly. Renewing extends the same key, so nothing to re-paste in your executor.">
+<meta name="description" content="Pick your offer (LootLabs = 12-hour key with 1 ad, or 24-hour key with 2 ads), sign in with Discord and get your Roblox key instantly. Renewing extends the same key, so nothing to re-paste in your executor.">
 <link rel="canonical" href="__SITE__/getkey">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="AUDIT HUB">
 <meta property="og:title" content="Get a Free Key — AUDIT HUB">
-<meta property="og:description" content="Pick your offer (LootLabs = 12-hour key with 1 ad, or 24-hour key with 2 ads; Work.ink = 24-hour key with 1 ad), sign in with Discord and get your Roblox key instantly. Renewing extends the same key, so nothing to re-paste in your executor.">
+<meta property="og:description" content="Pick your offer (LootLabs = 12-hour key with 1 ad, or 24-hour key with 2 ads), sign in with Discord and get your Roblox key instantly. Renewing extends the same key, so nothing to re-paste in your executor.">
 <meta property="og:url" content="__SITE__/getkey">
 <meta property="og:image" content="__SITE__/og.png">
 <meta property="og:image:width" content="1200">
@@ -18,7 +18,7 @@
 <meta property="og:image:alt" content="AUDIT HUB — free Roblox key system and universal script loader">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Get a Free Key — AUDIT HUB">
-<meta name="twitter:description" content="Pick your offer (LootLabs = 12-hour key with 1 ad, or 24-hour key with 2 ads; Work.ink = 24-hour key with 1 ad), sign in with Discord and get your Roblox key instantly. Renewing extends the same key, so nothing to re-paste in your executor.">
+<meta name="twitter:description" content="Pick your offer (LootLabs = 12-hour key with 1 ad, or 24-hour key with 2 ads), sign in with Discord and get your Roblox key instantly. Renewing extends the same key, so nothing to re-paste in your executor.">
 <meta name="twitter:image" content="__SITE__/og.png">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=__V__">
 <link rel="icon" type="image/png" href="/favicon.png?v=__V__">
@@ -136,10 +136,10 @@
   </section>
 
   <!-- Step 2: Ad network + tier choice.
-       Trois paliers: LootLabs 1 pub (12 h), LootLabs 2 pubs (24 h), Work.ink 1 pub (24 h).
-       Nom, nombre de publicites, duree de la cle et disponibilite viennent de
-       /api/config/public: un palier non disponible (Work.ink sans compte,
-       palier 2 pubs desactive) reste masque et aucun bouton mort n'est affiche. -->
+       Two tiers: LootLabs 1 ad (12h), LootLabs 2 ads (24h).
+       Name, ad count, key duration and availability come from
+       /api/config/public: an unavailable tier (e.g. tier 2 disabled)
+       remains hidden so no dead buttons are shown. -->
   <section class="keypanel" id="choiceCard">
     <h2>Step 2 · Choose your offer</h2>
     <p class="sub">Same key system, different number of ads: pick the key duration you want.</p>
@@ -153,15 +153,6 @@
         <span class="provider-ads">Choose ads</span>
         <span class="provider-duration" id="offerLootlabsMainDuration">12h · 24h</span>
         <span class="provider-note">Click to select number of ads</span>
-      </button>
-      <button type="button" class="card provider-card hidden" id="offerWorkink" data-offer="workink">
-        <span class="provider-icon" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="12" r="4.5"></circle><path d="M12.5 12H21"></path><path d="M18 12v3"></path><path d="M21 12v2.5"></path></svg>
-        </span>
-        <span class="provider-name">Work.ink</span>
-        <span class="provider-ads" id="offerWorkinkAds">1 ad</span>
-        <span class="provider-duration" id="offerWorkinkHours">24-hour key</span>
-        <span class="provider-note">Full day of access</span>
       </button>
     </div>
     <div class="provider-loading hidden" id="providerLoading">

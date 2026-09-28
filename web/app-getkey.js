@@ -6,21 +6,19 @@ let currentStep = 1;
 
 // ===== Paliers publicitaires (offres) =====
 // La liste, le nombre de publicites, les durees et la disponibilite viennent du
-// serveur (/api/config/public): un palier non disponible (Work.ink sans compte,
-// ou LootLabs "2 pubs" desactive) est annonce available:false, sa carte reste
-// masquee et son clic est sans effet — jamais de bouton mort.
-// Trois offres: LootLabs 1 pub (12 h), LootLabs 2 pubs (24 h), Work.ink 1 pub (24 h).
+// serveur (/api/config/public): un palier non disponible (LootLabs "2 pubs"
+// desactive) est annonce available:false, sa carte reste masquee et son clic
+// est sans effet — jamais de bouton mort.
+// Deux offres: LootLabs 1 pub (12 h), LootLabs 2 pubs (24 h).
 const OFFER_BLOCKS = {
   lootlabs: { card: 'offerLootlabs1', ads: 'offerLootlabs1Ads', hours: 'offerLootlabs1Hours', name: 'LootLabs' },
   lootlabs_2ads: { card: 'offerLootlabs2', ads: 'offerLootlabs2Ads', hours: 'offerLootlabs2Hours', name: 'LootLabs' },
-  workink: { card: 'offerWorkink', ads: 'offerWorkinkAds', hours: 'offerWorkinkHours', name: 'Work.ink' },
 };
 // Etat par defaut (avant reponse du serveur): LootLabs 1 pub visible, le reste
 // masque tant que /api/config/public ne l'annonce pas disponible.
 const offerState = {
   lootlabs: { available: true, adCount: 1, durationHours: 12 },
   lootlabs_2ads: { available: true, adCount: 2, durationHours: 24 },
-  workink: { available: false, adCount: 1, durationHours: 24 },
 };
 
 function renderOffers(list) {

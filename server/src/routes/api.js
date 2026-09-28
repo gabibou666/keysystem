@@ -3,7 +3,6 @@ const nodeCrypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const crypto = require('../services/crypto');
 const lootlabs = require('../services/lootlabs');
-const workink = require('../services/workink');
 const pool = require('../db');
 const path = require('path');
 const { requireDiscordUser } = require('./discord');
@@ -43,7 +42,6 @@ function clientIp(req) {
 // (jamais par le client):
 //   lootlabs       -> 1 publicite  = cle de 12 h (LOOTLABS_DURATION_HOURS)
 //   lootlabs_2ads  -> 2 publicites = cle de 24 h (LOOTLABS_DURATION_HOURS_2)
-//   workink        -> 1 publicite  = cle de 24 h (WORKINK_DURATION_HOURS)
 // Un palier LootLabs correspond au nombre de publicites reelles demandees
 // (champ number_of_tasks de l'API LootLabs, doc officielle: "The max number of
 // ads associated with the link shortener in a given session", 1-5). La duree
@@ -52,14 +50,10 @@ function clientIp(req) {
 // LootLabs est le chemin historique: il reste toujours propose (une cle API
 // invalide remonte un message clair au demarrage de session, plutot qu'une
 // carte masquee qui laisserait l'utilisateur sans aucune option).
-// Work.ink n'est annonce disponible que si sa configuration est complete: tant
-// que c'est faux, la carte n'apparait pas cote interface (/config/public) et
-// /key/start le refuse proprement (provider_unavailable) — jamais un 500.
 // Idem pour le palier LootLabs "2 pubs" si LOOTLABS_TIER2_ENABLED=false.
 const OFFERS = [
   { id: 'lootlabs', provider: 'lootlabs', label: 'LootLabs', ads: 1 },
   { id: 'lootlabs_2ads', provider: 'lootlabs', label: 'LootLabs', ads: 2 },
-  { id: 'workink', provider: 'workink', label: 'Work.ink', ads: 1 },
 ];
 const OFFER_IDS = OFFERS.map((o) => o.id);
 
@@ -74,18 +68,6 @@ function resolveOffer(value) {
 // available:false + reason = la carte est masquee par le front et /key/start
 // refuse le palier AVANT toute verification couteuse.
 function offerStatus(offer) {
-  if (offer.provider === 'workink') {
-    const reason = workink.unavailableReason();
-    return {
-      id: offer.id,
-      provider: 'workink',
-      label: offer.label,
-      adCount: workink.ADS_PER_KEY,
-      available: !reason,
-      reason,
-      durationHours: workink.durationHours(),
-    };
-  }
   const reason = lootlabs.unavailableReason(offer.ads);
   return {
     id: offer.id,
@@ -99,8 +81,8 @@ function offerStatus(offer) {
 }
 
 // ---------- POST /api/key/start ----------
-// Body: { offer: 'lootlabs' | 'lootlabs_2ads' | 'workink' }
-//       ('provider' reste accepte pour compatibilite: 'lootlabs' | 'workink')
+// Body: { offer: 'lootlabs' | 'lootlabs_2ads' }
+//       ('provider' reste accepte pour compatibilite: 'lootlabs')
 // GATE: connexion Discord requise (ajout au serveur via OAuth)
 // Anti-bypass: puid 32 bytes non devinable + session liee au proprietaire (owner_discord_id)
 // + rate-limit strict (express-rate-limit) + limite 2 pubs/12h/IP
@@ -120,10 +102,9 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
       });
     }
 
-    // Regie/palier non disponible (Work.ink sans compte, ou palier 2 pubs
-    // desactive): refus PROPRE et immediat, avant toute verification couteuse
-    // (Discord, base). Le front masque deja l'option; ce refus protege les
-    // appels directs a l'API.
+    // Palier non disponible (ex. palier 2 pubs desactive): refus PROPRE
+    // et immediat, avant toute verification couteuse (Discord, base).
+    // Le front masque deja l'option; ce refus protege les appels directs a l'API.
     const info = offerStatus(offer);
     if (!info.available) {
       return res.status(503).json({
@@ -207,10 +188,7 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
 
     let lootUrl, tasksRequired;
     try {
-      const link =
-        offer.provider === 'workink'
-          ? await workink.createMonetizedLink({ durationHours: duration, puid })
-          : await lootlabs.createMonetizedLink({ ads: adsRequired, durationHours: duration, puid });
+      const link = await lootlabs.createMonetizedLink({ ads: adsRequired, durationHours: duration, puid });
       lootUrl = link.lootUrl;
       // Nombre de points de controle exige par la regie: il doit correspondre au
       // palier grave ici (sinon on refuse plutot que de delivrer une duree qui
@@ -230,7 +208,7 @@ router.post('/key/start', startLimiter, requireDiscordUser, async (req, res) => 
         offer: info.id,
         error:
           'Could not create the link: ' +
-          (e.workinkMessage || e.lootlabsMessage || e.message) +
+          (e.lootlabsMessage || e.message) +
           (offer.provider === 'lootlabs' ? ' (check your Creator Details in the LootLabs panel)' : ''),
       });
     }
@@ -372,7 +350,6 @@ router.get('/lootlabs/postback', async (req, res) => {
     if (!session) return res.status(404).send('session not found');
 
     // Regie: chaque postback ne delivre que les sessions de SA regie.
-    // (Work.ink a sa propre route /api/workink/postback.)
     if (session.provider && session.provider !== 'lootlabs') {
       console.warn(`[postback] REJET regie incompatible (provider=${session.provider}, puid=${click_id.slice(0, 8)}...)`);
       return res.status(403).send('rejected: session belongs to another ad network');
@@ -476,164 +453,7 @@ router.get('/lootlabs/postback', async (req, res) => {
   }
 });
 
-// ---------- POSTBACK WORK.INK ----------
-// Doc: dashboard.work.ink > For Developers > Key System, et blog.work.ink
-// ("Using the Key System to make money with your Software" 02/03/2025,
-//  "Migrating from the Linkvertise Anti-Bypass System to the Work.ink Key
-//  System" 07/05/2025).
-// Work.ink ne signe PAS de postback serveur-a-serveur: apres la pub, il renvoie
-// l'utilisateur sur NOTRE destination avec ?hash=<token>, et la preuve de
-// completion est ce token verifie aupres de l'API officielle:
-//   GET https://work.ink/_api/v2/token/isValid/<token>?deleteToken=1
-// Protections cumulees:
-//   1. Token verifie aupres de l'API Work.ink, en usage UNIQUE (deleteToken=1)
-//   2. Secret partage optionnel WORKINK_POSTBACK_SECRET (temps constant)
-//   3. Regie: seules les sessions 'workink' sont delivrables ici
-//   4. Delai minimum realiste depuis started_at (anti-bot) + IP source tracee
-//   5. Refus de toute cle DEJA delivree pour cette session (status 'claimed')
-// Note: cette route ne depend pas de WORKINK_API_KEY (creation de lien): une
-// session ouverte juste avant une rotation de cle doit rester delivrable.
-router.get('/workink/postback', async (req, res) => {
-  try {
-    const puid = typeof req.query.puid === 'string' ? req.query.puid : '';
-    const token =
-      typeof req.query.hash === 'string'
-        ? req.query.hash
-        : typeof req.query.token === 'string'
-          ? req.query.token
-          : '';
-    if (!puid || puid.length > 128 || !token || token.length > 128) {
-      return res.status(400).send('missing puid or hash');
-    }
 
-    const sourceIp = clientIp(req);
-    const isBrowserNav = typeof req.headers.accept === 'string' && req.headers.accept.includes('text/html');
-
-    // Blacklist connue des serveurs de bots / bypass (meme liste que LootLabs)
-    const BLOCKED_POSTBACK_IPS = new Set(['37.27.162.36']);
-    if (BLOCKED_POSTBACK_IPS.has(sourceIp)) {
-      console.warn(`[postback:workink] REJET IP blacklistee (src=${sourceIp}, puid=${puid.slice(0, 8)}...)`);
-      if (isBrowserNav) return res.redirect('/getkey?err=' + encodeURIComponent('Access denied (blacklisted IP).'));
-      return res.status(403).send('rejected: blacklisted ip');
-    }
-
-    // Secret partage optionnel (notre propre garde, au meme titre que LootLabs).
-    const secret = workink.verifyPostbackSecret(req.query.secret || req.headers['x-postback-secret']);
-    if (!secret.ok) {
-      console.warn(`[postback:workink] REJET secret invalide/absent (puid=${puid.slice(0, 8)}..., src=${sourceIp})`);
-      if (isBrowserNav) return res.redirect('/getkey?err=' + encodeURIComponent('Invalid postback signature.'));
-      return res.status(403).send('rejected: invalid postback secret');
-    }
-    if (!secret.configured && process.env.NODE_ENV === 'production') {
-      console.warn('[postback:workink] WORKINK_POSTBACK_SECRET absent: verification par token uniquement.');
-    }
-
-    const sess = await pool.query('SELECT * FROM ll_sessions WHERE puid = $1 FOR UPDATE', [puid]);
-    const session = sess.rows[0];
-    if (!session) {
-      if (isBrowserNav) return res.redirect('/getkey?err=' + encodeURIComponent('Session not found.'));
-      return res.status(404).send('session not found');
-    }
-
-    if (session.provider !== 'workink') {
-      console.warn(`[postback:workink] REJET regie incompatible (provider=${session.provider}, puid=${puid.slice(0, 8)}...)`);
-      if (isBrowserNav) return res.redirect('/getkey?err=' + encodeURIComponent('Session belongs to another ad network.'));
-      return res.status(403).send('rejected: session belongs to another ad network');
-    }
-
-    // Cle DEJA delivree: un rejeu du meme token ne doit jamais rouvrir la session.
-    if (session.status === 'claimed') {
-      console.warn(`[postback:workink] REJET cle deja delivree (puid=${puid.slice(0, 8)}...)`);
-      if (isBrowserNav) return res.redirect('/getkey/callback');
-      return res.status(409).send('rejected: key already delivered');
-    }
-    if (session.status === 'completed') {
-      if (isBrowserNav) return res.redirect('/getkey/callback');
-      return res.send('already ok');
-    }
-
-    // Palier de la session: Work.ink ne delivre qu'UNE annonce par cle. Une
-    // session qui attendrait davantage de publicites (palier 2 pubs par
-    // exemple) ne doit JAMAIS etre validee par ce postback: le token Work.ink
-    // ne prouverait qu'une seule pub terminee.
-    const requiredAds = Number(session.ad_count) || Number(session.tasks_required) || 1;
-    if (requiredAds !== workink.ADS_PER_KEY) {
-      console.warn(
-        `[postback:workink] REJET palier incompatible (ad_count=${requiredAds}, attendu ${workink.ADS_PER_KEY}, puid=${puid.slice(0, 8)}...)`
-      );
-      if (isBrowserNav) return res.redirect('/getkey?err=' + encodeURIComponent('Ad tier mismatch.'));
-      return res.status(403).send('rejected: session ad tier mismatch');
-    }
-
-    // ANTI-SELF-POSTBACK: le retour Work.ink est recu par le navigateur de
-    // l'utilisateur — l'IP source PEUT donc etre la sienne (contrairement a
-    // LootLabs qui poste serveur-a-serveur). La preuve reste le token signe par
-    // l'API Work.ink, a usage unique, lie a la session par le puid.
-    const MIN_SECONDS = Math.max(12, requiredAds * 10);
-    const elapsedSec = (Date.now() - new Date(session.started_at).getTime()) / 1000;
-    if (elapsedSec < MIN_SECONDS) {
-      console.warn(`[postback:workink] REJET trop rapide: ${elapsedSec.toFixed(1)}s < ${MIN_SECONDS}s`);
-      await pool.query(
-        `UPDATE ll_sessions SET status = 'rejected_too_fast' WHERE id = $1 AND status = 'pending'`,
-        [session.id]
-      );
-      if (isBrowserNav) return res.redirect('/getkey?err=' + encodeURIComponent('Verification completed too fast. Please take your time on the ad page.'));
-      return res.status(429).send('rejected: completed too fast');
-    }
-
-    // Dedup: le token Work.ink est unique par session (l'API le supprime apres
-    // verification en usage unique).
-    const uniqueId = 'wi-' + token;
-    const dup = await pool.query('SELECT id FROM postbacks WHERE unique_id = $1', [uniqueId]);
-    if (dup.rows[0]) {
-      if (isBrowserNav) return res.redirect('/getkey/callback');
-      return res.send('duplicate ok');
-    }
-
-    // Verification officielle: sans ce verdict, AUCUNE cle n'est delivree.
-    const check = await workink.verifyKeyToken(token);
-    if (!check.valid) {
-      console.warn(
-        `[postback:workink] REJET token invalide (puid=${puid.slice(0, 8)}..., motif=${check.reason || 'not_valid'})`
-      );
-      if (isBrowserNav) return res.redirect('/getkey?err=' + encodeURIComponent('Invalid or expired Work.ink key token. Please restart verification.'));
-      return res.status(403).send('rejected: invalid workink token');
-    }
-
-    await pool.query('INSERT INTO postbacks (unique_id, puid, ip) VALUES ($1, $2, $3)', [
-      uniqueId,
-      puid,
-      sourceIp,
-    ]);
-    await pool.query('UPDATE ll_sessions SET postback_ip = $1 WHERE id = $2', [sourceIp, session.id]);
-
-    // Une seule annonce Work.ink = session complete (palier verifie plus haut).
-    const done = (session.tasks_done || 0) + 1;
-    const required = requiredAds;
-    if (done >= required) {
-      const completionToken = tokens.issueCompletionToken({
-        puid,
-        ownerDiscordId: session.owner_discord_id,
-        ip: session.ip,
-        tasksDone: done,
-        tasksRequired: required,
-      });
-      await pool.query(
-        `UPDATE ll_sessions SET tasks_done = $1, status = 'completed', completed_at = now(), completion_token = $2 WHERE id = $3`,
-        [done, completionToken, session.id]
-      );
-    } else {
-      await pool.query('UPDATE ll_sessions SET tasks_done = $1 WHERE id = $2', [done, session.id]);
-    }
-    if (isBrowserNav) {
-      return res.redirect('/getkey/callback');
-    }
-    res.send('ok');
-  } catch (e) {
-    console.error('[postback:workink]', e);
-    res.status(500).send('error');
-  }
-});
 
 // ---------- GET /api/key/status?puid=... ----------
 // Polling apres les pubs: la cle est delivree quand la session est complete.
@@ -748,8 +568,8 @@ router.get('/key/status', statusLimiter, async (req, res) => {
 
     // Duree de la cle: celle GRAVEE dans la session au demarrage
     // (colonne duration_hours: LOOTLABS_DURATION_HOURS = 12 pour le palier
-    // 1 pub, LOOTLABS_DURATION_HOURS_2 = 24 pour le palier 2 pubs,
-    // WORKINK_DURATION_HOURS = 24). Le client n'a AUCUN moyen de l'influencer:
+    // 1 pub, LOOTLABS_DURATION_HOURS_2 = 24 pour le palier 2 pubs).
+    // Le client n'a AUCUN moyen de l'influencer:
     // ni la requete /key/start, ni le postback, ni ce poll ne portent de duree.
     // Repli (sessions anterieures a la migration): duree du palier deduit du
     // nombre de publicites GRAVE (ad_count), jamais du seul tasks_required.
@@ -757,9 +577,7 @@ router.get('/key/status', statusLimiter, async (req, res) => {
     const duration =
       Number(session.duration_hours) > 0
         ? Number(session.duration_hours)
-        : session.provider === 'workink'
-          ? workink.durationHours()
-          : lootlabs.durationHours(sessionAds);
+        : lootlabs.durationHours(sessionAds);
 
     if (session.key_id) {
       // Renouvellement: meme kid, meme string cote client.
@@ -1556,7 +1374,7 @@ router.get('/config/public', async (req, res) => {
     // Regies/paliers publicitaires proposes: le front derive les cartes de choix
     // d'ici (nom de la regie, nombre de publicites, duree de la cle,
     // disponibilite) — aucune duree ni aucun palier code en dur cote page.
-    // Un palier non disponible (Work.ink sans compte, ou LootLabs "2 pubs"
+    // Un palier non disponible (ex: LootLabs "2 pubs"
     // desactive par LOOTLABS_TIER2_ENABLED=false) est annonce available:false
     // avec sa raison: sa carte n'apparait pas et aucun bouton mort n'est affiche.
     providers: OFFERS.map(offerStatus),

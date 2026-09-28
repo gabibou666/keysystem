@@ -2,14 +2,13 @@
 // p = PALIER choisi sur getkey.html (identifiant d'offre, tel quel):
 //   lootlabs       = LootLabs 1 publicite  -> cle de 12 h
 //   lootlabs_2ads  = LootLabs 2 publicites -> cle de 24 h
-//   workink        = Work.ink 1 publicite  -> cle de 24 h
 // Toute autre valeur (ou l'absence de p) retombe sur le palier historique
 // lootlabs: le serveur reste seul juge de la validite d'une offre, la page ne
 // refuse jamais a sa place. k=1 = renouvellement d'une cle existante.
 // C'est le SERVEUR qui decide le nombre de publicites ET la duree de la cle
 // d'apres le palier: la page ne transmet jamais ni duree ni nombre de pubs.
 const q = new URLSearchParams(location.search);
-const OFFRES_CONNUES = ['lootlabs', 'lootlabs_2ads', 'workink'];
+const OFFRES_CONNUES = ['lootlabs', 'lootlabs_2ads'];
 const offreDemandee = (q.get('p') || '').trim().toLowerCase();
 const offer = OFFRES_CONNUES.includes(offreDemandee) ? offreDemandee : 'lootlabs';
 const renewing = q.get('k') === '1';
