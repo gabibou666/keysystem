@@ -1198,8 +1198,8 @@ router.post('/booster/claim', boosterLimiter, requireDiscordUser, async (req, re
         success: false,
         error: 'second_boost_required',
         message: totalBoosts <= 1
-          ? 'Vous avez déjà utilisé votre clé de 7 jours pour ce boost ! (1 boost = 1 seule clé de 7 jours, aucun renouvellement automatique). Pour obtenir 7 jours de plus, vous devez obligatoirement ajouter un 2ème boost sur notre serveur Discord !'
-          : `Vous avez déjà utilisé vos ${totalBoosts} récompenses de 7 jours. Ajoutez un nouveau boost sur Discord pour débloquer +7 jours !`,
+          ? 'You already used your 7-day reward for this boost! (1 boost = 1 single 7-day key, no auto-renewal). To unlock 7 more days, you must add a 2nd boost to our Discord server!'
+          : `You already claimed all ${totalBoosts} 7-day rewards. Add a new boost to our Discord server to unlock +7 more days!`,
         boostCount: totalBoosts,
         claimsCount,
         remainingBoosts: 0,
