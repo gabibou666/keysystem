@@ -382,3 +382,24 @@ if (window.startSocialTicker) {
 }
 setInterval(loadStats, 30000);
 setInterval(loadActivity, 30000);
+
+// ===== Banderole Annonce Booster =====
+function dismissBoosterBanner() {
+  const b = document.getElementById('boosterBanner');
+  if (b) {
+    b.style.display = 'none';
+    try { sessionStorage.setItem('ks_booster_banner_closed', '1'); } catch {}
+  }
+}
+window.dismissBoosterBanner = dismissBoosterBanner;
+
+function initBoosterBanner() {
+  try {
+    if (sessionStorage.getItem('ks_booster_banner_closed') === '1') {
+      const b = document.getElementById('boosterBanner');
+      if (b) b.style.display = 'none';
+    }
+  } catch {}
+}
+initBoosterBanner();
+
