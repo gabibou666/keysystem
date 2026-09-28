@@ -203,6 +203,33 @@
     </div>
   </section>
 
+  <!-- Bonus: Discord Server Booster Reward -->
+  <section class="keypanel neon-frame" id="boosterCard" style="margin-top: 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+      <h2>🚀 Server Boosters · Free 7-Day Key</h2>
+      <span class="badge-pill" style="background:#ec489922; color:#f472b6; border:1px solid #ec489955;">Zero Ads · 7 Days</span>
+    </div>
+    <p class="sub">Boost our Discord server to get an instant <b>7-Day Key with ZERO ads</b>! As long as you keep boosting, you can renew your key every 7 days without watching any ads.</p>
+    
+    <div id="boosterLoggedOut" class="status">
+      <span>🔒 Sign in with Discord above (Step 1) to verify your booster status and claim your 7-day key.</span>
+    </div>
+
+    <div id="boosterLoggedIn" class="hidden">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top: 14px;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span id="boosterBadge" class="badge-pill" style="background:rgba(236,72,153,0.15); color:#f472b6; border:1px solid rgba(236,72,153,0.3); font-weight:600; padding:6px 12px; font-size:13px;">Checking booster status…</span>
+          <span id="boosterExpiryText" style="font-size:13px; color:var(--color-muted);"></span>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <a id="btnBoostDiscord" href="https://discord.gg/nrgtDK52Er" target="_blank" rel="noopener" class="btn small secondary hidden" style="text-decoration:none;">🚀 Boost Discord Server</a>
+          <button class="btn small" id="btnClaimBooster" onclick="claimBoosterKey()" style="background: linear-gradient(135deg, #ec4899, #be185d); border:none;">💎 Claim 7-Day Booster Key</button>
+        </div>
+      </div>
+      <div id="boosterClaimStatus" class="status" style="margin-top: 10px;"></div>
+    </div>
+  </section>
+
   <!-- AD: In-content 728x90 -->
   <div class="ad-banner in-content" id="ad-content-getkey">
     

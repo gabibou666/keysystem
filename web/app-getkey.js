@@ -218,9 +218,11 @@ async function loadDiscordStatus() {
         document.getElementById('serverNote').innerHTML = '⚠️ Not in server —' + (window.ksInviteLink('Rejoin Discord') || ' ask a staff member for an invite link.');
       }
       setStep(2);
+      loadBoosterStatus();
     } else {
       discordOk = false;
       setStep(1);
+      loadBoosterStatus();
     }
   } catch {}
 }
@@ -383,6 +385,134 @@ async function claimReferralReward() {
     }
   } catch {
     if (st) { st.textContent = 'Network error.'; st.className = 'status err'; }
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ===== Discord Server Booster System =====
+async function loadBoosterStatus() {
+  const out = document.getElementById('boosterLoggedOut');
+  const logged = document.getElementById('boosterLoggedIn');
+  const badge = document.getElementById('boosterBadge');
+  const expText = document.getElementById('boosterExpiryText');
+  const boostLink = document.getElementById('btnBoostDiscord');
+  const claimBtn = document.getElementById('btnClaimBooster');
+  const st = document.getElementById('boosterClaimStatus');
+  if (!out || !logged) return;
+
+  try {
+    const r = await fetch('/api/booster/status');
+    const d = await r.json();
+
+    if (!d.loggedIn) {
+      out.classList.remove('hidden');
+      logged.classList.add('hidden');
+      return;
+    }
+
+    out.classList.add('hidden');
+    logged.classList.remove('hidden');
+
+    if (d.inviteUrl && boostLink) {
+      boostLink.href = d.inviteUrl;
+    }
+
+    if (!d.isBooster) {
+      if (badge) {
+        badge.textContent = '❌ Not Boosting';
+        badge.style.background = 'rgba(239,68,68,0.15)';
+        badge.style.color = '#f87171';
+        badge.style.borderColor = 'rgba(239,68,68,0.3)';
+      }
+      if (expText) expText.textContent = 'Boost our Discord server to unlock your free 7-day key.';
+      if (boostLink) boostLink.classList.remove('hidden');
+      if (claimBtn) {
+        claimBtn.disabled = true;
+        claimBtn.textContent = '💎 Boost Required';
+      }
+      return;
+    }
+
+    // Utilisateur booster detecte
+    if (boostLink) boostLink.classList.add('hidden');
+
+    if (d.hasActiveKey) {
+      const daysLeft = Math.ceil(d.remainingHours / 24);
+      if (badge) {
+        badge.textContent = '💎 Active Booster';
+        badge.style.background = 'rgba(236,72,153,0.15)';
+        badge.style.color = '#f472b6';
+        badge.style.borderColor = 'rgba(236,72,153,0.3)';
+      }
+      if (expText) {
+        expText.textContent = `Key active · expires in ~${daysLeft} day(s) (${d.remainingHours}h left)`;
+      }
+
+      if (d.canRenew) {
+        if (claimBtn) {
+          claimBtn.disabled = false;
+          claimBtn.textContent = '🔄 Renew 7-Day Key';
+        }
+      } else {
+        if (claimBtn) {
+          claimBtn.disabled = true;
+          claimBtn.textContent = '✅ Key Already Active';
+        }
+        if (st && !st.textContent) {
+          st.textContent = 'Your 7-day Booster Key is active! You can renew when less than 24 hours remain.';
+          st.className = 'status ok';
+        }
+      }
+    } else {
+      if (badge) {
+        badge.textContent = '💎 Verified Booster';
+        badge.style.background = 'rgba(236,72,153,0.15)';
+        badge.style.color = '#f472b6';
+        badge.style.borderColor = 'rgba(236,72,153,0.3)';
+      }
+      if (expText) expText.textContent = 'You are boosting our server! Claim your 7-day key below.';
+      if (claimBtn) {
+        claimBtn.disabled = false;
+        claimBtn.textContent = '💎 Claim 7-Day Booster Key';
+      }
+    }
+  } catch {}
+}
+
+async function claimBoosterKey() {
+  const btn = document.getElementById('btnClaimBooster');
+  const st = document.getElementById('boosterClaimStatus');
+  if (btn) btn.disabled = true;
+  if (st) { st.textContent = 'Verifying booster status with Discord…'; st.className = 'status'; }
+
+  try {
+    const r = await fetch('/api/booster/claim', { method: 'POST' });
+    const d = await r.json();
+
+    if (d.success && d.key) {
+      localStorage.setItem(KEY_STORAGE, d.key);
+      if (window.launchConfetti) window.launchConfetti();
+      showModal(d.key, false, d.expiresAt);
+      loadCurrentKey();
+      loadBoosterStatus();
+      if (st) {
+        st.textContent = d.message || '🎉 7-Day Booster Key claimed successfully!';
+        st.className = 'status ok';
+      }
+      showToast(d.action === 'renew' ? '🎉 Booster Key renewed for 7 days!' : '🎉 7-Day Booster Key claimed!');
+    } else {
+      if (d.key) {
+        localStorage.setItem(KEY_STORAGE, d.key);
+        loadCurrentKey();
+      }
+      if (st) {
+        st.textContent = d.message || d.error || 'Could not claim booster key.';
+        st.className = d.status === 'already_active' ? 'status' : 'status err';
+      }
+      loadBoosterStatus();
+    }
+  } catch {
+    if (st) { st.textContent = 'Network error — please retry in a moment.'; st.className = 'status err'; }
     if (btn) btn.disabled = false;
   }
 }
@@ -663,4 +793,5 @@ loadCurrentKey();
 loadDiscordStatus();
 loadHwidStatus();
 loadReferralStats();
+loadBoosterStatus();
 loadOffers();

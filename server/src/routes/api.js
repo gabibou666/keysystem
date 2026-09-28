@@ -1066,6 +1066,184 @@ router.post('/referrals/claim', async (req, res) => {
   }
 });
 
+// ============================================================================
+// BOOSTER SYSTEM: Clés 7 jours gratuites (0 pub) pour les Server Boosters Discord
+// Anti-abus strict:
+// 1. Vérification en direct sur Discord API (member.premium_since).
+// 2. Anti-cumul: impossible d'empiler des jours (+7j, +7j...) en spammant.
+//    Si la clé a plus de 24h restantes, le renouvellement est refusé (409).
+// 3. Renouvellement de la même clé accordé uniquement si elle a expiré ou
+//    a < 24h restantes, ET si l'utilisateur booste TOUJOURS le serveur.
+// ============================================================================
+const boosterLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  message: { success: false, error: 'Too many requests, please slow down.' },
+});
+
+router.get('/booster/status', async (req, res) => {
+  const discordId = discordService.verifyUserCookie(req.cookies && req.cookies[discordService.USER_COOKIE]);
+  if (!discordId) {
+    return res.json({ loggedIn: false });
+  }
+
+  try {
+    const [boosterData, activeKeyRes, inviteUrl] = await Promise.all([
+      discordService.getBoosterStatus(discordId),
+      pool.query(
+        `SELECT id, kid, signature, expires_at, revoked, duration_hours, renewed_count
+         FROM keys
+         WHERE owner_discord_id = $1 AND source = 'booster' AND revoked = false
+         ORDER BY id DESC LIMIT 1`,
+        [discordId]
+      ),
+      discordService.getGuildInvite(),
+    ]);
+
+    const activeKey = activeKeyRes.rows[0] || null;
+    let hasActiveKey = false;
+    let remainingHours = 0;
+    let canRenew = false;
+
+    if (activeKey) {
+      const now = Date.now();
+      const expiresAtMs = new Date(activeKey.expires_at).getTime();
+      const remainingMs = expiresAtMs - now;
+      hasActiveKey = remainingMs > 0;
+      remainingHours = Math.max(0, Math.floor(remainingMs / (1000 * 60 * 60)));
+      canRenew = boosterData.isBooster && (!hasActiveKey || remainingHours <= 24);
+    } else {
+      canRenew = boosterData.isBooster;
+    }
+
+    res.json({
+      loggedIn: true,
+      discordId,
+      inGuild: boosterData.inGuild,
+      isBooster: boosterData.isBooster,
+      premiumSince: boosterData.premiumSince,
+      hasActiveKey,
+      remainingHours,
+      canRenew,
+      inviteUrl,
+      key: activeKey ? `${activeKey.kid}.${activeKey.signature}` : null,
+      expiresAt: activeKey ? activeKey.expires_at : null,
+    });
+  } catch (e) {
+    console.error('[booster/status]', e);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+router.post('/booster/claim', boosterLimiter, requireDiscordUser, async (req, res) => {
+  const discordId = req.discordId;
+
+  try {
+    // 1. Verification en direct aupres de Discord
+    const boosterData = await discordService.getBoosterStatus(discordId);
+    if (!boosterData.inGuild) {
+      return res.status(403).json({
+        success: false,
+        error: 'not_in_guild',
+        message: 'You must be a member of our Discord server to claim this reward.',
+      });
+    }
+
+    if (!boosterData.isBooster) {
+      return res.status(403).json({
+        success: false,
+        error: 'not_booster',
+        message: 'You are not currently boosting our Discord server. Boost the server to get a free 7-day key with zero ads!',
+      });
+    }
+
+    // 2. Recherche d'une cle booster existante
+    const existingRes = await pool.query(
+      `SELECT id, kid, signature, expires_at, revoked, duration_hours, renewed_count
+       FROM keys
+       WHERE owner_discord_id = $1 AND source = 'booster' AND revoked = false
+       ORDER BY id DESC LIMIT 1`,
+      [discordId]
+    );
+
+    const existingKey = existingRes.rows[0];
+    const now = Date.now();
+
+    if (existingKey) {
+      const expiresAtMs = new Date(existingKey.expires_at).getTime();
+      const remainingMs = expiresAtMs - now;
+      const remainingHours = remainingMs / (1000 * 60 * 60);
+
+      // ANTI-ABUS / ANTI-CUMUL: Si la cle a plus de 24h restantes, on refuse fermement
+      // d'ajouter du temps en boucle: la cle existante est renvoyee sans cumul.
+      if (remainingHours > 24) {
+        const daysLeft = Math.ceil(remainingHours / 24);
+        return res.status(409).json({
+          success: false,
+          error: 'already_active',
+          message: `You already have an active Booster Key! It expires in ~${daysLeft} day(s). You can renew it once less than 24 hours remain, as long as you are still boosting.`,
+          key: `${existingKey.kid}.${existingKey.signature}`,
+          expiresAt: existingKey.expires_at,
+          remainingHours: Math.round(remainingHours),
+        });
+      }
+
+      // La cle est expiree ou a moins de 24h restantes: prolongation de 7 jours (168h)
+      const upd = await pool.query(
+        `UPDATE keys
+         SET expires_at = GREATEST(expires_at, now()) + make_interval(hours => 168),
+             duration_hours = 168,
+             renewed_count = renewed_count + 1
+         WHERE id = $1
+         RETURNING id, kid, signature, expires_at`,
+        [existingKey.id]
+      );
+      const updatedKey = upd.rows[0];
+
+      await pool.query(
+        `INSERT INTO booster_claims (discord_id, key_id, action) VALUES ($1, $2, 'renew')`,
+        [discordId, updatedKey.id]
+      ).catch(() => {});
+
+      return res.json({
+        success: true,
+        action: 'renew',
+        key: `${updatedKey.kid}.${updatedKey.signature}`,
+        expiresAt: updatedKey.expires_at,
+        message: '🎉 Your 7-day Booster Key has been renewed successfully! Thank you for supporting the server.',
+      });
+    }
+
+    // 3. Premiere attribution: creation d'une nouvelle cle 7 jours (168h)
+    const gen = crypto.generateKey();
+    const duration = 168; // 7 jours = 168 heures
+    const ins = await pool.query(
+      `INSERT INTO keys (kid, signature, duration_hours, owner_discord_id, expires_at, source, note)
+       VALUES ($1, $2, $3, $4, now() + make_interval(hours => $3), 'booster', 'Discord Server Booster Reward')
+       RETURNING id, kid, signature, expires_at`,
+      [gen.kid, gen.signature, duration, discordId]
+    );
+    const newKey = ins.rows[0];
+
+    await pool.query(
+      `INSERT INTO booster_claims (discord_id, key_id, action) VALUES ($1, $2, 'create')`,
+      [discordId, newKey.id]
+    ).catch(() => {});
+
+    res.json({
+      success: true,
+      action: 'create',
+      key: `${newKey.kid}.${newKey.signature}`,
+      expiresAt: newKey.expires_at,
+      message: '🚀 Free 7-Day Booster Key unlocked! Zero ads needed as long as you boost our server.',
+    });
+  } catch (e) {
+    console.error('[booster/claim]', e);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 // ---------- POST /api/v1/check ----------
 // Loader: { key, userId, executor, placeId } -> { script } si OK
 router.post('/v1/check', checkLimiter, async (req, res) => {

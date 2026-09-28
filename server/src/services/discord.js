@@ -327,6 +327,47 @@ async function createPermanentInvite() {
   return null;
 }
 
+// Verification temps-reel du statut Server Booster (anti-abus: verification directe sur Discord API)
+async function getBoosterStatus(discordId) {
+  if (!discordId) return { inGuild: false, isBooster: false, premiumSince: null };
+  const guildId = process.env.DISCORD_GUILD_ID;
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (!guildId || !botToken) {
+    return { inGuild: false, isBooster: false, premiumSince: null, reason: 'bot_not_configured' };
+  }
+
+  try {
+    const res = await fetch(`https://discord.com/api/guilds/${guildId}/members/${discordId}`, {
+      headers: { Authorization: `Bot ${botToken}` },
+      signal: AbortSignal.timeout(6000),
+    });
+
+    if (res.status === 200) {
+      const member = await res.json();
+      // premium_since est une date ISO si le membre booste le serveur, sinon null
+      const isBooster = Boolean(member && member.premium_since);
+      // Mettre aussi a jour le cache de presence
+      memberCache.set(discordId, { inGuild: true, ts: Date.now() });
+      return {
+        inGuild: true,
+        isBooster,
+        premiumSince: member.premium_since || null,
+        roles: member.roles || [],
+      };
+    } else if (res.status === 404) {
+      memberCache.set(discordId, { inGuild: false, ts: Date.now() });
+      return { inGuild: false, isBooster: false, premiumSince: null };
+    } else if (res.status === 429) {
+      console.warn('[discord] getBoosterStatus rate-limited (429)');
+      return { inGuild: true, isBooster: false, premiumSince: null, rateLimited: true };
+    }
+    return { inGuild: true, isBooster: false, premiumSince: null };
+  } catch (e) {
+    console.warn('[discord] getBoosterStatus network error:', e.message);
+    return { inGuild: true, isBooster: false, premiumSince: null };
+  }
+}
+
 module.exports = {
   USER_COOKIE,
   USER_TTL_MS,
@@ -339,4 +380,6 @@ module.exports = {
   upsertJoin,
   isGuildMember,
   getGuildInvite,
+  getBoosterStatus,
 };
+
