@@ -217,9 +217,15 @@ app.use(
         // ete extraits dans web/app-*.js. Les attributs onclick= restent
         // autorises via script-src-attr (tolerance temporaire, documentee:
         // toute injection HTML est bloquee par l'echappement strict cote front).
-        scriptSrc: ALLOW_INLINE_SCRIPTS
-          ? ["'self'", "'unsafe-inline'", 'https://www.highrevenueformat.com', "'unsafe-eval'", ...valeursSupplementairesScript()]
-          : ["'self'", 'https://www.highrevenueformat.com'],
+        scriptSrc: [
+          "'self'",
+          'https://www.highrevenueformat.com',
+          'https://*.highrevenueformat.com',
+          'https://aqml.org',
+          'https://*.aqml.org',
+          ...(ALLOW_INLINE_SCRIPTS ? ["'unsafe-inline'", "'unsafe-eval'"] : []),
+          ...valeursSupplementairesScript(),
+        ],
         scriptSrcAttr: ["'unsafe-inline'"],
         // Violations remontees sur /api/csp-report (log + alerte Discord):
         // on detecte immediatement un partenaire qui aurait besoin d'une
@@ -248,8 +254,17 @@ app.use(
           // qui se paie en revenu. Extensible sans redeployer de code via
           // CSP_EXTRA_CONNECT_SRC (voir README).
           'https://protrafficinspector.com',
+          'https://*.protrafficinspector.com',
           'https://kettledroopingcontinuation.com',
+          'https://*.kettledroopingcontinuation.com',
           'https://spendsdetachment.com',
+          'https://*.spendsdetachment.com',
+          'https://zoologyfibre.com',
+          'https://*.zoologyfibre.com',
+          'https://workdeadlinededicate.com',
+          'https://*.workdeadlinededicate.com',
+          'https://aqml.org',
+          'https://*.aqml.org',
           ...originesSupplementaires(),
         ],
         objectSrc: ["'none'"],
@@ -299,6 +314,23 @@ app.get('/ping', (req, res) => res.set('Cache-Control', 'no-store').json({ ok: t
 // publicitaire tente d'injecter un script inline, on le voit ici (log + alerte
 // Discord) au lieu de le decouvrir via une baisse de revenu inexplicable.
 const cspAlertState = { lastAt: 0 };
+// Extensions de navigateur connues (Perplexity AI, gestionnaires de mots de passe, traducteurs)
+// qui injectent des polices ou des scripts locaux chez le visiteur. Ce ne sont PAS des erreurs
+// du site ni des annonceurs: les logger en console mais NE PAS alerter Discord.
+const IGNORED_CSP_REPORT_PATTERNS = [
+  /chrome-extension:\/\//i,
+  /moz-extension:\/\//i,
+  /safari-extension:\/\//i,
+  /edge-extension:\/\//i,
+  /perplexity\.ai/i,
+  /grammarly/i,
+  /metamask/i,
+  /lastpass/i,
+  /bitwarden/i,
+  /1password/i,
+  /about:blank/i,
+];
+
 app.post('/api/csp-report', (req, res) => {
   try {
     const raw = req.body || {};
@@ -307,6 +339,11 @@ app.post('/api/csp-report', (req, res) => {
     const blocked = report['blocked-uri'] || report.blockedURL || '(inconnu)';
     const page = report['document-uri'] || report.documentURL || '(inconnue)';
     console.warn(`[csp] ${directive} <- ${String(blocked).slice(0, 120)} (page ${String(page).slice(0, 120)})`);
+
+    const blockedStr = String(blocked);
+    if (IGNORED_CSP_REPORT_PATTERNS.some((pat) => pat.test(blockedStr))) {
+      return res.status(204).end();
+    }
 
     const now = Date.now();
     if (now - cspAlertState.lastAt > 10 * 60 * 1000) {

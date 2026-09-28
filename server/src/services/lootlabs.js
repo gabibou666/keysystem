@@ -164,11 +164,12 @@ async function createMonetizedLink({ ads, durationHours: hours, puid }) {
     throw err;
   }
 
-  // Ajoute le puid pour le postback anti-bypass
-  const lootUrl = `${lootUrlRaw}&puid=${puid}`;
+  // Ajoute le puid (pour le postback click_id) et le subid (pour la Statistics API)
+  const sep = lootUrlRaw.includes('?') ? '&' : '?';
+  const lootUrl = `${lootUrlRaw}${sep}puid=${encodeURIComponent(puid)}&subid=${encodeURIComponent(puid)}`;
   // tasksRequired = nombre de postbacks exiges avant la cle: EXACTEMENT le
   // nombre de publicites du palier (aucun arrondi, aucune deduction).
-  return { lootUrl, ads: tier.ads, tasksRequired: tier.ads, durationHours: duree };
+  return { lootUrl, short: msg?.short || null, ads: tier.ads, tasksRequired: tier.ads, durationHours: duree };
 }
 
 module.exports = {

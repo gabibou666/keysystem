@@ -36,7 +36,8 @@ async function fetchSubidRevenue(fromDaysAgo = 2) {
   let feeds = [];
   try {
     const f = await httpGetJson(`${REPORTS_URL}/feeds?api_token=${token}`);
-    feeds = (f.feeds || []).map((x) => x._id);
+    const list = Array.isArray(f?.message) ? f.message : Array.isArray(f?.feeds) ? f.feeds : [];
+    feeds = list.map((x) => x._id);
   } catch {
     return new Map();
   }
@@ -71,7 +72,8 @@ async function auditRecentSessions(notify) {
     const { rows } = await pool.query(
       `SELECT puid, ip, owner_discord_id, completed_at
        FROM ll_sessions
-       WHERE status IN ('completed','claimed') AND revenue_verified = false
+       WHERE provider = 'lootlabs'
+         AND status IN ('completed','claimed') AND revenue_verified = false
          AND completed_at > now() - interval '2 days'`
     );
     if (!rows.length) return { checked: 0 };
