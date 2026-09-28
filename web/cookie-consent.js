@@ -75,7 +75,7 @@
     banner.setAttribute('aria-describedby', 'ksCookieDesc');
 
     banner.innerHTML = `
-      <h3 id="ksCookieTitle">🍪 We Value Your Privacy</h3>
+      <h3 id="ksCookieTitle" style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"></path><path d="M8.5 8.5v.01"></path><path d="M7.5 15.5v.01"></path><path d="M12 18v.01"></path><path d="M16 14v.01"></path></svg> Privacy Preferences</h3>
       <p id="ksCookieDesc">
         We use essential cookies to operate and secure our service (sessions, anti-DDoS).
         With your consent, we also use third-party advertising cookies to keep our service completely free.
@@ -108,7 +108,7 @@
     overlay.innerHTML = `
       <div class="ks-cookie-modal">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <h3 id="ksModalTitle" style="margin:0;font-size:18px;color:#ffffff;">⚙️ Cookie Preferences</h3>
+          <h3 id="ksModalTitle" style="margin:0;font-size:18px;color:#ffffff;display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> Cookie Preferences</h3>
           <button type="button" id="ksCloseModalBtn" style="background:none;border:none;color:var(--color-muted-2);font-size:20px;cursor:pointer;" aria-label="Close">✕</button>
         </div>
         <p style="color:var(--color-muted);font-size:13px;line-height:1.6;margin-bottom:18px;">

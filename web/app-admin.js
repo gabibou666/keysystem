@@ -80,23 +80,23 @@ async function loadDashboard() {
     const d = await api('/stats');
     document.getElementById('dashStats').innerHTML = `
       <div class="admin-stat fade-up">
-        <div class="stat-icon">⚡</div>
+        <div class="stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div>
         <div class="num">${fmtNum(d.executions)}</div>
         <div class="lbl">Total executions</div>
       </div>
       <div class="admin-stat fade-up fade-up-d1">
-        <div class="stat-icon">👥</div>
+        <div class="stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
         <div class="num">${fmtNum(d.uniqueUsers)}</div>
         <div class="lbl">Unique users</div>
       </div>
       <div class="admin-stat fade-up fade-up-d2">
-        <div class="stat-icon">🔑</div>
+        <div class="stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></div>
         <div class="num">${fmtNum(d.keysPerDay?.reduce((a, x) => a + x.c, 0) || 0)}</div>
         <div class="lbl">Keys created (30d)</div>
         <div class="sub-stat"><span class="ss"><b>${d.manualKeysTotal}</b> manual</span></div>
       </div>
       <div class="admin-stat fade-up fade-up-d3">
-        <div class="stat-icon">⚠️</div>
+        <div class="stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
         <div class="num">${d.errors7d}</div>
         <div class="lbl">Errors (7d)</div>
       </div>`;
@@ -104,16 +104,16 @@ async function loadDashboard() {
     const max = Math.max(1, ...d.perDay.map(x => x.c));
     document.getElementById('perday').innerHTML = d.perDay.length
       ? d.perDay.map(x => barRow(x.d, x.c, max, 'violet')).join('')
-      : '<div class="empty-state"><div class="icon">📊</div>No data yet</div>';
+      : '<div class="empty-state">No data yet</div>';
 
     const kmax = Math.max(1, ...(d.keysPerDay || []).map(x => x.c));
     document.getElementById('keysperday').innerHTML = (d.keysPerDay || []).length
       ? d.keysPerDay.map(x => barRow(x.d, x.c, kmax, 'pink')).join('')
-      : '<div class="empty-state"><div class="icon">🔑</div>No keys created yet</div>';
+      : '<div class="empty-state">No keys created yet</div>';
 
     document.getElementById('byexec').innerHTML = d.byExecutor.length
       ? d.byExecutor.map(x => barRow(x.executor || 'unknown', x.c, d.byExecutor[0].c, 'violet')).join('')
-      : '<div class="empty-state"><div class="icon">🧩</div>No executions yet</div>';
+      : '<div class="empty-state">No executions yet</div>';
 
     dashLoaded = true;
   } catch {}
@@ -127,18 +127,18 @@ async function loadRevenue() {
 
     document.getElementById('revStats').innerHTML = `
       <div class="admin-stat revenue fade-up">
-        <div class="stat-icon">💰</div>
+        <div class="stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
         <div class="num">${fmtNum(t.revenueR$)} R$</div>
         <div class="lbl">Total revenue</div>
         <div class="sub-stat"><span class="ss"><b>${fmtNum(t.purchases)}</b> total sales</span></div>
       </div>
       <div class="admin-stat fade-up fade-up-d1">
-        <div class="stat-icon">📦</div>
+        <div class="stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
         <div class="num">${fmtNum(t.purchases)}</div>
         <div class="lbl">Total purchases</div>
       </div>
       <div class="admin-stat fade-up fade-up-d2">
-        <div class="stat-icon">📈</div>
+        <div class="stat-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
         <div class="num">${d.perDay.length ? d.perDay.slice(-7).reduce((a, x) => a + x.revenue, 0) : 0} R$</div>
         <div class="lbl">Last 7 days</div>
       </div>`;
@@ -147,7 +147,7 @@ async function loadRevenue() {
     const maxRev = Math.max(1, ...d.perDay.map(x => x.revenue));
     document.getElementById('revPerDay').innerHTML = d.perDay.length
       ? d.perDay.map(x => barRow(x.d, x.revenue + ' R$', maxRev, 'gold')).join('')
-      : '<div class="empty-state"><div class="icon">💰</div>No revenue data yet</div>';
+      : '<div class="empty-state">No revenue data yet</div>';
 
     // Offer breakdown cards
     document.getElementById('offerBreakdown').innerHTML = d.perOffer.length
@@ -160,7 +160,7 @@ async function loadRevenue() {
             <div class="offer-price">${o.priceR$} R$ each</div>
           </div>`;
         }).join('')
-      : '<div class="empty-state"><div class="icon">📦</div>No offers sold yet</div>';
+      : '<div class="empty-state">No offers sold yet</div>';
 
     // Recent sales table
     const tbody = document.querySelector('#salesTable tbody');
@@ -215,13 +215,13 @@ async function createKeys() {
   const note = document.getElementById('ckNote').value.trim();
   const boundUserId = boundRaw ? parseInt(boundRaw, 10) : null;
 
-  if (!Number.isFinite(durationHours) || durationHours < 1) { msg.textContent = '❌ Invalid duration (min 1 hour)'; msg.className = 'msg err'; return; }
-  if (boundUserId !== null && !Number.isFinite(boundUserId)) { msg.textContent = '❌ Invalid UserId'; msg.className = 'msg err'; return; }
+  if (!Number.isFinite(durationHours) || durationHours < 1) { msg.textContent = 'Invalid duration (min 1 hour)'; msg.className = 'msg err'; return; }
+  if (boundUserId !== null && !Number.isFinite(boundUserId)) { msg.textContent = 'Invalid UserId'; msg.className = 'msg err'; return; }
 
-  msg.textContent = '⏳ Generating…'; msg.className = 'msg';
+  msg.textContent = 'Generating…'; msg.className = 'msg';
   try {
     const d = await api('/keys/create', { method: 'POST', body: JSON.stringify({ durationHours, count, boundUserId, note }) });
-    if (!d.success) { msg.textContent = '❌ ' + d.error; msg.className = 'msg err'; return; }
+    if (!d.success) { msg.textContent = d.error; msg.className = 'msg err'; return; }
     msg.textContent = '';
     document.getElementById('createdCount').textContent = d.count;
     document.getElementById('createdDuration').textContent = d.durationHours + 'h';
@@ -229,7 +229,7 @@ async function createKeys() {
     openModal('createdModal');
     loadKeys();
   } catch (e) {
-    msg.textContent = '❌ Network error'; msg.className = 'msg err';
+    msg.textContent = 'Network error'; msg.className = 'msg err';
   }
 }
 
@@ -254,7 +254,7 @@ async function showKeyDetail(id) {
 
     document.getElementById('detailBody').innerHTML = `
       <textarea readonly rows="2" style="width:100%;font-family:Consolas,monospace;font-size:12px;background:#13101c;border:1px solid #231c33;border-radius:8px;color:#d8b4fe;padding:10px;user-select:all;">${k.keyString}</textarea>
-      <button class="admin-btn small" style="margin-top:8px;" data-key="${esc(k.keyString)}" onclick="navigator.clipboard.writeText(this.dataset.key)">📋 Copy key</button>
+      <button class="admin-btn small" style="margin-top:8px;" data-key="${esc(k.keyString)}" onclick="navigator.clipboard.writeText(this.dataset.key)">Copy key</button>
       <table style="margin-top:16px;width:100%">
         <tr><td style="color:var(--admin-muted-2);padding:6px 0">Status</td><td>${k.revoked ? '<span class="badge err">revoked</span>' : expired ? '<span class="badge muted">expired</span>' : '<span class="badge ok">valid</span>'}</td></tr>
         <tr><td style="color:var(--admin-muted-2);padding:6px 0">Source</td><td>${k.source === 'manual' ? 'manual (no ads)' : 'ad (LootLabs)'}</td></tr>
@@ -324,7 +324,7 @@ async function loadUsers() {
       const ads = u.ads_last_12h || 0;
       let adsBadge = '';
       if (ads >= 2) {
-        adsBadge = `<span class="badge red" style="background:#be185d26; color:#f472b6; border:1px solid #be185d55;">${ads} / 2 (Limit 🔴)</span>`;
+        adsBadge = `<span class="badge red" style="background:#be185d26; color:#f472b6; border:1px solid #be185d55;">${ads} / 2 (Limit reached)</span>`;
       } else if (ads === 1) {
         adsBadge = `<span class="badge yellow" style="background:#eab30826; color:#facc15; border:1px solid #eab30855;">1 / 2 (In progress)</span>`;
       } else {
@@ -332,7 +332,7 @@ async function loadUsers() {
       }
 
       const activeKey = u.active_key_kid 
-        ? `<span style="color:#c084fc; font-family:monospace; font-size:12px;">🔑 ${esc(u.active_key_kid.slice(0, 10))}...</span>`
+        ? `<span style="color:#c084fc; font-family:monospace; font-size:12px;">${esc(u.active_key_kid.slice(0, 10))}...</span>`
         : `<span style="color:var(--admin-muted); font-size:12px;">None</span>`;
 
       return `<tr>
@@ -349,7 +349,7 @@ async function loadUsers() {
         <td>${activeKey}</td>
         <td>
           <button class="admin-btn small ${ads >= 2 ? 'green' : 'ghost'}" data-user-name="${esc(u.username || '')}" onclick="resetUserAdLimit('${esc(u.discord_id)}', this.dataset.userName)">
-            🔄 Reset limit (0/2)
+            Reset limit (0/2)
           </button>
         </td>
       </tr>`;
@@ -366,13 +366,13 @@ async function resetUserAdLimit(discordId, username) {
   try {
     const data = await api(`/users/${encodeURIComponent(discordId)}/reset-limit`, { method: 'POST' });
     if (data.success) {
-      alert(`✅ ${data.message}`);
+      alert(data.message);
       loadUsers();
     } else {
-      alert(`❌ Error: ${data.error || 'Reset failed'}`);
+      alert(`Error: ${data.error || 'Reset failed'}`);
     }
   } catch (e) {
-    alert(`❌ Error: ${e.message}`);
+    alert(`Error: ${e.message}`);
   }
 }
 
@@ -424,12 +424,12 @@ async function loadAntiDdos() {
 
       return `<tr>
         <td class="mono"><b>${esc(item.ip)}</b></td>
-        <td><span class="badge err">⏳ ${timeLeft}</span></td>
+        <td><span class="badge err">${timeLeft}</span></td>
         <td><b>${item.peakCount} reqs / 10s</b></td>
         <td><span class="mono" style="font-size:12px; color:var(--admin-glow);">${esc(item.targetPath)}</span></td>
         <td>
           <button class="admin-btn small green" data-ip="${esc(item.ip)}" onclick="unbanDdosIp(this.dataset.ip)">
-            🔓 Unban IP
+            Unban IP
           </button>
         </td>
       </tr>`;
@@ -449,10 +449,10 @@ async function unbanDdosIp(ip) {
     if (res.success) {
       loadAntiDdos();
     } else {
-      alert(`❌ Error: ${res.error || 'Failed'}`);
+      alert(`Error: ${res.error || 'Failed'}`);
     }
   } catch (e) {
-    alert(`❌ Error: ${e.message}`);
+    alert(`Error: ${e.message}`);
   }
 }
 
@@ -469,14 +469,14 @@ async function loadGameStatuses() {
     }
     tbody.innerHTML = d.games.map(g => {
       const st = g.status || 'safe';
-      let badgeHtml = '<span class="badge ok">🟢 Safe / Undetected</span>';
-      if (st === 'updating') badgeHtml = '<span class="badge" style="background:#f59e0b1f;color:#fbbf24;border:1px solid #f59e0b44;">🟡 Updating</span>';
-      if (st === 'detected') badgeHtml = '<span class="badge err">🔴 Detected / Down</span>';
+      let badgeHtml = '<span class="badge ok">Safe / Undetected</span>';
+      if (st === 'updating') badgeHtml = '<span class="badge" style="background:#f59e0b1f;color:#fbbf24;border:1px solid #f59e0b44;">Updating</span>';
+      if (st === 'detected') badgeHtml = '<span class="badge err">Detected / Down</span>';
 
       return `<tr>
         <td>
           <div style="display:flex; align-items:center; gap:10px;">
-            ${g.iconUrl ? `<img src="${g.iconUrl}" alt="${esc(g.name)} server icon" style="width:28px;height:28px;border-radius:6px;object-fit:cover;">` : '🎮'}
+            ${g.iconUrl ? `<img src="${g.iconUrl}" alt="${esc(g.name)} server icon" style="width:28px;height:28px;border-radius:6px;object-fit:cover;">` : '<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:var(--admin-card);border-radius:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="12" x2="10" y2="12"></line><line x1="8" y1="10" x2="8" y2="14"></line><line x1="15" y1="13" x2="15.01" y2="13"></line><line x1="18" y1="11" x2="18.01" y2="11"></line></svg></span>'}
             <b>${esc(g.name)}</b>
           </div>
         </td>
@@ -485,16 +485,16 @@ async function loadGameStatuses() {
         <td id="curr-status-${g.placeId}">${badgeHtml}</td>
         <td>
           <select id="sel-status-${g.placeId}" class="admin-input" style="padding:4px 8px; font-size:12.5px;">
-            <option value="safe" ${st === 'safe' ? 'selected' : ''}>🟢 Safe / Undetected</option>
-            <option value="updating" ${st === 'updating' ? 'selected' : ''}>🟡 Updating</option>
-            <option value="detected" ${st === 'detected' ? 'selected' : ''}>🔴 Detected</option>
+            <option value="safe" ${st === 'safe' ? 'selected' : ''}>Safe / Undetected</option>
+            <option value="updating" ${st === 'updating' ? 'selected' : ''}>Updating</option>
+            <option value="detected" ${st === 'detected' ? 'selected' : ''}>Detected</option>
           </select>
         </td>
         <td>
           <input id="note-status-${g.placeId}" class="admin-input" value="${esc(g.statusNote || '')}" placeholder="Note (ex: Update v2)" style="width:160px; padding:4px 8px; font-size:12px;">
         </td>
         <td>
-          <button class="admin-btn small green" onclick="saveGameStatus(${g.placeId})">💾 Save</button>
+          <button class="admin-btn small green" onclick="saveGameStatus(${g.placeId})">Save</button>
         </td>
       </tr>`;
     }).join('');
@@ -518,10 +518,10 @@ async function saveGameStatus(placeId) {
     if (res.success) {
       loadGameStatuses();
     } else {
-      alert(`❌ Error: ${res.error || 'Failed'}`);
+      alert(`Error: ${res.error || 'Failed'}`);
     }
   } catch (e) {
-    alert(`❌ Error: ${e.message}`);
+    alert(`Error: ${e.message}`);
   }
 }
 
@@ -547,10 +547,10 @@ async function addNewGameStatus() {
       if (noteInput) noteInput.value = '';
       loadGameStatuses();
     } else {
-      alert(`❌ Error: ${res.error || 'Failed'}`);
+      alert(`Error: ${res.error || 'Failed'}`);
     }
   } catch (e) {
-    alert(`❌ Error: ${e.message}`);
+    alert(`Error: ${e.message}`);
   }
 }
 
@@ -561,7 +561,7 @@ async function loadVersions() {
     document.querySelector('#versionsTable tbody').innerHTML = d.versions.map(v =>
       `<tr>
         <td><b>v${v.version}</b></td>
-        <td>${v.place_id ? '<span class="mono" style="color:var(--admin-glow)">🎮 ' + v.place_id + '</span><br>' : ''}<span style="font-size:12px;color:var(--admin-muted-2)">${esc(v.note)}</span></td>
+        <td>${v.place_id ? '<span class="mono" style="color:var(--admin-glow)">Place ' + v.place_id + '</span><br>' : ''}<span style="font-size:12px;color:var(--admin-muted-2)">${esc(v.note)}</span></td>
         <td class="mono">${new Date(v.created_at).toLocaleString('en-US')}</td>
         <td>${v.builds}</td>
         <td>${v.published ? '<span class="badge ok">published</span>' : '<span class="badge muted">draft</span>'}</td>
@@ -594,30 +594,30 @@ async function saveScript() {
   const placeId = placeIdRaw ? parseInt(placeIdRaw) : null;
   const msg = document.getElementById('scriptMsg');
   if (placeId !== null && !Number.isFinite(placeId)) {
-    msg.textContent = '❌ Invalid PlaceId'; msg.className = 'msg err'; return;
+    msg.textContent = 'Invalid PlaceId'; msg.className = 'msg err'; return;
   }
-  msg.textContent = '⏳ Pipeline running…'; msg.className = 'msg';
+  msg.textContent = 'Pipeline running…'; msg.className = 'msg';
   try {
     const d = await api('/script/save', { method: 'POST', body: JSON.stringify({ source, note, placeId }) });
     if (d.success) {
-      msg.innerHTML = `✅ Draft v${d.version} — ${d.buildType === 'ai' ? d.patches + ' AI patch(es)' : 'shims only'}.`;
+      msg.innerHTML = `Draft v${d.version} (${d.buildType === 'ai' ? d.patches + ' patch(es)' : 'shims only'}).`;
       msg.className = 'msg ok';
       document.getElementById('scriptNote').value = '';
       loadVersions();
     } else {
-      msg.textContent = '❌ ' + d.error; msg.className = 'msg err';
+      msg.textContent = d.error; msg.className = 'msg err';
     }
   } catch (e) {
-    msg.textContent = '❌ Network error'; msg.className = 'msg err';
+    msg.textContent = 'Network error'; msg.className = 'msg err';
   }
 }
 async function publishVersion(version) {
   const d = await api('/script/publish', { method: 'POST', body: JSON.stringify({ version }) });
   if (d.success) {
-    document.getElementById('scriptMsg').textContent = `✅ v${version} published!`;
+    document.getElementById('scriptMsg').textContent = `v${version} published!`;
     document.getElementById('scriptMsg').className = 'msg ok';
   } else {
-    document.getElementById('scriptMsg').textContent = '❌ ' + d.error;
+    document.getElementById('scriptMsg').textContent = d.error;
     document.getElementById('scriptMsg').className = 'msg err';
   }
   loadVersions();
@@ -804,13 +804,13 @@ async function loadPatches() {
     const d = await api('/patches/pending');
     const el = document.getElementById('patchesList');
     if (!d.patches || !d.patches.length) {
-      el.innerHTML = '<div class="empty-state"><div class="icon">✨</div>No pending patches</div>';
+      el.innerHTML = '<div class="empty-state">No pending patches</div>';
       return;
     }
     el.innerHTML = d.patches.map(p =>
       `<div style="background:#17141f;border:1px solid var(--admin-border-accent);border-radius:12px;padding:18px;margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <span><b style="color:var(--admin-glow)">v${p.version}</b> — <span style="color:var(--admin-muted-2)">${esc(p.reason)}</span></span>
+          <span><b style="color:var(--admin-glow)">v${p.version}</b> : <span style="color:var(--admin-muted-2)">${esc(p.reason)}</span></span>
         </div>
         <div style="background:#0d0b12;border:1px solid var(--admin-border);border-radius:8px;padding:12px;font-family:Consolas,monospace;font-size:12px;margin-bottom:12px;">
           <div style="color:var(--admin-muted-2);margin-bottom:6px;font-family:sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.05em">FIND:</div>
@@ -819,8 +819,8 @@ async function loadPatches() {
           <div style="color:var(--admin-ok);white-space:pre-wrap">${esc(p.replace)}</div>
         </div>
         <div style="display:flex;gap:8px">
-          <button class="admin-btn small green" onclick="approvePatch(${p.id})">✅ Approve</button>
-          <button class="admin-btn small red" onclick="rejectPatch(${p.id})">❌ Reject</button>
+          <button class="admin-btn small green" onclick="approvePatch(${p.id})">Approve</button>
+          <button class="admin-btn small red" onclick="rejectPatch(${p.id})">Reject</button>
         </div>
       </div>`
     ).join('');
@@ -914,7 +914,7 @@ async function onBotGuildChange() {
     const el = document.getElementById(id);
     if (!el) return;
     el.innerHTML = `<option value="">${defaultText}</option>` +
-      items.map(it => `<option value="${it.id}">📁 ${esc(it.name)}</option>`).join('');
+      items.map(it => `<option value="${it.id}">${esc(it.name)}</option>`).join('');
   };
 
   fillSelect('botVerifChannel', textChannels);
@@ -965,7 +965,7 @@ async function saveBotSettings() {
   const statusEl = document.getElementById('botSaveStatus');
   if (!guildId) return;
 
-  statusEl.textContent = '⏳ Saving...';
+  statusEl.textContent = 'Saving...';
   statusEl.style.color = 'var(--admin-muted)';
 
   const payload = {
@@ -996,15 +996,15 @@ async function saveBotSettings() {
       body: JSON.stringify(payload),
     });
     if (res.success) {
-      statusEl.textContent = '✅ Configuration saved to the bot successfully!';
+      statusEl.textContent = 'Configuration saved to the bot successfully!';
       statusEl.style.color = 'var(--admin-ok)';
       setTimeout(() => { statusEl.textContent = ''; }, 4000);
     } else {
-      statusEl.textContent = '❌ Error: ' + (res.error || 'Could not save');
+      statusEl.textContent = 'Error: ' + (res.error || 'Could not save');
       statusEl.style.color = 'var(--admin-err)';
     }
   } catch (e) {
-    statusEl.textContent = '❌ Network error while saving';
+    statusEl.textContent = 'Network error while saving';
     statusEl.style.color = 'var(--admin-err)';
   }
 }
@@ -1035,12 +1035,12 @@ async function deployBotPanel(panelType) {
       body: JSON.stringify({ panel_type: panelType, channel_id: channelId }),
     });
     if (res.success) {
-      alert(`✅ "${panelType}" panel sent to Discord successfully!`);
+      alert(`"${panelType}" panel sent to Discord successfully!`);
     } else {
-      alert(`❌ Error: ${res.error || 'Deployment failed'}`);
+      alert(`Error: ${res.error || 'Deployment failed'}`);
     }
   } catch (e) {
-    alert(`❌ Network error: ${e.message}`);
+    alert(`Network error: ${e.message}`);
   }
 }
 
@@ -1061,7 +1061,7 @@ async function sendBotAnnouncement() {
     return;
   }
 
-  statusEl.textContent = '⏳ Sending...';
+  statusEl.textContent = 'Sending...';
   statusEl.style.color = 'var(--admin-muted)';
 
   try {
@@ -1075,17 +1075,17 @@ async function sendBotAnnouncement() {
       }),
     });
     if (res.success) {
-      statusEl.textContent = '✅ Announcement sent to Discord successfully!';
+      statusEl.textContent = 'Announcement sent to Discord successfully!';
       statusEl.style.color = 'var(--admin-ok)';
       document.getElementById('botAnnounceTitle').value = '';
       document.getElementById('botAnnounceDesc').value = '';
       setTimeout(() => { statusEl.textContent = ''; }, 4000);
     } else {
-      statusEl.textContent = '❌ Error: ' + (res.error || 'Send failed');
+      statusEl.textContent = 'Error: ' + (res.error || 'Send failed');
       statusEl.style.color = 'var(--admin-err)';
     }
   } catch (e) {
-    statusEl.textContent = '❌ Network error while sending';
+    statusEl.textContent = 'Network error while sending';
     statusEl.style.color = 'var(--admin-err)';
   }
 }

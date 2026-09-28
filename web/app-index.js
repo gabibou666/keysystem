@@ -54,8 +54,8 @@ function countUp(el, target, duration = 1200) {
       stop();
       localStorage.setItem(KEY_STORAGE, d.key);
       loadKeyInfo();
-      setStatus('🎉 Your key is ready! Copy it above.', 'ok');
-      showToast('🎉 Your key is ready!', 'ok');
+      setStatus('Your key is ready! Copy it above.', 'ok');
+      showToast('Your key is ready!', 'ok');
     } else if (!d.success && ['already_claimed', 'forbidden', 'token_expired', 'token_invalid', 'rejected', 'revoked_key'].includes(d.status)
                || d.error === 'Unknown session') {
       // Session definitivement morte: arreter de poller (l'onglet getkey a
@@ -164,7 +164,7 @@ function renderGames() {
     }
     return `
     <div class="game-card" style="animation-delay: ${i * 0.05}s">
-      <div class="g-icon">${g.iconUrl ? `<img src="${g.iconUrl}" alt="${g.name} game icon" loading="lazy">` : '🎮'}</div>
+      <div class="g-icon">${g.iconUrl ? `<img src="${g.iconUrl}" alt="${g.name} game icon" loading="lazy">` : '<svg class="icon-svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" y1="11" x2="10" y2="11"/><line x1="8" y1="9" x2="8" y2="13"/><line x1="15.5" y1="10.5" x2="15.6" y2="10.5"/><line x1="18" y1="13" x2="18.1" y2="13"/><path d="M17.5 5H6.5A4.5 4.5 0 0 0 2 9.5v5A4.5 4.5 0 0 0 6.5 19h11a4.5 4.5 0 0 0 4.5-4.5v-5A4.5 4.5 0 0 0 17.5 5Z"/></svg>'}</div>
       <div class="g-body">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
           <div class="g-name" title="${g.name.replace(/"/g, '&quot;')}">${g.name.replace(/</g, '&lt;')}</div>
@@ -188,6 +188,8 @@ async function loadGames() {
     const d = await r.json();
     allGamesCache = d.games || [];
     renderGames();
+    const gamesCountEl = document.getElementById('statGamesCount');
+    if (gamesCountEl) gamesCountEl.textContent = allGamesCache.length.toLocaleString('en-US');
   } catch {
     if (grid) grid.innerHTML = '<p class="games-empty">Failed to load games.</p>';
   }
@@ -250,7 +252,7 @@ async function loadKeyInfo(customKey) {
     }
     if (d.inDiscord === false) {
       if (wrap) wrap.classList.remove('hidden');
-      setStatus('⚠️ Inactive: You left our Discord! Rejoin to use your key.', 'err');
+      setStatus('Inactive: You left our Discord! Rejoin to use your key.', 'err');
       return;
     }
     if (wrap) wrap.classList.remove('hidden');
@@ -299,7 +301,7 @@ function copyKey() {
   if (v) {
     navigator.clipboard.writeText(v);
     setStatus('Key copied!', 'ok');
-    if (window.showToast) showToast('🔑 Key copied to clipboard!');
+    if (window.showToast) showToast('Key copied to clipboard!');
     flashCopied(document.querySelector('#keyCard .keybox .btn.small'), 'Copy');
   }
 }
@@ -307,13 +309,13 @@ function copyKey() {
 function copyLuauScriptFromKey(rawKey) {
   let key = (rawKey || localStorage.getItem(KEY_STORAGE) || '').trim();
   if (!key) {
-    if (window.showToast) showToast('⚠️ Enter or obtain a key first!', 'err');
+    if (window.showToast) showToast('Enter or obtain a key first!', 'err');
     return;
   }
   const script = `getgenv().Key = "${key}"\nloadstring(game:HttpGet("${location.origin}/api/v1/loader"))()`;
   navigator.clipboard.writeText(script).then(() => {
     setStatus('Full script with key copied!', 'ok');
-    if (window.showToast) showToast('⚡ Luau script with key copied! Paste directly into your executor.');
+    if (window.showToast) showToast('Luau script with key copied! Paste directly into your executor.');
   }).catch(() => {
     prompt('Copy this script into your executor:', script);
   });
@@ -325,7 +327,7 @@ function copyHeroLoader() {
     const txt = document.getElementById('heroCopyText');
     if (txt) txt.textContent = 'Copied ✓';
     if (btn) btn.classList.add('copied');
-    if (window.showToast) showToast('📋 Loader copied to clipboard!');
+    if (window.showToast) showToast('Loader copied to clipboard!');
     setTimeout(() => {
       if (txt) txt.textContent = 'Copy';
       if (btn) btn.classList.remove('copied');
@@ -351,22 +353,6 @@ async function loadChangelog() {
 
 const fmtNum = (v) => Number(v || 0).toLocaleString('en-US');
 
-function tickerEvents() {
-  const ev = [];
-  const a = activityCache || {};
-  if (a.executionsToday) ev.push({ icon: '⚡', text: `${fmtNum(a.executionsToday)} script executions today`, time: 'live' });
-  if (a.onlineNow) ev.push({ icon: '👥', text: `${fmtNum(a.onlineNow)} users online right now`, time: 'now' });
-  if (a.usersToday) ev.push({ icon: '🔑', text: `${fmtNum(a.usersToday)} users got access today`, time: 'today' });
-  if (a.totalUsers) ev.push({ icon: '📈', text: `${fmtNum(a.totalUsers)} accounts served in total`, time: 'total' });
-  const top = (allGamesCache || [])[0];
-  if (top && top.playing) ev.push({ icon: '🔥', text: `${top.name} — ${fmtNum(top.playing)} playing now`, time: 'live' });
-  const count = (allGamesCache || []).length;
-  if (count) ev.push({ icon: '🎮', text: `${count} supported game${count > 1 ? 's' : ''} with a live build`, time: 'updated' });
-  const latest = changelogCache[0];
-  if (latest) ev.push({ icon: '🆕', text: `v${latest.version} published${latest.gameName ? ' for ' + latest.gameName : ''}`, time: 'changelog' });
-  return ev;
-}
-
 // Initialise le code du terminal hero avec le bon origin
 const heroCodeEl = document.getElementById('heroTerminalCode');
 if (heroCodeEl) {
@@ -377,9 +363,6 @@ loadKeyInfo();
 loadGames();
 loadActivity();
 loadChangelog();
-if (window.startSocialTicker) {
-  window.startSocialTicker(document.getElementById('socialTickerBar'), tickerEvents);
-}
 setInterval(loadStats, 30000);
 setInterval(loadActivity, 30000);
 

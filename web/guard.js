@@ -105,10 +105,10 @@
     ov.innerHTML =
       '<div style="max-width: 540px; margin: 20px; padding: 28px; border-radius: 16px; ' +
       'background: #13101ccc; border: 1px solid #6d28d980; text-align: center; color: #fff;">' +
-      '<div style="font-size: 44px; margin-bottom: 10px;">🚫</div>' +
+      '<div style="margin-bottom: 14px;"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#f472b6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg></div>' +
       '<h2 id="adblockGuardTitle" style="margin: 0 0 8px; font-size: 24px;">Ad blocker detected</h2>' +
       '<p style="margin: 0 0 18px; color: #ffffffa8; font-size: 15px; line-height: 1.6;">' +
-      'This site stays free thanks to ads — the key page can\'t work while your ad blocker is active.<br>' +
+      'This site stays free thanks to ads: the key page can\'t work while your ad blocker is active.<br>' +
       'Allow <b style="color:#c084fc;">' + location.hostname + '</b> and it unlocks automatically.</p>' +
       '<div style="padding: 14px; border-radius: 10px; background: #0b0812; ' +
       'border: 1px solid #ffffff14; color: #ffffffa8; font-size: 13.5px; line-height: 1.8; text-align: left;">' +

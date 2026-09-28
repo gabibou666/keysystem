@@ -211,9 +211,9 @@ async function loadDiscordStatus() {
       window.discordInServer = d.inServer;
       window.discordInviteUrl = d.inviteUrl || window.ksInviteUrl();
       if (d.inServer) {
-        document.getElementById('serverNote').textContent = '✅ Member of our Discord server';
+        document.getElementById('serverNote').textContent = 'Member of our Discord server';
       } else {
-        document.getElementById('serverNote').innerHTML = '⚠️ Not in server —' + (window.ksInviteLink('Rejoin Discord') || ' ask a staff member for an invite link.');
+        document.getElementById('serverNote').innerHTML = 'Not in server — ' + (window.ksInviteLink('Rejoin Discord') || 'ask a staff member for an invite link.');
       }
       setStep(2);
       loadBoosterStatus();
@@ -241,7 +241,7 @@ async function discordLogout() {
     history.replaceState({}, '', '/getkey');
     const el = document.getElementById('loginError');
     if (login === 'ok') {
-      el.textContent = '✅ Signed in with Discord!';
+      el.textContent = 'Signed in with Discord!';
       el.className = 'status ok';
     } else if (login === 'denied') {
       el.textContent = 'You cancelled the Discord sign-in — you must join to get a key.';
@@ -260,7 +260,7 @@ async function discordLogout() {
   if (err) {
     history.replaceState({}, '', '/getkey');
     const el = document.getElementById('loginError');
-    el.textContent = '❌ ' + err;
+    el.textContent = err;
     el.className = 'status err';
   }
 })();
@@ -306,7 +306,7 @@ async function resetHwid() {
     const r = await fetch('/api/key/reset-hwid', { method: 'POST' });
     const d = await r.json();
     if (d.success) {
-      showToast('✅ HWID reset! Launch script on your new device.');
+      showToast('HWID reset! Launch script on your new device.');
       loadHwidStatus();
     } else {
       if (st) { st.textContent = d.error || 'Failed to reset HWID'; st.style.color = 'var(--red)'; }
@@ -345,7 +345,7 @@ async function loadReferralStats() {
     const prog = document.getElementById('refProgressText');
     const needed = 2 - (d.progressToNext || 0);
     prog.textContent = d.availableRewards > 0 
-      ? `🎉 You have ${d.availableRewards} VIP key(s) ready to claim!`
+      ? `You have ${d.availableRewards} VIP key(s) ready to claim!`
       : `${d.progressToNext || 0} / 2 friends completed. ${needed} more needed for a VIP key.`;
 
     const claimBtn = document.getElementById('btnClaimRef');
@@ -357,7 +357,7 @@ function copyRefLink() {
   const input = document.getElementById('refLinkInput');
   if (input && input.value) {
     navigator.clipboard.writeText(input.value);
-    showToast('🔗 Referral link copied to clipboard!');
+    showToast('Referral link copied to clipboard!');
   }
 }
 
@@ -375,8 +375,8 @@ async function claimReferralReward() {
       showModal(d.key, false, d.expiresAt);
       loadCurrentKey();
       loadReferralStats();
-      if (st) { st.textContent = '🎉 24h VIP Key claimed and saved!'; st.className = 'status ok'; }
-      showToast('🎉 VIP Key successfully claimed!');
+      if (st) { st.textContent = '24h VIP Key claimed and saved!'; st.className = 'status ok'; }
+      showToast('VIP Key successfully claimed!');
     } else {
       if (st) { st.textContent = d.error || 'Could not claim VIP key.'; st.className = 'status err'; }
       if (btn) btn.disabled = false;
@@ -417,19 +417,19 @@ async function loadBoosterStatus() {
 
     if (!d.isBooster) {
       if (badge) {
-        badge.textContent = '❌ Not Boosting';
+        badge.textContent = 'Not Boosting';
         badge.style.background = 'rgba(239,68,68,0.15)';
         badge.style.color = '#f87171';
         badge.style.borderColor = 'rgba(239,68,68,0.3)';
       }
       if (expText) expText.textContent = 'Boost our Discord server to unlock your 7-day key (1 boost = 1 key of 7 days).';
       if (boostLink) {
-        boostLink.textContent = '🚀 Boost Discord Server';
+        boostLink.textContent = 'Boost Discord Server';
         boostLink.classList.remove('hidden');
       }
       if (claimBtn) {
         claimBtn.disabled = true;
-        claimBtn.textContent = '💎 Boost Server First';
+        claimBtn.textContent = 'Boost Server First';
       }
       return;
     }
@@ -443,7 +443,7 @@ async function loadBoosterStatus() {
       // Un boost disponible pour reclamation (Boost #1 ou 2eme Boost)
       if (boostLink) boostLink.classList.add('hidden');
       if (badge) {
-        badge.textContent = claimsCount === 0 ? '💎 1 Boost Active' : `💎 ${totalBoosts} Boosts Active`;
+        badge.textContent = claimsCount === 0 ? '1 Boost Active' : `${totalBoosts} Boosts Active`;
         badge.style.background = 'rgba(236,72,153,0.15)';
         badge.style.color = '#f472b6';
         badge.style.borderColor = 'rgba(236,72,153,0.3)';
@@ -455,17 +455,17 @@ async function loadBoosterStatus() {
       }
       if (claimBtn) {
         claimBtn.disabled = false;
-        claimBtn.textContent = claimsCount === 0 ? '💎 Claim 7-Day Key (Boost #1)' : '💎 Claim +7 Days (2nd Boost)';
+        claimBtn.textContent = claimsCount === 0 ? 'Claim 7-Day Key (Boost #1)' : 'Claim +7 Days (2nd Boost)';
       }
     } else {
       // Toutes les reclamations pour ses boosts actuels ont ete utilisees!
       // REGLE STRICTE: 1 boost = 1 seule cle de 7 jours. Pour +7 jours, 2eme boost OBLIGATOIRE.
       if (boostLink) {
-        boostLink.textContent = totalBoosts === 1 ? '🚀 Add 2nd Boost on Discord' : '🚀 Add Another Boost';
+        boostLink.textContent = totalBoosts === 1 ? 'Add 2nd Boost on Discord' : 'Add Another Boost';
         boostLink.classList.remove('hidden');
       }
       if (badge) {
-        badge.textContent = `🔒 ${claimsCount}/${totalBoosts} Boost Used`;
+        badge.textContent = `${claimsCount}/${totalBoosts} Boost Used`;
         badge.style.background = 'rgba(245,158,11,0.15)';
         badge.style.color = '#fbbf24';
         badge.style.borderColor = 'rgba(245,158,11,0.3)';
@@ -480,7 +480,7 @@ async function loadBoosterStatus() {
       }
       if (claimBtn) {
         claimBtn.disabled = true;
-        claimBtn.textContent = totalBoosts === 1 ? '🔒 2nd Boost Required (+7 Days)' : '🔒 Extra Boost Required';
+        claimBtn.textContent = totalBoosts === 1 ? '2nd Boost Required (+7 Days)' : 'Extra Boost Required';
       }
       if (st && !st.textContent) {
         st.textContent = '1 boost = strictly 1 key of 7 days (no auto-renewal). To get +7 more days, you must add a 2nd boost to our Discord server!';
@@ -507,10 +507,10 @@ async function claimBoosterKey() {
       loadCurrentKey();
       loadBoosterStatus();
       if (st) {
-        st.textContent = d.message || '🎉 7-Day Booster Key claimed successfully!';
+        st.textContent = d.message || '7-Day Booster Key claimed successfully!';
         st.className = 'status ok';
       }
-      showToast(d.action === 'renew' ? '🎉 Booster Key renewed for 7 days!' : '🎉 7-Day Booster Key claimed!');
+      showToast(d.action === 'renew' ? 'Booster Key renewed for 7 days!' : '7-Day Booster Key claimed!');
     } else {
       if (d.key) {
         localStorage.setItem(KEY_STORAGE, d.key);
@@ -545,13 +545,13 @@ async function loadCurrentKey() {
       st.textContent = 'Key expired — renew it below (same key).';
       st.className = 'status err';
     } else if (d.inDiscord === false) {
-      st.innerHTML = '⚠️ Inactive: you left our Discord!' + (d.discordInvite ? ' <a href="' + d.discordInvite + '" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;font-weight:bold;">Rejoin to reactivate</a>' : window.ksInviteLink('Rejoin to reactivate'));
+      st.innerHTML = 'Inactive: you left our Discord!' + (d.discordInvite ? ' <a href="' + d.discordInvite + '" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;font-weight:bold;">Rejoin to reactivate</a>' : window.ksInviteLink('Rejoin to reactivate'));
       st.className = 'status err';
     } else {
       const left = new Date(d.expiresAt) - Date.now();
       const h = Math.floor(left / 3600000);
       const m = Math.floor((left % 3600000) / 60000);
-      st.textContent = '✅ Valid — ' + h + 'h ' + m + 'm remaining';
+      st.textContent = 'Valid — ' + h + 'h ' + m + 'm remaining';
       st.className = 'status ok';
     }
     loadHwidStatus();
@@ -562,7 +562,7 @@ async function loadCurrentKey() {
 
 function copyCurrentKey() {
   const v = document.getElementById('currentKey').value;
-  if (v) { navigator.clipboard.writeText(v); showToast('🔑 Key copied to clipboard!'); }
+  if (v) { navigator.clipboard.writeText(v); showToast('Key copied to clipboard!'); }
 }
 
 function copyLuauScriptFromKey(rawKey) {
@@ -571,7 +571,7 @@ function copyLuauScriptFromKey(rawKey) {
   key = key.trim();
   const script = `getgenv().Key = "${key}"\nloadstring(game:HttpGet("${location.origin}/api/v1/loader"))()`;
   navigator.clipboard.writeText(script).then(() => {
-    showToast('⚡ Luau script with key copied! Paste directly into your executor.');
+    showToast('Luau script with key copied! Paste directly into your executor.');
   }).catch(() => {
     prompt('Copy this script into your executor:', script);
   });
@@ -579,7 +579,7 @@ function copyLuauScriptFromKey(rawKey) {
 
 // ===== Modal =====
 function showModal(key, renewed, expiresAt) {
-  document.getElementById('modalTitle').textContent = renewed ? '✅ Key renewed!' : '🔓 Key obtained!';
+  document.getElementById('modalTitle').textContent = renewed ? 'Key renewed!' : 'Key obtained!';
   document.getElementById('modalKey').textContent = key;
   if (expiresAt) {
     document.getElementById('modalExpires').textContent = 'Valid until ' + new Date(expiresAt).toLocaleString('en-US');
@@ -589,7 +589,7 @@ function showModal(key, renewed, expiresAt) {
 function closeModal() { document.getElementById('keyModal').classList.remove('open'); }
 function copyModalKey() {
   const v = document.getElementById('modalKey').textContent;
-  if (v) { navigator.clipboard.writeText(v); showToast('🔑 Key copied to clipboard!'); }
+  if (v) { navigator.clipboard.writeText(v); showToast('Key copied to clipboard!'); }
 }
 document.getElementById('keyModal').addEventListener('click', (e) => {
   if (e.target.id === 'keyModal') closeModal();
@@ -706,7 +706,7 @@ async function poll(puid) {
       if (cancelWrap) cancelWrap.classList.add('hidden');
       const retryWrap = document.getElementById('retryActions');
       if (retryWrap) retryWrap.classList.add('hidden');
-      document.getElementById('resultTitle').textContent = d.renewed ? '✅ Key renewed!' : '🎉 Key obtained!';
+      document.getElementById('resultTitle').textContent = d.renewed ? 'Key renewed!' : 'Key obtained!';
       document.getElementById('resultSub').textContent = 'Paste it into the loader — it\'s also saved in your browser.';
       const el = document.getElementById('newKey');
       el.classList.remove('hidden');
@@ -732,7 +732,7 @@ async function poll(puid) {
       pollTimer = null;
       localStorage.removeItem(PUID_STORAGE);
       localStorage.removeItem(PUID_STORAGE + '_time');
-      showWaiting('⚠️ Session expired', 'The verification took too long or was reset — pick a duration below.', true);
+      showWaiting('Session expired', 'The verification took too long or was reset — pick a duration below.', true);
       return;
     }
     if (d.status === 'forbidden') {
@@ -740,7 +740,7 @@ async function poll(puid) {
       pollTimer = null;
       localStorage.removeItem(PUID_STORAGE);
       localStorage.removeItem(PUID_STORAGE + '_time');
-      showWaiting('🔒 Session mismatch', 'This session doesn\'t belong to this browser — sign in again and retry.', true);
+      showWaiting('Session mismatch', 'This session doesn\'t belong to this browser — sign in again and retry.', true);
       return;
     }
     if (d.status === 'already_claimed') {
@@ -748,7 +748,7 @@ async function poll(puid) {
       pollTimer = null;
       localStorage.removeItem(PUID_STORAGE);
       localStorage.removeItem(PUID_STORAGE + '_time');
-      showWaiting('✅ Already claimed', 'This session\'s key was already retrieved — pick a duration below.', true);
+      showWaiting('Already claimed', 'This session\'s key was already retrieved — pick a duration below.', true);
       return;
     }
     // Statut DEFINITIVMENT mort (session inconnue): on arrete et on nettoie.
@@ -757,7 +757,7 @@ async function poll(puid) {
       pollTimer = null;
       localStorage.removeItem(PUID_STORAGE);
       localStorage.removeItem(PUID_STORAGE + '_time');
-      showWaiting('⚠️ Session reset', (d.error || 'Previous session finished — pick a duration below.'), true);
+      showWaiting('Session reset', (d.error || 'Previous session finished — pick a duration below.'), true);
       return;
     }
     // 500 transitoire / reseau: PAS d'arret — le tick suivant reessaie.
@@ -772,13 +772,13 @@ function flashCopied(btn) {
   if (!btn) return;
   const old = btn.innerHTML;
   btn.classList.add('copied');
-  btn.innerHTML = 'Copied ✓';
+  btn.innerHTML = 'Copied';
   setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = old; }, 1400);
 }
 
 function copyKey() {
   const v = document.getElementById('newKey').textContent;
-  if (v) { navigator.clipboard.writeText(v); showToast('🔑 Key copied to clipboard!'); flashCopied(document.querySelector('#resultActions .btn.small')); }
+  if (v) { navigator.clipboard.writeText(v); showToast('Key copied to clipboard!'); flashCopied(document.querySelector('#resultActions .btn.small')); }
 }
 
 if (location.pathname.endsWith('/callback')) {
@@ -796,7 +796,7 @@ function resumePendingSession() {
     return;
   }
   setStep(3);
-  showWaiting('⏳ Verifying your session…', 'Your key will pop up as soon as it\'s validated.');
+  showWaiting('Verifying your session…', 'Your key will pop up as soon as it\'s validated.');
   startPolling(puid);
 }
 

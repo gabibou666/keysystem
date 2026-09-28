@@ -4,20 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="strix-verification" content="strix-verify-42e4da9a3a54da5e2ebc69b15eee17ed">
-<title>Get a Free Key — AUDIT HUB</title>
+<title>Get a Free Key | AUDIT HUB</title>
 <meta name="description" content="Pick your offer (LootLabs = 12-hour key with 1 ad, or 24-hour key with 2 ads), sign in with Discord and get your Roblox key instantly. Renewing extends the same key, so nothing to re-paste in your executor.">
 <link rel="canonical" href="__SITE__/getkey">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="AUDIT HUB">
-<meta property="og:title" content="Get a Free Key — AUDIT HUB">
+<meta property="og:title" content="Get a Free Key | AUDIT HUB">
 <meta property="og:description" content="Pick your offer (LootLabs = 12-hour key with 1 ad, or 24-hour key with 2 ads), sign in with Discord and get your Roblox key instantly. Renewing extends the same key, so nothing to re-paste in your executor.">
 <meta property="og:url" content="__SITE__/getkey">
 <meta property="og:image" content="__SITE__/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="AUDIT HUB — free Roblox key system and universal script loader">
+<meta property="og:image:alt" content="AUDIT HUB: Free Roblox key system and universal script loader">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Get a Free Key — AUDIT HUB">
+<meta name="twitter:title" content="Get a Free Key | AUDIT HUB">
 <meta name="twitter:description" content="Pick your offer (LootLabs = 12-hour key with 1 ad, or 24-hour key with 2 ads), sign in with Discord and get your Roblox key instantly. Renewing extends the same key, so nothing to re-paste in your executor.">
 <meta name="twitter:image" content="__SITE__/og.png">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=__V__">
@@ -33,7 +33,7 @@
 <!-- Discord Booster Announcement Banner (7 Days Key) -->
 <aside class="top-announcement-bar" id="boosterBanner" role="region" aria-label="Discord Booster Announcement">
   <div class="announcement-content">
-    <span class="announcement-badge">💎 NEW · 7 DAYS</span>
+    <span class="announcement-badge"><svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M2 9h20"/><path d="m10 9 2 13 2-13"/></svg> NEW | 7 DAYS</span>
     <span class="announcement-text">
       Boost our Discord server to unlock an instant <strong>7-Day VIP Key (100% free, ZERO ads)</strong>!
     </span>
@@ -87,20 +87,20 @@
   <!-- Active key notice (shown only when a key exists in browser) -->
   <section class="keypanel neon-frame hidden" id="currentKeyCard" style="margin-bottom: 24px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
-      <h2>🔑 Your active key</h2>
+      <h2><svg class="icon-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="3.5"/><path d="m10 13 9-9"/><path d="m16.5 6.5 2 2"/><path d="m14 9 2 2"/></svg> Your active key</h2>
       <span class="badge-pill" style="background:#8b5cf622; color:#c084fc; border:1px solid #8b5cf655;">Saved in browser</span>
     </div>
     <p class="sub">You already have a key saved — copy it or choose a duration below to renew.</p>
     <div class="keybox">
       <textarea id="currentKey" rows="2" readonly placeholder="No key yet."></textarea>
       <div style="display:flex; flex-direction:column; gap:6px;">
-        <button class="btn small" onclick="copyCurrentKey()">📋 Copy</button>
-        <button class="btn small" onclick="copyLuauScriptFromKey(document.getElementById('currentKey').value)" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9); border:none; font-size:12px; padding: 6px 10px;">⚡ Script</button>
+        <button class="btn small" onclick="copyCurrentKey()"><svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy</button>
+        <button class="btn small" onclick="copyLuauScriptFromKey(document.getElementById('currentKey').value)" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9); border:none; font-size:12px; padding: 6px 10px; display:inline-flex; align-items:center; gap:5px;"><svg class="icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Script</button>
       </div>
     </div>
     <div id="currentKeyStatus" class="status"></div>
     <div style="margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-      <button class="btn small secondary" id="btnResetHwid" onclick="resetHwid()" style="display:none;">🔄 Reset HWID (switch device)</button>
+      <button class="btn small secondary" id="btnResetHwid" onclick="resetHwid()" style="display:none; align-items:center; gap:5px;"><svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> Reset HWID (switch device)</button>
       <span id="hwidStatusText" style="font-size: 13px; color: var(--color-muted);"></span>
     </div>
   </section>
@@ -114,7 +114,7 @@
   <!-- Step 1: Discord -->
   <section class="keypanel" id="discordCard">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-      <h2>Step 1 · Sign in with Discord</h2>
+      <h2>Step 1: Sign in with Discord</h2>
       <span class="badge-pill" style="background:#5865f222; color:#a5b4fc; border:1px solid #5865f255;">Required</span>
     </div>
     <p class="sub" id="discordSub">One click — links your key to your account and adds you to our Discord server automatically. No farming, no bots.</p>
@@ -141,7 +141,7 @@
        /api/config/public: an unavailable tier (e.g. tier 2 disabled)
        remains hidden so no dead buttons are shown. -->
   <section class="keypanel" id="choiceCard">
-    <h2>Step 2 · Choose your offer</h2>
+    <h2>Step 2: Choose your offer</h2>
     <p class="sub">Same key system, different number of ads: pick the key duration you want.</p>
     <div class="provider-grid" id="providerGrid">
       <button type="button" class="card provider-card" id="offerLootlabsMain">
@@ -168,19 +168,19 @@
   <!-- Bonus: Referral Program -->
   <section class="keypanel neon-frame" id="referralCard" style="margin-top: 24px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-      <h2>👥 Invite Friends · Earn Free VIP Keys</h2>
+      <h2><svg class="icon-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Invite Friends | Earn Free VIP Keys</h2>
       <span class="badge-pill" style="background:#10b98122; color:#34d399; border:1px solid #10b98155;">Zero Ads</span>
     </div>
     <p class="sub">Share your personal link. Every <b>2 friends</b> who get a key unlocks a <b>24h VIP Key with NO ads</b>!</p>
     
     <div id="refLoggedOut" class="status">
-      <span>🔒 Sign in with Discord above (Step 1) to get your invite link and track your free VIP keys.</span>
+      <span>Sign in with Discord above (Step 1) to get your invite link and track your free VIP keys.</span>
     </div>
 
     <div id="refLoggedIn" class="hidden">
       <div style="display:flex; gap: 10px; margin-top: 14px; flex-wrap:wrap;">
         <input type="text" id="refLinkInput" readonly style="flex:1; min-width: 200px; background:rgba(0,0,0,0.4); border:1px solid var(--color-border); border-radius:var(--radius-sm); padding:10px 14px; color:#c084fc; font-size:13px; font-family:monospace;" />
-        <button class="btn small" onclick="copyRefLink()">📋 Copy Link</button>
+        <button class="btn small" onclick="copyRefLink()"><svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy Link</button>
       </div>
 
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-top: 18px;">
@@ -200,7 +200,7 @@
 
       <div style="margin-top: 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
         <p id="refProgressText" style="font-size: 13px; color: var(--color-muted); margin:0;">0 / 2 friends towards your next VIP key.</p>
-        <button class="btn small" id="btnClaimRef" onclick="claimReferralReward()" disabled style="background: linear-gradient(135deg, #10b981, #059669); border:none;">🎁 Claim 24h VIP Key</button>
+        <button class="btn small" id="btnClaimRef" onclick="claimReferralReward()" disabled style="background: linear-gradient(135deg, #10b981, #059669); border:none; display:inline-flex; align-items:center; gap:5px;"><svg class="icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg> Claim 24h VIP Key</button>
       </div>
       <div id="refClaimStatus" class="status" style="margin-top: 8px;"></div>
     </div>
@@ -209,13 +209,13 @@
   <!-- Bonus: Discord Server Booster Reward -->
   <section class="keypanel neon-frame" id="boosterCard" style="margin-top: 24px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-      <h2>🚀 Server Boosters · Free 7-Day Key</h2>
-      <span class="badge-pill" style="background:#ec489922; color:#f472b6; border:1px solid #ec489955;">Zero Ads · 7 Days</span>
+      <h2><svg class="icon-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4.5c1.62-1.63 5-2 5-2"/><path d="M12 15v5s3.03-.55 4.5-2c1.63-1.62 2-5 2-5"/></svg> Server Boosters | Free 7-Day Key</h2>
+      <span class="badge-pill" style="background:#ec489922; color:#f472b6; border:1px solid #ec489955;">Zero Ads | 7 Days</span>
     </div>
     <p class="sub">Boost our Discord server to get an instant <b>7-Day Key with ZERO ads</b> (1 boost = 1 single 7-day key). No weekly auto-renewal: a <b>2nd boost is strictly required</b> to unlock +7 days!</p>
     
     <div id="boosterLoggedOut" class="status">
-      <span>🔒 Sign in with Discord above (Step 1) to verify your booster status and claim your 7-day key.</span>
+      <span>Sign in with Discord above (Step 1) to verify your booster status and claim your 7-day key.</span>
     </div>
 
     <div id="boosterLoggedIn" class="hidden">
@@ -225,8 +225,8 @@
           <span id="boosterExpiryText" style="font-size:13px; color:var(--color-muted);"></span>
         </div>
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <a id="btnBoostDiscord" href="https://discord.gg/nrgtDK52Er" target="_blank" rel="noopener" class="btn small secondary hidden" style="text-decoration:none;">🚀 Boost Discord Server</a>
-          <button class="btn small" id="btnClaimBooster" onclick="claimBoosterKey()" style="background: linear-gradient(135deg, #ec4899, #be185d); border:none;">💎 Claim 7-Day Booster Key</button>
+          <a id="btnBoostDiscord" href="https://discord.gg/nrgtDK52Er" target="_blank" rel="noopener" class="btn small secondary hidden" style="text-decoration:none; display:inline-flex; align-items:center; gap:5px;"><svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4.5c1.62-1.63 5-2 5-2"/><path d="M12 15v5s3.03-.55 4.5-2c1.63-1.62 2-5 2-5"/></svg> Boost Discord Server</a>
+          <button class="btn small" id="btnClaimBooster" onclick="claimBoosterKey()" style="background: linear-gradient(135deg, #ec4899, #be185d); border:none; display:inline-flex; align-items:center; gap:5px;"><svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M2 9h20"/><path d="m10 9 2 13 2-13"/></svg> Claim 7-Day Booster Key</button>
         </div>
       </div>
       <div id="boosterClaimStatus" class="status" style="margin-top: 10px;"></div>
@@ -243,13 +243,13 @@
   <section class="keypanel hidden" id="result">
     <div id="waitState">
       <div class="ks-spinner"></div>
-      <h2 id="resultTitle">⏳ Waiting…</h2>
+      <h2 id="resultTitle">Waiting...</h2>
       <p class="sub" id="resultSub">Complete the tasks in the other tab — this page checks automatically.</p>
     </div>
     <div id="newKey" class="codebox hidden" style="color: var(--accent);"></div>
     <div id="resultActions" class="hidden" style="margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
-      <button class="btn small" onclick="copyKey()">📋 Copy key</button>
-      <button class="btn small" onclick="copyLuauScriptFromKey(document.getElementById('newKey').textContent)" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9); border:none;">⚡ Copy Luau script</button>
+      <button class="btn small" onclick="copyKey()"><svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy key</button>
+      <button class="btn small" onclick="copyLuauScriptFromKey(document.getElementById('newKey').textContent)" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9); border:none; display:inline-flex; align-items:center; gap:5px;"><svg class="icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Copy Luau script</button>
       <a class="btn small secondary" href="/">← Back home</a>
     </div>
     <div id="retryActions" class="hidden" style="margin-top: 16px; text-align: center;">
@@ -277,7 +277,7 @@
         <span class="provider-icon" style="width:36px; height:36px; border-radius:10px; display:inline-grid; place-items:center; background:rgba(139,92,246,0.18); border:1px solid var(--color-border-violet); color:var(--color-glow);" aria-hidden="true">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"></rect><path d="M8 20.5h8"></path><path d="M12 17v3.5"></path><path d="m10.5 8 3.5 2.5-3.5 2.5z"></path></svg>
         </span>
-        <h2 id="lootlabsModalTitle" style="font-size:18px; margin:0; text-align:left;">LootLabs · Choose ads count</h2>
+        <h2 id="lootlabsModalTitle" style="font-size:18px; margin:0; text-align:left;">LootLabs | Choose ads count</h2>
       </div>
       <button type="button" class="btn small secondary" onclick="closeLootlabsModal()" aria-label="Close" style="padding:4px 10px; font-size:14px;">✕</button>
     </div>
@@ -314,15 +314,15 @@
     <div class="keycode" id="modalKey">...</div>
     <p class="expires" id="modalExpires"></p>
     <div class="modal-actions" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
-      <button class="btn small" onclick="copyModalKey()">📋 Copy key</button>
-      <button class="btn small" onclick="copyLuauScriptFromKey(document.getElementById('modalKey').textContent)" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9); border:none;">⚡ Copy Luau script</button>
+      <button class="btn small" onclick="copyModalKey()"><svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy key</button>
+      <button class="btn small" onclick="copyLuauScriptFromKey(document.getElementById('modalKey').textContent)" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9); border:none; display:inline-flex; align-items:center; gap:5px;"><svg class="icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Copy Luau script</button>
       <button class="btn small secondary" onclick="closeModal()">Close</button>
     </div>
   </div>
 </div>
 
 <footer>
-  Powered by AUDIT HUB · <a href="/">Home</a>
+  Powered by AUDIT HUB | <a href="/">Home</a>
 </footer>
 
 <!-- script inline extrait vers app-getkey.js -->
@@ -335,7 +335,7 @@
       <a href="/terms">Terms of Service</a>
       <a href="/privacy">Privacy Policy</a>
       <a href="/cookies">Cookie Policy</a>
-      <button type="button" onclick="openCookieSettings()">🍪 Cookie Settings</button>
+      <button type="button" onclick="openCookieSettings()"><svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10 4 4 0 0 1-4 4 4 4 0 0 1-4-4 4 4 0 0 0-4-4 4 4 0 0 1-4-4 4 4 0 0 1 6-2z"/><circle cx="8.5" cy="8.5" r="1"/><circle cx="16" cy="12" r="1"/><circle cx="10" cy="16" r="1"/></svg> Cookie Settings</button>
     </div>
     <div>© 2026 AUDIT HUB. All rights reserved. Independent service not affiliated with Roblox Corporation.</div>
   </footer>

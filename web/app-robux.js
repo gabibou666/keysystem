@@ -50,7 +50,7 @@ async function loadOffers() {
         <div class="offer-name">${o.name}</div>
         <div class="offer-duration">${o.durationHours >= 24 ? Math.round(o.durationHours/24) + ' days' : o.durationHours + 'h'}</div>
         ${o.configured
-          ? `<a class="btn small" style="margin-top: 14px;" data-sku="${o.sku}" href="${o.buyUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation(); preselect(this.dataset.sku)">🛒 Buy on Roblox</a>`
+          ? `<a class="btn small" style="margin-top: 14px;" data-sku="${o.sku}" href="${o.buyUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation(); preselect(this.dataset.sku)">Buy on Roblox</a>`
           : `<p style="color: var(--muted); font-size: 12px; margin-top: 10px;">Coming soon</p>`}
       </div>
     `).join('');
@@ -61,7 +61,7 @@ async function loadOffers() {
       const b = document.createElement('button');
       b.className = 'btn small secondary offer-btn';
       b.dataset.sku = o.sku;
-      b.textContent = `${o.name} — ${o.priceR$} R$`;
+      b.textContent = `${o.name} : ${o.priceR$} R$`;
       b.onclick = () => selectOfferBtn(o.sku);
       btnsWrap.appendChild(b);
     });
@@ -111,15 +111,15 @@ async function startVerify() {
 
   if (!username || !sku) {
     status.textContent = !username
-      ? '⚠️ Enter your Roblox username.'
-      : '⚠️ Pick your offer (buttons above).';
+      ? 'Enter your Roblox username.'
+      : 'Pick your offer (buttons above).';
     status.className = 'status err';
     return;
   }
 
   btn.disabled = true;
   btn.classList.add('disabled');
-  status.textContent = '⏳ Checking your purchase on Roblox…';
+  status.textContent = 'Checking your purchase on Roblox…';
   status.className = 'status';
 
   try {
@@ -133,23 +133,23 @@ async function startVerify() {
       if (d.key) {
         deliverKey(d, true);
       } else {
-        status.textContent = '⛔ This game pass has already been used by another session.';
+        status.textContent = 'This game pass has already been used by another session.';
         status.className = 'status err';
       }
       return;
     }
     if (d.status === 'not_found') {
-      status.textContent = '❌ Roblox account not found — check the username.';
+      status.textContent = 'Roblox account not found: check the username.';
       status.className = 'status err';
       return;
     }
     if (d.status === 'blocked') {
-      status.textContent = '⛔ This account cannot use Robux payments.';
+      status.textContent = 'This account cannot use Robux payments.';
       status.className = 'status err';
       return;
     }
     if (d.status === 'pending') {
-      status.textContent = '⏳ Purchase not detected yet — Roblox can take 1-2 minutes. Checking automatically…';
+      status.textContent = 'Purchase not detected yet (Roblox can take 1 to 2 minutes). Checking automatically…';
       status.className = 'status';
       pollEnd = Date.now() + 2 * 60 * 1000;
       if (pollTimer) clearInterval(pollTimer);
@@ -157,7 +157,7 @@ async function startVerify() {
         if (Date.now() > pollEnd) {
           clearInterval(pollTimer);
           pollTimer = null;
-          status.textContent = '⚠️ Still not detected after 2 minutes — verify you bought the right pass, then try again.';
+          status.textContent = 'Still not detected after 2 minutes: verify you bought the right pass, then try again.';
           status.className = 'status err';
           return;
         }
@@ -177,14 +177,14 @@ async function startVerify() {
       return;
     }
     if (d.status === 'rate_limited') {
-      status.textContent = '⛔ Too many attempts — wait a minute.';
+      status.textContent = 'Too many attempts: wait a minute.';
       status.className = 'status err';
       return;
     }
-    status.textContent = '❌ ' + (d.error || 'Unexpected error.');
+    status.textContent = d.error || 'Unexpected error.';
     status.className = 'status err';
   } catch {
-    status.textContent = 'Network error — try again.';
+    status.textContent = 'Network error: try again.';
     status.className = 'status err';
   } finally {
     btn.disabled = false;
@@ -198,19 +198,19 @@ function deliverKey(d, wasUsed) {
   const card = document.getElementById('resultCard');
   card.classList.remove('hidden');
   document.getElementById('resultTitle').textContent = wasUsed
-    ? '✅ Your key (already delivered)'
+    ? 'Your key (already delivered)'
     : d.extended
-      ? '⏰ Time added to your key!'
-      : '🎉 Key delivered!';
+      ? 'Time added to your key!'
+      : 'Key delivered!';
   document.getElementById('resultSub').textContent =
     (d.extended ? 'Your existing key was extended' : 'Bound to') +
-    (d.robloxUser ? ' — ' + d.robloxUser : ' your Roblox account') +
+    (d.robloxUser ? ' : ' + d.robloxUser : ' your Roblox account') +
     '. Paste it into the loader.';
   const el = document.getElementById('newKey');
   el.textContent = d.key;
   localStorage.setItem(KEY_STORAGE, d.key);
   document.getElementById('modalKey').textContent = d.key;
-  document.getElementById('modalTitle').textContent = d.extended ? '⏰ Time added!' : '💎 Key delivered!';
+  document.getElementById('modalTitle').textContent = d.extended ? 'Time added!' : 'Key delivered!';
   if (d.expiresAt) {
     document.getElementById('modalExpires').textContent = 'Valid until ' + new Date(d.expiresAt).toLocaleString('en-US');
   }
@@ -221,12 +221,12 @@ function deliverKey(d, wasUsed) {
 function copyKey() {
   const v = document.getElementById('newKey').textContent;
   if (v) navigator.clipboard.writeText(v);
-  if (window.showToast) showToast('🔑 Key copied!');
+  if (window.showToast) showToast('Key copied!');
 }
 function copyModalKey() {
   const v = document.getElementById('modalKey').textContent;
   if (v) navigator.clipboard.writeText(v);
-  if (window.showToast) showToast('🔑 Key copied!');
+  if (window.showToast) showToast('Key copied!');
 }
 function copyLuauScriptFromKey(rawKey) {
   let key = rawKey || localStorage.getItem(KEY_STORAGE);
@@ -234,7 +234,7 @@ function copyLuauScriptFromKey(rawKey) {
   key = key.trim();
   const script = `getgenv().Key = "${key}"\nloadstring(game:HttpGet("${location.origin}/api/v1/loader"))()`;
   navigator.clipboard.writeText(script).then(() => {
-    if (window.showToast) showToast('⚡ Luau script with key copied! Paste directly into your executor.');
+    if (window.showToast) showToast('Luau script with key copied! Paste directly into your executor.');
   }).catch(() => {
     prompt('Copy this script into your executor:', script);
   });
