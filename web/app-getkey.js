@@ -424,56 +424,69 @@ async function loadBoosterStatus() {
         badge.style.color = '#f87171';
         badge.style.borderColor = 'rgba(239,68,68,0.3)';
       }
-      if (expText) expText.textContent = 'Boost our Discord server to unlock your free 7-day key.';
-      if (boostLink) boostLink.classList.remove('hidden');
+      if (expText) expText.textContent = 'Boost our Discord server to unlock your 7-day key (1 boost = 1 key of 7 days).';
+      if (boostLink) {
+        boostLink.textContent = '🚀 Boost Discord Server';
+        boostLink.classList.remove('hidden');
+      }
       if (claimBtn) {
         claimBtn.disabled = true;
-        claimBtn.textContent = '💎 Boost Required';
+        claimBtn.textContent = '💎 Boost Server First';
       }
       return;
     }
 
     // Utilisateur booster detecte
-    if (boostLink) boostLink.classList.add('hidden');
+    const totalBoosts = d.boostCount || 1;
+    const claimsCount = d.claimsCount || 0;
+    const remainingBoosts = d.remainingBoosts || 0;
 
-    if (d.hasActiveKey) {
-      const daysLeft = Math.ceil(d.remainingHours / 24);
+    if (d.canClaim) {
+      // Un boost disponible pour reclamation (Boost #1 ou 2eme Boost)
+      if (boostLink) boostLink.classList.add('hidden');
       if (badge) {
-        badge.textContent = '💎 Active Booster';
+        badge.textContent = claimsCount === 0 ? '💎 1 Boost Active' : `💎 ${totalBoosts} Boosts Active`;
         badge.style.background = 'rgba(236,72,153,0.15)';
         badge.style.color = '#f472b6';
         badge.style.borderColor = 'rgba(236,72,153,0.3)';
       }
       if (expText) {
-        expText.textContent = `Key active · expires in ~${daysLeft} day(s) (${d.remainingHours}h left)`;
+        expText.textContent = claimsCount === 0
+          ? 'Boost verified! Claim your 7-day key below (Zero ads).'
+          : '2nd boost detected! Click below to add +7 days to your key.';
       }
-
-      if (d.canRenew) {
-        if (claimBtn) {
-          claimBtn.disabled = false;
-          claimBtn.textContent = '🔄 Renew 7-Day Key';
-        }
-      } else {
-        if (claimBtn) {
-          claimBtn.disabled = true;
-          claimBtn.textContent = '✅ Key Already Active';
-        }
-        if (st && !st.textContent) {
-          st.textContent = 'Your 7-day Booster Key is active! You can renew when less than 24 hours remain.';
-          st.className = 'status ok';
-        }
-      }
-    } else {
-      if (badge) {
-        badge.textContent = '💎 Verified Booster';
-        badge.style.background = 'rgba(236,72,153,0.15)';
-        badge.style.color = '#f472b6';
-        badge.style.borderColor = 'rgba(236,72,153,0.3)';
-      }
-      if (expText) expText.textContent = 'You are boosting our server! Claim your 7-day key below.';
       if (claimBtn) {
         claimBtn.disabled = false;
-        claimBtn.textContent = '💎 Claim 7-Day Booster Key';
+        claimBtn.textContent = claimsCount === 0 ? '💎 Claim 7-Day Key (Boost #1)' : '💎 Claim +7 Days (2nd Boost)';
+      }
+    } else {
+      // Toutes les reclamations pour ses boosts actuels ont ete utilisees!
+      // REGLE STRICTE: 1 boost = 1 seule cle de 7 jours. Pour +7 jours, 2eme boost OBLIGATOIRE.
+      if (boostLink) {
+        boostLink.textContent = totalBoosts === 1 ? '🚀 Add 2nd Boost on Discord' : '🚀 Add Another Boost';
+        boostLink.classList.remove('hidden');
+      }
+      if (badge) {
+        badge.textContent = `🔒 ${claimsCount}/${totalBoosts} Boost Used`;
+        badge.style.background = 'rgba(245,158,11,0.15)';
+        badge.style.color = '#fbbf24';
+        badge.style.borderColor = 'rgba(245,158,11,0.3)';
+      }
+      if (expText) {
+        if (d.hasActiveKey) {
+          const daysLeft = Math.ceil(d.remainingHours / 24);
+          expText.textContent = `Key active (~${daysLeft}d left). 1 boost = 1 key. Put a 2nd boost for +7 more days!`;
+        } else {
+          expText.textContent = 'Your 7-day key has ended. 1 boost = 1 key (no auto-renewal). Add a 2nd boost for +7 days!';
+        }
+      }
+      if (claimBtn) {
+        claimBtn.disabled = true;
+        claimBtn.textContent = totalBoosts === 1 ? '🔒 2nd Boost Required (+7 Days)' : '🔒 Extra Boost Required';
+      }
+      if (st && !st.textContent) {
+        st.textContent = '1 boost = strictly 1 key of 7 days (no auto-renewal). To get +7 more days, you must add a 2nd boost to our Discord server!';
+        st.className = 'status';
       }
     }
   } catch {}

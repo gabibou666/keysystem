@@ -327,13 +327,37 @@ async function createPermanentInvite() {
   return null;
 }
 
+let guildRolesCache = { ts: 0, roles: [] };
+async function getGuildRoles() {
+  const guildId = process.env.DISCORD_GUILD_ID;
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (!guildId || !botToken) return [];
+  if (Date.now() - guildRolesCache.ts < 15 * 60 * 1000 && guildRolesCache.roles.length > 0) {
+    return guildRolesCache.roles;
+  }
+  try {
+    const res = await fetch(`https://discord.com/api/guilds/${guildId}/roles`, {
+      headers: { Authorization: `Bot ${botToken}` },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (res.ok) {
+      guildRolesCache.roles = await res.json();
+      guildRolesCache.ts = Date.now();
+      return guildRolesCache.roles;
+    }
+  } catch (e) {
+    console.warn('[discord] getGuildRoles error:', e.message);
+  }
+  return guildRolesCache.roles || [];
+}
+
 // Verification temps-reel du statut Server Booster (anti-abus: verification directe sur Discord API)
 async function getBoosterStatus(discordId) {
-  if (!discordId) return { inGuild: false, isBooster: false, premiumSince: null };
+  if (!discordId) return { inGuild: false, isBooster: false, boostCount: 0, premiumSince: null };
   const guildId = process.env.DISCORD_GUILD_ID;
   const botToken = process.env.DISCORD_BOT_TOKEN;
   if (!guildId || !botToken) {
-    return { inGuild: false, isBooster: false, premiumSince: null, reason: 'bot_not_configured' };
+    return { inGuild: false, isBooster: false, boostCount: 0, premiumSince: null, reason: 'bot_not_configured' };
   }
 
   try {
@@ -348,23 +372,45 @@ async function getBoosterStatus(discordId) {
       const isBooster = Boolean(member && member.premium_since);
       // Mettre aussi a jour le cache de presence
       memberCache.set(discordId, { inGuild: true, ts: Date.now() });
+
+      // Calcul du nombre de boosts:
+      // Base: 1 boost si premium_since est defini.
+      // S'il possede un role 2x / double boost (ou DISCORD_BOOSTER_2X_ROLE_ID), boostCount = 2 (ou plus).
+      let boostCount = isBooster ? 1 : 0;
+      if (isBooster && Array.isArray(member.roles) && member.roles.length > 0) {
+        const allRoles = await getGuildRoles();
+        const userRoleObjs = allRoles.filter((r) => member.roles.includes(r.id));
+        const booster2xRoleId = process.env.DISCORD_BOOSTER_2X_ROLE_ID;
+
+        for (const r of userRoleObjs) {
+          if (booster2xRoleId && r.id === booster2xRoleId) {
+            boostCount = Math.max(boostCount, 2);
+          } else if (/3x|triple|3\s*boost/i.test(r.name)) {
+            boostCount = Math.max(boostCount, 3);
+          } else if (/2x|double|2\s*boost/i.test(r.name)) {
+            boostCount = Math.max(boostCount, 2);
+          }
+        }
+      }
+
       return {
         inGuild: true,
         isBooster,
+        boostCount,
         premiumSince: member.premium_since || null,
         roles: member.roles || [],
       };
     } else if (res.status === 404) {
       memberCache.set(discordId, { inGuild: false, ts: Date.now() });
-      return { inGuild: false, isBooster: false, premiumSince: null };
+      return { inGuild: false, isBooster: false, boostCount: 0, premiumSince: null };
     } else if (res.status === 429) {
       console.warn('[discord] getBoosterStatus rate-limited (429)');
-      return { inGuild: true, isBooster: false, premiumSince: null, rateLimited: true };
+      return { inGuild: true, isBooster: false, boostCount: 0, premiumSince: null, rateLimited: true };
     }
-    return { inGuild: true, isBooster: false, premiumSince: null };
+    return { inGuild: true, isBooster: false, boostCount: 0, premiumSince: null };
   } catch (e) {
     console.warn('[discord] getBoosterStatus network error:', e.message);
-    return { inGuild: true, isBooster: false, premiumSince: null };
+    return { inGuild: true, isBooster: false, boostCount: 0, premiumSince: null };
   }
 }
 

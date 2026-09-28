@@ -1177,5 +1177,61 @@ router.post('/bot/guilds/:guildId/deploy-panel', requireAdmin, async (req, res) 
   }
 });
 
+// ---------- Booster Management ----------
+router.get('/booster/stats', requireAdmin, async (req, res) => {
+  try {
+    const claims = await pool.query(
+      `SELECT bc.id, bc.discord_id, bc.key_id, bc.claimed_at, bc.action, k.kid, k.expires_at
+       FROM booster_claims bc
+       LEFT JOIN keys k ON k.id = bc.key_id
+       ORDER BY bc.claimed_at DESC LIMIT 50`
+    );
+    const credits = await pool.query(
+      `SELECT discord_id, extra_boosts, updated_at FROM booster_credits ORDER BY updated_at DESC LIMIT 50`
+    );
+    res.json({
+      success: true,
+      claims: claims.rows,
+      credits: credits.rows,
+    });
+  } catch (e) {
+    console.error('[admin/booster/stats]', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+router.post('/booster/credit', requireAdmin, async (req, res) => {
+  try {
+    const { discordId, extraBoosts } = req.body;
+    if (!discordId) return res.status(400).json({ success: false, error: 'Missing discordId' });
+    const boosts = parseInt(extraBoosts, 10) || 0;
+
+    await pool.query(
+      `INSERT INTO booster_credits (discord_id, extra_boosts, updated_at)
+       VALUES ($1, $2, now())
+       ON CONFLICT (discord_id) DO UPDATE SET extra_boosts = EXCLUDED.extra_boosts, updated_at = now()`,
+      [discordId, boosts]
+    );
+    res.json({ success: true, message: `Updated extra boosts to ${boosts} for ${discordId}` });
+  } catch (e) {
+    console.error('[admin/booster/credit]', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+router.post('/booster/reset', requireAdmin, async (req, res) => {
+  try {
+    const { discordId } = req.body;
+    if (!discordId) return res.status(400).json({ success: false, error: 'Missing discordId' });
+
+    await pool.query('DELETE FROM booster_claims WHERE discord_id = $1', [discordId]);
+    res.json({ success: true, message: `Reset booster claims for ${discordId}` });
+  } catch (e) {
+    console.error('[admin/booster/reset]', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 module.exports = router;
+
 
