@@ -351,6 +351,64 @@ async function getGuildRoles() {
   return guildRolesCache.roles || [];
 }
 
+let systemChannelCache = { ts: 0, channelId: null };
+async function getGuildSystemChannelId() {
+  const guildId = process.env.DISCORD_GUILD_ID;
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (process.env.DISCORD_BOOST_CHANNEL_ID) return process.env.DISCORD_BOOST_CHANNEL_ID;
+  if (!guildId || !botToken) return null;
+  if (Date.now() - systemChannelCache.ts < 30 * 60 * 1000 && systemChannelCache.channelId !== undefined) {
+    return systemChannelCache.channelId;
+  }
+  try {
+    const res = await fetch(`https://discord.com/api/guilds/${guildId}`, {
+      headers: { Authorization: `Bot ${botToken}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const g = await res.json();
+      systemChannelCache.channelId = g.system_channel_id || null;
+      systemChannelCache.ts = Date.now();
+      return systemChannelCache.channelId;
+    }
+  } catch (e) {
+    console.warn('[discord] getGuildSystemChannelId error:', e.message);
+  }
+  return null;
+}
+
+let boostMessagesCache = { ts: 0, messages: [] };
+async function countUserBoostMessages(discordId) {
+  const channelId = await getGuildSystemChannelId();
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (!channelId || !botToken || !discordId) return 0;
+
+  try {
+    if (Date.now() - boostMessagesCache.ts > 60 * 1000 || boostMessagesCache.messages.length === 0) {
+      const res = await fetch(`https://discord.com/api/channels/${channelId}/messages?limit=100`, {
+        headers: { Authorization: `Bot ${botToken}` },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const msgs = await res.json();
+        if (Array.isArray(msgs)) {
+          boostMessagesCache.messages = msgs;
+          boostMessagesCache.ts = Date.now();
+        }
+      }
+    }
+    // Types 8, 9, 10, 11 sont les types natifs Discord de messages de boost
+    const boostMsgTypes = [8, 9, 10, 11];
+    const userMsgs = boostMessagesCache.messages.filter(
+      (m) => boostMsgTypes.includes(m.type) && m.author && m.author.id === discordId
+    );
+    return userMsgs.length;
+  } catch (e) {
+    console.warn('[discord] countUserBoostMessages error:', e.message);
+    return 0;
+  }
+}
+
 // Verification temps-reel du statut Server Booster (anti-abus: verification directe sur Discord API)
 async function getBoosterStatus(discordId) {
   if (!discordId) return { inGuild: false, isBooster: false, boostCount: 0, premiumSince: null };
@@ -375,20 +433,28 @@ async function getBoosterStatus(discordId) {
 
       // Calcul du nombre de boosts:
       // Base: 1 boost si premium_since est defini.
-      // S'il possede un role 2x / double boost (ou DISCORD_BOOSTER_2X_ROLE_ID), boostCount = 2 (ou plus).
       let boostCount = isBooster ? 1 : 0;
-      if (isBooster && Array.isArray(member.roles) && member.roles.length > 0) {
-        const allRoles = await getGuildRoles();
-        const userRoleObjs = allRoles.filter((r) => member.roles.includes(r.id));
-        const booster2xRoleId = process.env.DISCORD_BOOSTER_2X_ROLE_ID;
+      if (isBooster) {
+        // 1. Verification par les messages systeme natifs de boost Discord
+        const msgBoosts = await countUserBoostMessages(discordId);
+        if (msgBoosts > 1) {
+          boostCount = Math.max(boostCount, msgBoosts);
+        }
 
-        for (const r of userRoleObjs) {
-          if (booster2xRoleId && r.id === booster2xRoleId) {
-            boostCount = Math.max(boostCount, 2);
-          } else if (/3x|triple|3\s*boost/i.test(r.name)) {
-            boostCount = Math.max(boostCount, 3);
-          } else if (/2x|double|2\s*boost/i.test(r.name)) {
-            boostCount = Math.max(boostCount, 2);
+        // 2. Verification par les roles (2x, double, ID configurable)
+        if (Array.isArray(member.roles) && member.roles.length > 0) {
+          const allRoles = await getGuildRoles();
+          const userRoleObjs = allRoles.filter((r) => member.roles.includes(r.id));
+          const booster2xRoleId = process.env.DISCORD_BOOSTER_2X_ROLE_ID;
+
+          for (const r of userRoleObjs) {
+            if (booster2xRoleId && r.id === booster2xRoleId) {
+              boostCount = Math.max(boostCount, 2);
+            } else if (/3x|triple|3\s*boost/i.test(r.name)) {
+              boostCount = Math.max(boostCount, 3);
+            } else if (/2x|double|2\s*boost/i.test(r.name)) {
+              boostCount = Math.max(boostCount, 2);
+            }
           }
         }
       }
