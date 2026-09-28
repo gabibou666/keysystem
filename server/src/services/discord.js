@@ -239,13 +239,13 @@ async function getGuildInvite() {
           if (permanent) {
             cachedInvite = `https://discord.gg/${permanent.code}`;
             cachedInviteTs = now;
-            console.log('[discord] invitation permanente utilisee:', cachedInvite);
+            console.log('[discord] permanent invite in use:', cachedInvite);
             return cachedInvite;
           }
           if (expiring.length) {
             const longest = Math.round(Math.max(...expiring.map((i) => i.max_age)) / 86400);
             console.warn(
-              `[discord] AUCUNE invitation permanente (${expiring.length} temporaire(s), la plus longue expire dans ${longest} j) — creation d'une invitation permanente par le bot...`
+              `[discord] NO permanent invite found (${expiring.length} temporary, longest expires in ${longest}d) — creating a permanent invite via bot...`
             );
           }
         }
@@ -260,7 +260,7 @@ async function getGuildInvite() {
   if (created) {
     cachedInvite = created;
     cachedInviteTs = now;
-    console.log('[discord] invitation permanente creee:', created);
+    console.log('[discord] permanent invite created:', created);
     return created;
   }
 
@@ -272,13 +272,13 @@ async function getGuildInvite() {
     const ok = await isUsableInvite(DEFAULT_PERMANENT_INVITE);
     if (!ok) {
       console.error(
-        `[discord] ATTENTION: l'invitation de secours ${DEFAULT_PERMANENT_INVITE} n'est plus valide. ` +
-          "Definis DISCORD_INVITE_URL (invitation permanente) dans les variables d'environnement, ou execute: npm run invite:ensure"
+        `[discord] WARNING: fallback invite ${DEFAULT_PERMANENT_INVITE} is no longer valid. ` +
+          "Define DISCORD_INVITE_URL in environment variables or run: npm run invite:ensure"
       );
     }
   }
   console.warn(
-    `[discord] invitation via l'API indisponible (DISCORD_BOT_TOKEN/DISCORD_GUILD_ID absents ou erreur Discord) — repli sur ${DEFAULT_PERMANENT_INVITE}`
+    `[discord] invite via API unavailable (DISCORD_BOT_TOKEN/DISCORD_GUILD_ID missing or Discord error) — falling back to ${DEFAULT_PERMANENT_INVITE}`
   );
   cachedInvite = DEFAULT_PERMANENT_INVITE;
   cachedInviteTs = now;
@@ -297,7 +297,7 @@ async function createPermanentInvite() {
       signal: AbortSignal.timeout(6000),
     });
     if (!chRes.ok) {
-      console.error(`[discord] impossible de lister les salons (HTTP ${chRes.status})`);
+      console.error(`[discord] unable to list channels (HTTP ${chRes.status})`);
       return null;
     }
     const channels = await chRes.json();
@@ -316,7 +316,7 @@ async function createPermanentInvite() {
         if (inv && inv.code) return `https://discord.gg/${inv.code}`;
       } else if (res.status === 401 || res.status === 403) {
         console.error(
-          `[discord] le bot ne peut pas creer d'invitation (HTTP ${res.status}): donne-lui la permission "Create Invite" sur un salon texte.`
+          `[discord] bot cannot create invite (HTTP ${res.status}): grant "Create Invite" permission to the bot.`
         );
         return null;
       }
