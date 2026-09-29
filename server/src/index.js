@@ -479,7 +479,7 @@ app.use(
   express.static(webDir, {
     index: false,
     setHeaders: (res, filePath) => {
-      if (/\.(css|js|woff2|png|svg|ico|jpg|webp)$/i.test(filePath)) {
+      if (/\.(css|js|woff2|png|svg|ico|jpg|webp|mp4)$/i.test(filePath)) {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       } else {
         res.setHeader('Cache-Control', 'public, max-age=3600');

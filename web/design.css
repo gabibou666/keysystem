@@ -1077,6 +1077,64 @@ main a,
   margin: clamp(50px, 7vh, 74px) auto 0;
   padding: 0 20px;
 }
+
+/* ============================================================================
+   11 quater. TUTORIEL VIDÉO
+   ============================================================================ */
+.tutorial-section {
+  max-width: 860px;
+  margin: clamp(52px, 7vh, 76px) auto 0;
+  padding: 0 20px;
+  text-align: center;
+}
+.tutorial-head {
+  margin-bottom: 22px;
+}
+.tutorial-kicker {
+  display: inline-block;
+  margin-bottom: 8px;
+  color: var(--color-glow-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+.tutorial-head h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: clamp(24px, 3.4vw, 31px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.tutorial-head p {
+  margin: 10px auto 0;
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.tutorial-video-wrap {
+  overflow: hidden;
+  background-color: #0b0b10;
+  background-image: linear-gradient(#0b0b10, #0b0b10), var(--dx-edge);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--dx-elev-3), var(--dx-inner);
+}
+.tutorial-video {
+  display: block;
+  width: 100%;
+  max-height: min(68vh, 620px);
+  background: #050507;
+}
+@media (max-width: 768px) {
+  .tutorial-section {
+    padding: 0 14px;
+  }
+  .tutorial-video-wrap {
+    border-radius: var(--radius-lg);
+  }
+}
 .requests-head {
   text-align: center;
   margin-bottom: 26px;
