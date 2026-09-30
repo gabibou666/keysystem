@@ -27638,7 +27638,7 @@ local aA=tostring(an or"empty")local aB=
 ag.Folder or ag.Title
 
 if ag.KeySystem.KeyValidator then
-local b=ag.KeySystem.KeyValidator(aA)
+local b,validationMessage=ag.KeySystem.KeyValidator(aA)
 
 if b then
 if ag.KeySystem.SaveKey then
@@ -27651,7 +27651,7 @@ end
 else
 ag.WindUI:Notify{
 Title="Key System. Error",
-Content="Invalid key.",
+Content=type(validationMessage)=="string"and validationMessage or"Invalid key.",
 Icon="triangle-alert",
 }
 end

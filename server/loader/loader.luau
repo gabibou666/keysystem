@@ -166,10 +166,9 @@ local function detectDumperEnvironment()
         local ok, hooked = pcall(function() return isfunctionhooked(loadstring) end)
         if ok and hooked then return "hooked_loadstring" end
     end
-    local okInfo, src = pcall(function() return debug.info(loadstring, "s") end)
-    if okInfo and type(src) == "string" and src ~= "[C]" and not src:find("loadstring") then
-        return "custom_lua_loadstring"
-    end
+    -- A Lua source reported by debug.info is not evidence of a hook:
+    -- executors can expose loadstring through a Lua wrapper (Xeno reports this).
+    -- Keep the explicit isfunctionhooked check above instead.
 
     -- 3) Détection de hook sur request
     if type(isfunctionhooked) == "function" and type(request) == "function" then
@@ -440,18 +439,8 @@ if WindUI then
                             Duration = 5,
                         })
                     end)
-                elseif not ok then
-                    -- WindUI n'affiche que "Invalid key." — on complete avec le
-                    -- message DETAILLE (expired/banned/rate_limited/bound...) en notif
-                    pcall(function()
-                        WindUI:Notify({
-                            Title = "Key System",
-                            Content = msg,
-                            Icon = "triangle-alert",
-                            Duration = 7,
-                        })
-                    end)
                 end
+                -- The self-hosted WindUI displays the validator's error message.
                 return ok, msg
             end,
         },
