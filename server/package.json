@@ -10,6 +10,9 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
+    "test:platform": "node test-platform.js && node test-checkpoint-providers.js",
+    "test:platform:ui": "node test-platform-ui.js",
+    "preview:platform": "node tests/platform-fixture.js",
     "migrate": "node src/migrate.js",
     "check": "node scripts/check-assets.js && node scripts/check-design.js && node scripts/check-cost.js && node scripts/check-schema.js && node scripts/check-dom.js",
     "check:design": "node scripts/check-design.js",
@@ -22,11 +25,12 @@
     "backup": "node scripts/backup-db.js",
     "restore": "node scripts/restore-db.js",
     "watchdog": "node scripts/watchdog.js",
-    "test": "node test-crypto-config.js && node test-healthz-cache.js && node test-alerts.js && node test-session-token.js && node test-prelude-session.js && node test-requests.js && node test-providers.js && node test-admin-generate.js && node test-booster.js",
+    "test": "node test-developer-auth.js && node test-auth-concurrency.js && node test-platform.js && node test-checkpoint-providers.js && node test-crypto-config.js && node test-healthz-cache.js && node test-alerts.js && node test-session-token.js && node test-prelude-session.js && node test-requests.js && node test-providers.js && node test-admin-generate.js && node test-booster.js",
     "invite:ensure": "node scripts/ensure-discord-invite.js",
     "fonts": "python scripts/selfhost-fonts.py",
     "og": "python scripts/make-og-image.py",
-    "pages:polish": "python scripts/polish-pages.py"
+    "pages:polish": "python scripts/polish-pages.py",
+    "test:auth": "node test-developer-auth.js && node test-auth-concurrency.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
@@ -37,6 +41,8 @@
     "pg": "^8.12.0"
   },
   "devDependencies": {
-    "luaparse": "^0.3.1"
+    "@playwright/test": "^1.63.0",
+    "luaparse": "^0.3.1",
+    "pg-mem": "^3.0.14"
   }
 }

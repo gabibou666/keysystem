@@ -29,6 +29,16 @@ const CRITIQUES = [
   'admin_sessions',
   'beacons',
   'user_cache',
+  'developer_accounts',
+  'developer_identities',
+  'developer_sessions',
+  'developer_email_tokens',
+  'developer_projects',
+  'developer_licenses',
+  'developer_scripts',
+  'developer_events',
+  'developer_checkpoints',
+  'developer_checkpoint_receipts',
 ];
 
 const fichiers = fs.readdirSync(dbDir).filter((f) => f.endsWith('.sql'));

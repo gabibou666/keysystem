@@ -22,7 +22,14 @@ const WEB = path.join(__dirname, '..', '..', 'web');
 // Page <-> script qui la pilote.
 const PAIRES = [
   ['index.html', 'app-index.js'],
-  ['index.html', 'app-requests.js'],
+  ['hub.html', 'app-hub.js'],
+  ['hub.html', 'app-requests.js'],
+  ['dashboard.html', 'app-dashboard.js'],
+  ['signup.html', 'app-auth.js'],
+  ['login.html', 'app-auth.js'],
+  ['verify-email.html', 'app-auth.js'],
+  ['reset-password.html', 'app-auth.js'],
+  ['claim.html', 'app-claim.js'],
   ['getkey.html', 'app-getkey.js'],
   ['robux.html', 'app-robux.js'],
   ['verify.html', 'app-verify.js'],

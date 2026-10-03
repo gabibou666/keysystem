@@ -2,6 +2,102 @@
 
 Système de clés complet avec monétisation LootLabs, compatibilité universelle executors (shims + IA), obfuscation automatique, loader GUI, dashboard admin Discord OAuth et statistiques d'exécution.
 
+## Plateforme développeurs
+
+L'accueil présente désormais la plateforme multi-développeurs. `/dashboard` est
+le workspace développeur, `/docs` documente l'API, `/claim?project=UUID` délivre les
+clés des projets après vérification LootLabs, Work.ink, Linkvertise ou
+LinkUnlocker. L'ancien service joueurs est
+conservé sur `/hub`, `/getkey` et ses API historiques.
+
+Chaque développeur possède ses projets, licences, scripts et tokens API dans
+des tables `developer_*` séparées. Les clés `ah_` sont propres à un projet;
+les tokens privés `ahp_` permettent seulement l'émission depuis un backend.
+Le loader public n'embarque aucun token API. Les scripts et tokens fournisseurs
+sont chiffrés avec la même `AES_KEY` stable que le service existant.
+
+En production, le serveur applique les trois migrations développeurs dans une
+transaction avant d'accepter les requêtes. Il utilise sa `DATABASE_URL`, avec
+un verrou pour les démarrages simultanés et des délais SQL bornés. Les migrations
+sont additives et ne transfèrent pas les anciennes données dans les comptes
+développeurs. Les autres migrations restent gérées par `npm run migrate`.
+Le callback Discord reste
+`/api/discord/callback`: aucun nouveau redirect URI n'est nécessaire.
+
+### Checkpoints par projet
+
+Chaque projet choisit LootLabs, Work.ink, Linkvertise ou LinkUnlocker dans son
+onglet Checkpoints. LootLabs utilise son token et un postback authentifie ;
+Work.ink utilise un lien et son ID numerique ; Linkvertise utilise un Target
+Link, son token anti-bypass et la destination indiquee apres configuration ;
+LinkUnlocker utilise son lien et son Redirect API token. Les secrets sont
+chiffres dans la base et ne sont jamais envoyes au navigateur.
+
+La migration `migration-developer-zcheckpoint-providers.sql` fait partie du
+démarrage en production et préserve les projets LootLabs existants. Les retours
+Work.ink, Linkvertise et LinkUnlocker sont verifies cote serveur et lies a une
+session du meme navigateur. Tester un parcours reel pour chaque fournisseur
+avant de partager la page publique.
+
+### Inscription et connexion
+
+`/signup` propose Google, Discord et email ; `/login` permet la connexion,
+le renvoi de vérification et la récupération du mot de passe. L'accueil
+explique les quatre étapes et comporte des aperçus interactifs identifiés
+comme exemples. Chaque compte possède un workspace indépendant.
+
+La migration `migration-developer-signup.sql` conserve les identifiants et
+projets existants. La colonne historique `discord_id` représente désormais
+l'identifiant interne du compte : les nouvelles inscriptions utilisent un
+UUID. Les identités OAuth sont séparées par fournisseur et sujet. Aucun
+rapprochement automatique n'est effectué entre deux comptes ayant le même
+email. Utiliser la même méthode de connexion pour retrouver ses projets.
+
+Configurer les variables dans l'environnement de l'hébergeur, jamais dans
+le dépôt ni dans le chat :
+
+- Google : `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Dans un client OAuth
+  Web Google, ajouter exactement `https://VOTRE_DOMAINE/api/auth/google/callback`
+  comme URI de redirection. La connexion utilise state, nonce, PKCE et vérifie
+  la signature Google, l'émetteur, l'audience et l'expiration du jeton.
+- Discord : `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` existants et
+  `https://VOTRE_DOMAINE/api/discord/callback` comme redirection.
+- Email : domaine expéditeur vérifié dans Resend, `RESEND_API_KEY` et
+  `AUTH_EMAIL_FROM` (exemple : `AUDIT HUB <accounts@VOTRE_DOMAINE>`).
+- `PUBLIC_URL` doit correspondre à l'origine publique HTTPS exacte.
+
+Sans configuration, les options concernées sont signalées comme indisponibles.
+Les mots de passe sont hachés avec scrypt. Les liens de vérification et de
+réinitialisation expirent après une heure et sont stockés hachés. Les sessions
+développeurs utilisent un cookie HttpOnly de sept jours et un token haché en
+base ; déconnexion et changement de mot de passe les révoquent côté serveur.
+Une réinitialisation ne modifie pas les projets ni les tokens API.
+La connexion email, la réinitialisation et la réservation d'envoi d'un lien
+partagent un verrou de compte PostgreSQL. Le réseau email est appelé après
+la transaction. `test:auth` couvre les deux ordres de concurrence connexion /
+réinitialisation et les envois simultanés avec un adaptateur de verrou, car
+pg-mem ignore `FOR UPDATE`. Cela ne remplace pas une validation des migrations
+et des transactions sur PostgreSQL avant le déploiement.
+
+Valider après configuration : inscription et vérification depuis une boîte
+réelle, récupération du mot de passe, puis connexion Google et Discord sur le
+domaine public. Les tests locaux simulent les fournisseurs et les emails.
+
+Vérification locale sans base ni secrets de production:
+
+```sh
+npm --prefix server run test:platform
+npm --prefix server run test:auth
+npx --prefix server playwright install chromium
+npm --prefix server run test:platform:ui
+npm --prefix server run preview:platform
+```
+
+L'aperçu isolé écoute sur `http://127.0.0.1:3215`. Il utilise des comptes fictifs,
+des tables en mémoire et un fournisseur LootLabs simulé. Les captures des tests
+sont enregistrées dans `artifacts/platform`. Les tests ne remplacent pas une
+vérification réelle du callback LootLabs après configuration de chaque compte.
+
 ## Stack
 
 - **Backend** : Node.js + Express (Render.com free)

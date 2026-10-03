@@ -15,6 +15,8 @@ const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
 const discordRoutes = require('./routes/discord');
 const robuxRoutes = require('./routes/robux');
+const platformRoutes = require('./routes/platform');
+const authRoutes = require('./routes/auth');
 const pool = require('./db');
 const { startPurgeScheduler } = require('./services/purge');
 const { auditRecentSessions } = require('./services/lootlabs-verify');
@@ -150,7 +152,7 @@ function serveHtml(req, res, next) {
   res.set('Content-Type', 'text/html; charset=UTF-8');
   res.set('Cache-Control', 'no-cache, must-revalidate');
   // Pages d'administration / d'attente: jamais indexees.
-  if (rel === 'admin.html' || rel === 'verify.html') {
+  if (['admin.html', 'verify.html', 'dashboard.html', 'claim.html', 'signup.html', 'login.html', 'verify-email.html', 'reset-password.html'].includes(rel)) {
     res.set('X-Robots-Tag', 'noindex, nofollow');
   }
   res.send(html);
@@ -493,6 +495,8 @@ app.use('/api', apiRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/discord', discordRoutes.router);
 app.use('/api/robux', robuxRoutes);
+app.use('/api/platform', platformRoutes);
+app.use('/api/auth', authRoutes);
 
 // OAuth Discord: redirect configure dans Discord = /admin/auth/callback
 app.use('/admin', adminRoutes);
@@ -519,7 +523,7 @@ app.use((err, req, res, next) => {
   console.error('[server]', err);
   // Alerte Discord (anti-inondation) sur les 500 non geres: sans cela, une panne
   // de la base ne se voit que par les utilisateurs ou dans les logs Render.
-  alerts.report(err, { where: 'express', route: req.originalUrl }).catch(() => {});
+  alerts.report(err, { where: 'express', route: req.path }).catch(() => {});
   if (res.headersSent) return next(err);
   res.status(500).json({ success: false, error: 'Erreur interne' });
 });
@@ -538,7 +542,8 @@ const SELF_PING_URL = process.env.PUBLIC_URL
 // Alertes d'erreurs non gerees -> Discord (cout nul tant que tout va bien).
 alerts.install();
 
-app.listen(PORT, () => {
+function startServer() {
+return app.listen(PORT, () => {
   console.log(`[server] KeySystem en ligne sur le port ${PORT}`);
   console.log(`[server] PUBLIC_URL = ${process.env.PUBLIC_URL || '(non defini)'}`);
   console.log(`[server] assets=${ASSET_VERSION} · trust proxy=${app.get('trust proxy')}`);
@@ -589,5 +594,20 @@ app.listen(PORT, () => {
     console.log('[self-ping] desactive (PUBLIC_URL local ou non defini)');
   }
 });
+
+}
+
+// A new deployment must prepare its own configured database before accepting
+// developer traffic. This never reads the local .env.migration target.
+if (process.env.NODE_ENV === 'production') {
+  require('./services/developer-schema').ensureDeveloperSchema(pool)
+    .then(() => { console.log('[schema] Developer platform ready'); startServer(); })
+    .catch(error => {
+      console.error('[schema] Developer platform setup failed:', error.code || error.name);
+      pool.end().finally(() => process.exit(1));
+    });
+} else {
+  startServer();
+}
 
 module.exports = app;

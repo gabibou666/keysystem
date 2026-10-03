@@ -41,12 +41,12 @@ function verifyUserCookie(cookie) {
 }
 
 // ---------- OAuth URLs ----------
-function loginUrl(redirectUri, state) {
+function loginUrl(redirectUri, state, scope = 'identify guilds.join') {
   const params = new URLSearchParams({
     client_id: process.env.DISCORD_CLIENT_ID,
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope: 'identify guilds.join',
+    scope,
     state,
   });
   return `https://discord.com/api/oauth2/authorize?${params}`;
@@ -494,4 +494,3 @@ module.exports = {
   getGuildInvite,
   getBoosterStatus,
 };
-

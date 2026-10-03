@@ -23,10 +23,16 @@ const INTERVALS = {
   admin_sessions: '30 days',
   executions: '90 days',
   activations: '90 days',
+  developer_events: '90 days',
+  developer_checkpoints: '1 day',
 };
 
 async function purgeNow() {
   const results = {};
+  for (const table of ['developer_sessions', 'developer_email_tokens']) {
+    try { const r = await pool.query(`DELETE FROM ${table} WHERE expires_at < now()`); if (r.rowCount) results[table] = r.rowCount; }
+    catch (e) { console.error(`[purge] ${table}:`, e.message); }
+  }
   for (const [table, interval] of Object.entries(INTERVALS)) {
     try {
       const r = await pool.query(

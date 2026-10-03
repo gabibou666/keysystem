@@ -9,6 +9,13 @@ Allow: /
 Disallow: /admin/
 Disallow: /admin
 Disallow: /verify
+Disallow: /dashboard
+Disallow: /claim
+Disallow: /signup
+Disallow: /login
+Disallow: /verify-email
+Disallow: /reset-password
+Disallow: /hub
 Disallow: /api/
 Disallow: /getkey/callback
 

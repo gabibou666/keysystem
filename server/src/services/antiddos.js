@@ -176,7 +176,7 @@ function antiDdosMiddleware(req, res, next) {
     jailedIPs.set(ip, {
       jailUntil,
       peakCount: tracker.count,
-      targetPath: req.originalUrl || req.path,
+      targetPath: req.path,
       userAgent: tracker.userAgent,
     });
     totalBlockedAttacks++;
@@ -188,7 +188,7 @@ function antiDdosMiddleware(req, res, next) {
       ip,
       tracker.count,
       now - tracker.windowStart,
-      req.originalUrl || req.path,
+      req.path,
       tracker.userAgent
     ).catch(() => {});
 

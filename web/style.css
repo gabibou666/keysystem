@@ -2077,6 +2077,7 @@ nav .links a:hover::after { transform: scaleX(1); }
    ACCESSIBILITÉ — reduced motion: tout au repos
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
   *, *::before, *::after {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
