@@ -10,6 +10,8 @@
 // (toutes signatures confondues), et uniquement en production.
 
 const { notifyDiscord } = require('./notify');
+const { errorSummary, diagnosticUrl } = require('./private-diagnostics');
+const crypto = require('crypto');
 
 const FENETRE_MS = 10 * 60 * 1000; // meme erreur: 1 alerte / 10 min
 const PLAFOND_MS = 60 * 1000; // toutes erreurs: 1 alerte / minute
@@ -23,7 +25,7 @@ function signature(err) {
     .split('\n')
     .find((l) => l.includes(' at ') && !l.includes('node:'));
   const lieu = (frame || '').match(/([^()\s\\/]+:\d+:\d+)\)?\s*$/) || [];
-  return `${message}|${lieu[1] || ''}`;
+  return `${crypto.createHash('sha256').update(message).digest('hex').slice(0,16)}|${lieu[1] || ''}`;
 }
 
 function createReporter({ send = notifyDiscord, now = Date.now, actif = process.env.NODE_ENV === 'production' } = {}) {
@@ -32,7 +34,7 @@ function createReporter({ send = notifyDiscord, now = Date.now, actif = process.
   const stats = { envoyees: 0, regroupees: 0, ignoreesHorsProd: 0 };
 
   async function report(err, contexte = {}) {
-    const message = String((err && (err.message || err)) || 'unknown').slice(0, 400);
+    const message = errorSummary(err);
     // Toujours visible dans les logs Render, quoi qu'il arrive.
     console.error(`[alerte${contexte.where ? ':' + contexte.where : ''}]`, message);
 
@@ -63,7 +65,7 @@ function createReporter({ send = notifyDiscord, now = Date.now, actif = process.
       description: `\`\`\`\n${message}\n\`\`\``,
       fields: [
         { name: 'Origin', value: contexte.where || 'unknown' },
-        { name: 'Route', value: contexte.route || '—' },
+        { name: 'Route', value: contexte.route ? diagnosticUrl(contexte.route) : '—' },
         { name: 'Runtime', value: `${process.version} · ${process.env.NODE_ENV || 'dev'}` },
       ],
     }).catch(() => {});

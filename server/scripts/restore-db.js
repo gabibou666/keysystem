@@ -145,7 +145,7 @@ const TYPES_SIMPLE = (v) => v === null || typeof v === 'number' || typeof v === 
     if (manquantes.length) {
       console.error(
         `\n[restore] ARRET: ${manquantes.length} table(s) absente(s) de la cible: ${manquantes.join(', ')}` +
-          "\n          Lancer d'abord: npm run migrate  (applique schema.sql ET db/migration-*.sql)"
+          "\n          Lancer d'abord: npm run migrate pour la plateforme. Les sauvegardes historiques exigent leur schema historique, disponible dans Git."
       );
       return;
     }

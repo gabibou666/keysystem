@@ -22,19 +22,13 @@ const WEB = path.join(__dirname, '..', '..', 'web');
 // Page <-> script qui la pilote.
 const PAIRES = [
   ['index.html', 'app-index.js'],
-  ['hub.html', 'app-hub.js'],
-  ['hub.html', 'app-requests.js'],
   ['dashboard.html', 'app-dashboard.js'],
+  ['hubs.html', 'app-catalog.js'],
   ['signup.html', 'app-auth.js'],
   ['login.html', 'app-auth.js'],
   ['verify-email.html', 'app-auth.js'],
   ['reset-password.html', 'app-auth.js'],
   ['claim.html', 'app-claim.js'],
-  ['getkey.html', 'app-getkey.js'],
-  ['robux.html', 'app-robux.js'],
-  ['verify.html', 'app-verify.js'],
-  ['admin.html', 'app-admin.js'],
-  ['changelog.html', 'app-changelog.js'],
 ];
 
 const problems = [];
@@ -54,9 +48,10 @@ for (const [page, script] of PAIRES) {
   const idsCrees = new Set();
   for (const m of code.matchAll(/\.id\s*=\s*['"]([^'"]+)['"]/g)) idsCrees.add(m[1]);
   for (const m of code.matchAll(/setAttribute\(\s*['"]id['"]\s*,\s*['"]([^'"]+)['"]/g)) idsCrees.add(m[1]);
+  for (const m of code.matchAll(/\bid=["']([^"']+)["']/g)) idsCrees.add(m[1]);
 
   const attendus = new Set(
-    [...code.matchAll(/getElementById\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1])
+    [...code.matchAll(/(?:getElementById|\$)\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1])
   );
   totalAttendus += attendus.size;
 

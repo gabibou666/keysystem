@@ -1,9 +1,9 @@
-// Routes OAuth Discord pour les UTILISATEURS (gate getkey)
-// /api/discord/login -> /api/discord/callback -> /api/discord/status
+// Developer OAuth Discord.
 const express = require('express');
 const nodeCrypto = require('crypto');
 const discord = require('../services/discord');
 const auth = require('../services/developer-auth');
+const registration = require('../services/registration-guard');
 
 const router = express.Router();
 
@@ -12,9 +12,9 @@ function userRedirectUri(req) {
 }
 
 // Etat anti-CSRF signe (10 min de validite)
-function signState(purpose = '') {
+function signState() {
   const exp = Date.now() + 10 * 60 * 1000;
-  const suffix = purpose === 'developer' ? `.${nodeCrypto.randomBytes(16).toString('hex')}.developer` : '';
+  const suffix = `.${nodeCrypto.randomBytes(16).toString('hex')}.developer`;
   const sig = nodeCrypto
     .createHmac('sha256', process.env.HMAC_SECRET)
     .update(String(exp) + suffix)
@@ -26,7 +26,7 @@ function verifyState(state) {
   if (typeof state !== 'string') return false;
   const [exp, sig, nonce, purpose] = state.split('.');
   if (!/^\d+$/.test(exp || '') || !/^[a-f0-9]{16}$/.test(sig || '')) return false;
-  if (state.split('.').length !== 2 && (state.split('.').length !== 4 || purpose !== 'developer' || !/^[a-f0-9]{32}$/.test(nonce || ''))) return false;
+  if (state.split('.').length !== 4 || purpose !== 'developer' || !/^[a-f0-9]{32}$/.test(nonce || '')) return false;
   if (!exp || !sig) return false;
   if (parseInt(exp, 10) < Date.now()) return false;
   const expected = nodeCrypto
@@ -39,96 +39,40 @@ function verifyState(state) {
 
 // ---------- GET /api/discord/login ----------
 router.get('/login', (req, res) => {
-  if (req.query.mode === 'developer') {
-    const state = signState('developer');
-    res.cookie('ah_oauth_state', state, { httpOnly: true, secure: userRedirectUri(req).startsWith('https:'), sameSite: 'lax', maxAge: 600000, path: '/api/discord' });
-    return res.redirect(discord.loginUrl(userRedirectUri(req), state, 'identify'));
-  }
-  res.redirect(discord.loginUrl(userRedirectUri(req), signState()));
+  registration.context(req,res);
+  const state = signState();
+  res.cookie('ah_oauth_state', state, { httpOnly: true, secure: process.env.NODE_ENV === 'production' || userRedirectUri(req).startsWith('https:'), sameSite: 'lax', maxAge: 600000, path: '/api/discord' });
+  res.redirect(discord.loginUrl(userRedirectUri(req), state, 'identify email'));
 });
 
 // ---------- GET /api/discord/callback ----------
 router.get('/callback', async (req, res) => {
   const { code, state, error } = req.query;
-  const developerLogin = typeof state === 'string' && state.endsWith('.developer');
-  const destination = developerLogin ? '/dashboard' : '/getkey';
+  const destination = '/dashboard';
   if (error === 'access_denied') {
     return res.redirect(`${destination}?login=denied`);
   }
-  if (!code || !verifyState(state)) {
+  if (typeof code !== 'string' || !code || code.length > 4096 || !verifyState(state)) {
     return res.redirect(`${destination}?login=invalid`);
   }
-  if (developerLogin && req.cookies?.ah_oauth_state !== state) return res.redirect('/dashboard?login=invalid');
+  if (req.cookies?.ah_oauth_state !== state) return res.redirect(`${destination}?login=invalid`);
   res.clearCookie('ah_oauth_state', { path: '/api/discord' });
   try {
     const tokenData = await discord.exchangeCode(code, userRedirectUri(req));
     const user = await discord.fetchUser(tokenData.access_token);
     const username = user.global_name || user.username;
-    if (developerLogin) {
-      const id = await auth.socialAccount('discord', user.id, username);
+      const id = await auth.socialAccount('discord', user.id, username,{email:user.email,emailVerified:user.verified===true},registration.context(req,res));
       await auth.createSession(id, res);
       return res.redirect('/dashboard?login=ok');
-    }
 
-    // Ajoute au serveur via le bot (silencieux si non configure)
-    const join = developerLogin ? null : await discord.addToGuild(tokenData.access_token, user.id, username);
-
-    // DB
-    if (join) await discord.upsertJoin(user.id, username, user.avatar, join.joined);
-
-    // Cookie session user signe
-    const isHttps = req.secure || (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
-    res.cookie(discord.USER_COOKIE, discord.signUserCookie(user.id), {
-      httpOnly: true,
-      secure: isHttps,
-      sameSite: 'lax',
-      maxAge: discord.USER_TTL_MS,
-      path: '/',
-    });
-
-    res.redirect(`${destination}?login=ok`);
   } catch (e) {
-    console.error('[discord/callback]', e);
+    console.error('[discord/callback]', e.code || e.name);
+    if(['ACCOUNT_EXISTS','VERIFIED_EMAIL_REQUIRED','ACCOUNT_CREATION_LIMIT'].includes(e.code)) {
+      const reason={ACCOUNT_EXISTS:'account_exists',VERIFIED_EMAIL_REQUIRED:'verified_email_required',ACCOUNT_CREATION_LIMIT:'account_creation_limit'}[e.code];
+      return res.redirect('/login?error='+reason);
+    }
     res.redirect(`${destination}?login=error`);
   }
 });
 
-// ---------- GET /api/discord/status ----------
-// Le front interroge pour savoir si l'utilisateur est connecte
-router.get('/status', async (req, res) => {
-  const discordId = discord.verifyUserCookie(req.cookies && req.cookies[discord.USER_COOKIE]);
-  if (!discordId) return res.json({ loggedIn: false });
-  const [rows, inServer, inviteUrl] = await Promise.all([
-    pool.query('SELECT username, avatar, joined FROM discord_joins WHERE discord_id = $1', [discordId]),
-    discord.isGuildMember(discordId),
-    discord.getGuildInvite(),
-  ]);
-  res.json({
-    loggedIn: true,
-    discordId,
-    username: rows.rows[0] ? rows.rows[0].username : null,
-    avatar: rows.rows[0] && rows.rows[0].avatar
-      ? `https://cdn.discordapp.com/avatars/${discordId}/${rows.rows[0].avatar}.png`
-      : null,
-    inServer,
-    inviteUrl: inServer ? null : inviteUrl,
-  });
-});
-
-// ---------- Middleware: exige un utilisateur connecte ----------
-async function requireDiscordUser(req, res, next) {
-  const discordId = discord.verifyUserCookie(req.cookies && req.cookies[discord.USER_COOKIE]);
-  if (!discordId) {
-    return res.status(401).json({ success: false, reason: 'discord_required', error: 'Sign in with Discord to get a key.' });
-  }
-  req.discordId = discordId;
-  next();
-}
-
-// ---------- POST /api/discord/logout ----------
-router.post('/logout', (req, res) => {
-  res.clearCookie(discord.USER_COOKIE);
-  res.json({ success: true });
-});
-
-module.exports = { router, requireDiscordUser };
+module.exports = { router };

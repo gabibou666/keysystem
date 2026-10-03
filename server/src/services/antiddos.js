@@ -14,6 +14,8 @@
 //   utilisateurs d'un coup.
 
 const { notifyDiscord } = require('./notify');
+const { isIP } = require('net');
+const { diagnosticUrl } = require('./private-diagnostics');
 
 // ===== Configuration des seuils =====
 const WINDOW_MS = 10 * 1000;         // Fenêtre de mesure glissante (10 secondes)
@@ -21,6 +23,9 @@ const SOFT_LIMIT = 60;               // Limite de courtoisie (max 60 req / 10s ~
 const DDOS_THRESHOLD = 95;           // Seuil d'attaque DDoS (95+ req / 10s = ban direct)
 const JAIL_DURATION_MS = 15 * 60 * 1000; // Durée de quarantaine (15 minutes)
 const ALERT_COOLDOWN_MS = 15 * 60 * 1000; // Cooldown webhook par IP (évite de spammer Discord)
+const MAX_TRACKED_IPS = 10000;
+const MAX_JAILED_IPS = 10000;
+const MAX_ALERT_IPS = 10000;
 
 // Option explicite, a activer UNIQUEMENT si tout le trafic passe par Cloudflare:
 //   IP_HEADER=cf-connecting-ip
@@ -50,9 +55,6 @@ function isPrivateOrReserved(ip) {
 
 // Source d'IP fiable. `null` => aucun tracking (on ne juge pas ce qu'on ne peut
 // pas identifier de facon sure).
-const IPV4_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
-const IPV6_RE = /^[0-9a-f:]{3,45}$/i;
-
 function getClientIp(req) {
   let ip = '';
 
@@ -69,7 +71,7 @@ function getClientIp(req) {
 
   // Validation stricte: un en-tete d'IP exotic (mode IP_HEADER) ne doit JAMAIS
   // se retrouver stocke puis reaffiche dans le panel admin (injection HTML).
-  if (!IPV4_RE.test(ip) && !IPV6_RE.test(ip)) return null;
+  if (!isIP(ip)) return null;
   return ip;
 }
 
@@ -103,6 +105,7 @@ async function triggerDdosAlert(ip, count, durationMs, targetPath, userAgent) {
   if (now - lastAlert < ALERT_COOLDOWN_MS) {
     return; // Évite de saturer le webhook Discord si l'attaquant continue
   }
+  if (!alertCooldowns.has(ip) && alertCooldowns.size >= MAX_ALERT_IPS) return;
   alertCooldowns.set(ip, now);
 
   const durationSec = Math.max(0.5, durationMs / 1000);
@@ -156,10 +159,15 @@ function antiDdosMiddleware(req, res, next) {
   // 3. Suivi du débit de requêtes
   let tracker = trackedIPs.get(ip);
   if (!tracker || now - tracker.windowStart > WINDOW_MS) {
+    if (!tracker && trackedIPs.size >= MAX_TRACKED_IPS) {
+      totalBlockedAttacks++;
+      res.setHeader('Retry-After', 30);
+      return res.status(429).json({ success: false, error: 'Server busy. Please try again shortly.', retryAfter: 30 });
+    }
     tracker = {
       count: 1,
       windowStart: now,
-      lastPath: req.path,
+      lastPath: diagnosticUrl(req.path),
       userAgent: req.headers['user-agent'] || '',
     };
     trackedIPs.set(ip, tracker);
@@ -167,28 +175,28 @@ function antiDdosMiddleware(req, res, next) {
   }
 
   tracker.count++;
-  tracker.lastPath = req.path;
+  tracker.lastPath = diagnosticUrl(req.path);
   tracker.userAgent = req.headers['user-agent'] || tracker.userAgent;
 
   // 4. Seuil d'attaque DDoS franchi -> Mise en prison immédiate + alerte
   if (tracker.count >= DDOS_THRESHOLD) {
     const jailUntil = now + JAIL_DURATION_MS;
-    jailedIPs.set(ip, {
+    if (jailedIPs.has(ip) || jailedIPs.size < MAX_JAILED_IPS) jailedIPs.set(ip, {
       jailUntil,
       peakCount: tracker.count,
-      targetPath: req.path,
+      targetPath: diagnosticUrl(req.path),
       userAgent: tracker.userAgent,
     });
     totalBlockedAttacks++;
 
-    console.warn(`[anti-ddos] ALERTE: IP ${ip} bloquée et bannie pour 15m (${tracker.count} reqs en ${(now - tracker.windowStart) / 1000}s sur ${req.path})`);
+    console.warn(`[anti-ddos] ALERTE: IP ${ip} bloquée et bannie pour 15m (${tracker.count} reqs en ${(now - tracker.windowStart) / 1000}s sur ${diagnosticUrl(req.path)})`);
 
     // Alerte Discord asynchrone non-bloquante
     triggerDdosAlert(
       ip,
       tracker.count,
       now - tracker.windowStart,
-      req.path,
+      diagnosticUrl(req.path),
       tracker.userAgent
     ).catch(() => {});
 
@@ -215,7 +223,7 @@ function antiDdosMiddleware(req, res, next) {
   next();
 }
 
-// Nettoyage régulier de la mémoire (toutes les 5 minutes)
+// Memory-only cleanup keeps the bounded tracker available without database I/O.
 setInterval(() => {
   const now = Date.now();
   // Purge trackers inactifs
@@ -240,7 +248,7 @@ setInterval(() => {
   for (const [ip, chain] of seenChains.entries()) {
     if (now - chain.at > 60 * 60 * 1000) seenChains.delete(ip);
   }
-}, 5 * 60 * 1000).unref();
+}, 30 * 1000).unref();
 
 function getStats() {
   const now = Date.now();

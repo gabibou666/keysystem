@@ -21,9 +21,8 @@
      npm run migrate           -> recree le schema
      node scripts/restore-db.js <dossier> --write  -> reinjecte les donnees
 
-   ATTENTION: script_versions.original_enc est CHIFFRE (AES-256-GCM). Les
-   originaux ne sont lisibles qu'avec la MEME AES_KEY: conservez cette variable
-   avec la sauvegarde, sinon les originaux restent illisibles pour toujours.
+   ATTENTION: builds et credentials sont CHIFFRES (AES-256-GCM). Conservez
+   la MEME AES_KEY avec la sauvegarde pour permettre leur dechiffrement.
 
    Usage:
      node scripts/backup-db.js [dossier-de-sortie]
@@ -71,7 +70,7 @@ function empreinte(txt) {
     creeLe: new Date().toISOString(),
     baseDeDonnees: (process.env.DATABASE_URL.split('/').pop() || '').split('?')[0],
     avertissement:
-      'script_versions.original_enc est chiffre (AES-256-GCM): les originaux exigent la MEME AES_KEY que celle utilisee lors de la sauvegarde.',
+      'Builds et credentials sont chiffres (AES-256-GCM): conserver la MEME AES_KEY que celle de la sauvegarde.',
     schema: {},
     tables: {},
   };

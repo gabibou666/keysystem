@@ -1,49 +1,13 @@
 const crypto = require('crypto');
-const { secret, aesKey } = require('../config-check');
+const { aesKey } = require('../config-check');
 
 // Secrets via l'environnement (voir src/config-check.js).
 // ATTENTION: plus aucun fallback silencieux de type 'dev-secret' (forgeable par
 // n'importe qui) et plus d'AES_KEY aleatoire par processus (elle rendait les
 // originaux chiffres illisibles apres chaque redeploiement).
-const HMAC_SECRET = secret('HMAC_SECRET');
 const AES_KEY = aesKey();
 
-// ---------- Cles HMAC (format: kid.signature) ----------
-function generateKey() {
-  const kid = crypto.randomBytes(16).toString('hex');
-  const signature = crypto
-    .createHmac('sha256', HMAC_SECRET)
-    .update(kid)
-    .digest('hex')
-    .slice(0, 32);
-  return { key: `${kid}.${signature}`, kid, signature };
-}
-
-function verifyKeyFormat(key) {
-  if (typeof key !== 'string') return null;
-  const parts = key.split('.');
-  // Validation stricte du format AVANT tout calcul cryptographique:
-  // timingSafeEqual leve une exception si les buffers n'ont pas la meme taille,
-  // et une entree non hex produirait un buffer plus court => 500 au lieu d'un
-  // simple "cle invalide".
-  if (parts.length !== 2) return null;
-  const [kid, signature] = parts;
-  if (!/^[0-9a-f]{32}$/i.test(kid) || !/^[0-9a-f]{32}$/i.test(signature)) return null;
-
-  const expected = crypto
-    .createHmac('sha256', HMAC_SECRET)
-    .update(kid)
-    .digest('hex')
-    .slice(0, 32);
-  try {
-    if (!crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'))) return null;
-  } catch {
-    return null;
-  }
-  return { kid, signature };
-}
-
-// ---------- AES-256-GCM pour le script original ----------
+// ---------- AES-256-GCM pour les builds et credentials ----------
 function encryptAES(plaintext) {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', AES_KEY, iv);
@@ -89,8 +53,6 @@ function safeEqual(a, b) {
 }
 
 module.exports = {
-  generateKey,
-  verifyKeyFormat,
   encryptAES,
   decryptAES,
   sha256,

@@ -1,15 +1,16 @@
 'use strict';
 const crypto = require('crypto');
-const { promisify } = require('util');
-const scrypt = promisify(crypto.scrypt);
+const { passwordWork } = require('./password-work');
 const pool = require('../db');
+const {normalizeEmail,validEmail}=require('./account-identity');
+const registration=require('./registration-guard');
 const COOKIE = 'ah_session';
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const random = () => crypto.randomBytes(32).toString('hex');
 const origin = () => (process.env.PUBLIC_URL || '').replace(/\/$/, '');
 const emailEnabled = () => !!(process.env.RESEND_API_KEY && process.env.AUTH_EMAIL_FROM && origin());
 const googleEnabled = () => !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && origin());
-function cookieOptions() { return { httpOnly:true, secure:origin().startsWith('https:'), sameSite:'lax', path:'/' }; }
+function cookieOptions() { return { httpOnly:true, secure:process.env.NODE_ENV==='production'||origin().startsWith('https:'), sameSite:'lax', path:'/' }; }
 function setSessionCookie(res,token) { res.cookie(COOKIE,token,{...cookieOptions(),maxAge:86400000*7}); }
 async function createSession(id, res, db = pool) {
   const token = random();
@@ -24,16 +25,16 @@ async function account(req) {
   return rows[0] || null;
 }
 async function passwordHash(password) {
-  const salt=random(); const key=await scrypt(password,salt,64);
+  const salt=random(); const key=await passwordWork(password,salt);
   return `scrypt:${salt}:${key.toString('hex')}`;
 }
 async function passwordMatches(password, stored) {
   const [,salt,key]=(stored||'').split(':');
   // A real derivation for unknown users keeps login timing comparable.
-  const actual=await scrypt(password,salt||'unknown-account-timing-salt',64);
+  const actual=await passwordWork(password,salt||'unknown-account-timing-salt');
   return !!key && /^[a-f0-9]{128}$/.test(key) && crypto.timingSafeEqual(actual,Buffer.from(key,'hex'));
 }
-async function socialAccount(provider, subject, name) {
+async function socialAccount(provider, subject, name, identity={}, creationContext) {
   if(!subject || typeof subject!=='string' || subject.length>255) throw new Error('Invalid provider identity');
   const client=await pool.connect();
   try {
@@ -43,12 +44,21 @@ async function socialAccount(provider, subject, name) {
     // Preserve the accounts created by the original Discord-only platform.
     const legacy=provider==='discord'?await client.query('SELECT discord_id FROM developer_accounts WHERE discord_id=$1',[subject]):{rows:[]};
     const id=legacy.rows[0]?.discord_id || crypto.randomUUID();
-    if(!legacy.rows[0]) await client.query('INSERT INTO developer_accounts(discord_id,username) VALUES($1,$2)',[id,String(name||'Developer').slice(0,80)]);
+    if(!legacy.rows[0]) {
+      const email=normalizeEmail(identity.email);
+      if(identity.emailVerified!==true||!validEmail(email)) {const e=new Error('A verified email is required to create your account.');e.code='VERIFIED_EMAIL_REQUIRED';throw e;}
+      const duplicate=await client.query('SELECT discord_id FROM developer_accounts WHERE email=$1',[email]);
+      if(duplicate.rows[0]) {const e=new Error('An account already uses this email. Sign in with its existing method.');e.code='ACCOUNT_EXISTS';throw e;}
+      await registration.reserve(client,creationContext);
+      await client.query('INSERT INTO developer_accounts(discord_id,username,email,email_verified) VALUES($1,$2,$3,true)',[id,String(name||'Developer').slice(0,80),email]);
+    }
     await client.query('INSERT INTO developer_identities(provider,subject,account_id) VALUES($1,$2,$3)',[provider,subject,id]);
     await client.query('COMMIT'); return id;
   } catch(e) {
     await client.query('ROLLBACK');
-    if(e.code==='23505') {const {rows}=await pool.query('SELECT account_id FROM developer_identities WHERE provider=$1 AND subject=$2',[provider,subject]);if(rows[0]) return rows[0].account_id;}
+    if(e.code==='23505') {const {rows}=await pool.query('SELECT account_id FROM developer_identities WHERE provider=$1 AND subject=$2',[provider,subject]);if(rows[0]) return rows[0].account_id;
+      const email=normalizeEmail(identity.email);const duplicate=await pool.query('SELECT discord_id FROM developer_accounts WHERE email=$1',[email]);
+      if(duplicate.rows[0]) {const exists=new Error('An account already uses this email. Sign in with its existing method.');exists.code='ACCOUNT_EXISTS';throw exists;}}
     throw e;
   } finally {client.release();}
 }
@@ -67,7 +77,7 @@ async function sendToken(id,email,purpose) {
   // the email provider. Concurrent resends cannot bypass the cooldown.
   const link=`${origin()}/${purpose==='verify'?'verify-email':'reset-password'}?token=${token}`;
   try {
-    const result=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({from:process.env.AUTH_EMAIL_FROM,to:[email],subject:purpose==='verify'?'Verify your AUDIT HUB account':'Reset your AUDIT HUB password',text:`${purpose==='verify'?'Verify your email address':'Choose a new password'}: ${link}\n\nThis link expires in one hour. If you did not request this, ignore this message.`}),signal:AbortSignal.timeout(15000)});
+    const result=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({from:process.env.AUTH_EMAIL_FROM,to:[email],subject:purpose==='verify'?'Verify your AUDIT HUB account':'Reset your AUDIT HUB password',text:`${purpose==='verify'?'Verify your email address':'Choose a new password'}: ${link}\n\nThis link expires in one hour. If you did not request this, ignore this message.`}),redirect:'error',signal:AbortSignal.timeout(15000)});
     if(!result.ok) throw new Error('Email delivery unavailable');
   } catch(e) {await pool.query('DELETE FROM developer_email_tokens WHERE token_hash=$1',[tokenHash]);throw e;}
 }

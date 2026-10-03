@@ -19,7 +19,7 @@ async function run() {
   const emailToken=()=>new URL(mailbox.at(-1).text.match(/https?:\/\/\S+/)[0]).searchParams.get('token');
   function signedToken(nonce,overrides={}) {
     const header=Buffer.from(JSON.stringify({alg:'RS256',kid:jwk.kid})).toString('base64url');
-    const payload=Buffer.from(JSON.stringify({iss:'https://accounts.google.com',aud:process.env.GOOGLE_CLIENT_ID,sub:'google-subject-1',iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+300,nonce,name:'Google Developer',...overrides})).toString('base64url');
+    const payload=Buffer.from(JSON.stringify({iss:'https://accounts.google.com',aud:process.env.GOOGLE_CLIENT_ID,sub:'google-subject-1',iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+300,nonce,name:'Google Developer',email:'google-developer@example.com',email_verified:true,...overrides})).toString('base64url');
     return header+'.'+payload+'.'+crypto.sign('RSA-SHA256',Buffer.from(header+'.'+payload),privateKey).toString('base64url');
   }
   try {
@@ -53,7 +53,7 @@ async function run() {
     check((await post('logout',{},nextLogin.cookie,'https://evil.example')).status===403,'Cross-origin auth mutations rejected');
     await post('logout',{},nextLogin.cookie);check((await fetch(f.base+'/api/platform/projects',{headers:{Cookie:nextLogin.cookie}})).status===401,'Logout revokes the session on the server');
     process.env.GOOGLE_CLIENT_ID='test-client';process.env.GOOGLE_CLIENT_SECRET='test-secret';
-    const begin=await fetch(f.base+'/api/auth/google',{redirect:'manual'});const oauth=new URL(begin.headers.get('location'));const googleCookie=begin.headers.get('set-cookie').split(';')[0];
+    const begin=await fetch(f.base+'/api/auth/google',{redirect:'manual'});const oauth=new URL(begin.headers.get('location'));const googleCookie=begin.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
     check(oauth.hostname==='accounts.google.com'&&oauth.searchParams.get('code_challenge_method')==='S256','Google authorization uses official endpoint and PKCE');
     googleToken=signedToken(oauth.searchParams.get('nonce'));
     const callback=f.base+'/api/auth/google/callback?code=test&state='+oauth.searchParams.get('state');
@@ -62,7 +62,7 @@ async function run() {
     const verifier=require('./src/services/google-auth');
     for(const [label,overrides,nonce] of [['Wrong audience',{aud:'another-app'},oauth.searchParams.get('nonce')],['Wrong issuer',{iss:'https://evil.example'},oauth.searchParams.get('nonce')],['Expired token',{exp:1},oauth.searchParams.get('nonce')],['Wrong nonce',{},'different']]) {await assert.rejects(()=>verifier.verifyIdToken(signedToken(oauth.searchParams.get('nonce'),overrides),nonce));check(true,label+' rejected');}
     const bad=googleToken.slice(0,-10)+'AAAAAAAAAA';await assert.rejects(()=>verifier.verifyIdToken(bad,oauth.searchParams.get('nonce')));check(true,'Forged Google signature rejected');
-    const social=require('./src/services/developer-auth');const id=await social.socialAccount('google','google-subject-1','Updated name');const other=await social.socialAccount('discord','google-subject-1','Other provider');check(id!==other,'Different providers cannot impersonate matching subjects');
+    const social=require('./src/services/developer-auth');const id=await social.socialAccount('google','google-subject-1','Updated name');const other=await social.socialAccount('discord','google-subject-1','Other provider',{email:'another-provider@example.com',emailVerified:true});check(id!==other,'Different providers cannot impersonate matching subjects');
     console.log(`Developer auth: ${checks} checks passed without production email or OAuth calls.`);
   } finally {global.fetch=nativeFetch;await f.close();}
 }

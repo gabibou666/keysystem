@@ -2,12 +2,20 @@
 const fs = require('fs');
 const path = require('path');
 
-// Only the additive developer-platform migrations run here. Historical tables
+// Developer migrations run here, including email normalization. Existing email
+// collisions abort the transaction for operator review. Historical tables
 // remain managed by the operator's existing migration command.
 const files = [
   'migration-developer-platform.sql',
   'migration-developer-signup.sql',
+  'migration-developer-zaccount-guards.sql',
   'migration-developer-zcheckpoint-providers.sql',
+  'migration-developer-zhubs.sql',
+  'migration-developer-zscript-builds.sql',
+  'migration-developer-zui.sql',
+  'migration-developer-zprofiles.sql',
+  'migration-developer-zmoderation.sql',
+  'migration-developer-zprovider-guards.sql',
 ];
 
 async function ensureDeveloperSchema(pool) {
@@ -29,4 +37,4 @@ async function ensureDeveloperSchema(pool) {
   }
 }
 
-module.exports = { ensureDeveloperSchema };
+module.exports = { ensureDeveloperSchema, files };

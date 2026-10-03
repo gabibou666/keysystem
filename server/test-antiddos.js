@@ -1,5 +1,6 @@
 // Test unitaire et fonctionnel du système Anti-DDoS
-require('dotenv').config({ path: __dirname + '/.env' });
+// Tests use an injected notification transport, never the live webhook.
+require.cache[require.resolve('./src/services/notify')]={exports:{notifyDiscord:async()=>{}}};
 const express = require('express');
 const http = require('http');
 const antiddos = require('./src/services/antiddos');

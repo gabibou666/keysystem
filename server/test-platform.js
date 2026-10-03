@@ -13,15 +13,15 @@ async function run() {
     const discord=require('./src/services/discord');
     const loginResponse=await fetch(f.base+'/api/discord/login?mode=developer',{redirect:'manual'});
     const loginUrl=new URL(loginResponse.headers.get('location'));
-    check(loginUrl.searchParams.get('scope')==='identify','Developer OAuth requests identity only');
+    check(loginUrl.searchParams.get('scope')==='identify email','Developer OAuth requests identity and verified email without joining guilds');
     const oauthState=loginUrl.searchParams.get('state');
     const missingNonce=await fetch(f.base+'/api/discord/callback?code=test&state='+encodeURIComponent(oauthState),{redirect:'manual'});
     check(missingNonce.headers.get('location')==='/dashboard?login=invalid','OAuth callback must match the originating browser');
     let joins=0;
     discord.exchangeCode=async()=>({access_token:'test-only'});
-    discord.fetchUser=async()=>({id:'900000000000000003',username:'New developer'});
+    discord.fetchUser=async()=>({id:'900000000000000003',username:'New developer',email:'discord-developer@example.com',verified:true});
     discord.addToGuild=async()=>{joins++;return {joined:true};};
-    const callbackResponse=await fetch(f.base+'/api/discord/callback?code=test&state='+encodeURIComponent(oauthState),{redirect:'manual',headers:{Cookie:loginResponse.headers.get('set-cookie').split(';')[0]}});
+    const callbackResponse=await fetch(f.base+'/api/discord/callback?code=test&state='+encodeURIComponent(oauthState),{redirect:'manual',headers:{Cookie:loginResponse.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ')}});
     check(callbackResponse.headers.get('location')==='/dashboard?login=ok' && joins===0,'Developer sign-in creates workspace without joining a guild');
     const createdAccount=await f.pool.query('SELECT a.username FROM developer_accounts a JOIN developer_identities i ON i.account_id=a.discord_id WHERE i.provider=$1 AND i.subject=$2',['discord','900000000000000003']);
     check(createdAccount.rows[0]?.username==='New developer','Discord profile persisted in developer account');
@@ -47,14 +47,14 @@ async function run() {
     check(dbKey.rows[0].hwid_hash===null,'Failed script load does not bind a device');
     await req('/projects/'+id+'/script','PUT',{content:'return "project-a-script"'});
     const valid=await req('/v1/check','POST',{projectId:id,key,hwid:'test-device-a',executor:'Xeno',loadScript:true},'');
-    check(valid.data.success && valid.data.script==='return "project-a-script"','Published script delivered after validation');
+    check(valid.data.success && valid.data.script.includes('project-a-script'),'Published script delivered after validation');
     check((await req('/projects/'+id+'/script','PUT',{content:'return "unauthorized"'},f.cookies[1])).status===404,'Another developer cannot replace a hosted script');
     check((await req('/projects/'+bid+'/script','PUT',{content:'return "project-b-script"'},f.cookies[1])).status===200,'Each developer can publish their own project script');
     const hosted=await f.pool.query('SELECT content_enc,content_iv FROM developer_scripts WHERE project_id=$1',[id]);
     check(hosted.rows[0].content_enc!=='return "project-a-script"'&&!!hosted.rows[0].content_iv,'Hosted source is encrypted in storage');
     const release=await req('/projects/'+id+'/script','PUT',{content:'return "project-a-release-2"'});
     const updated=await req('/v1/check','POST',{projectId:id,key,hwid:'test-device-a',loadScript:true},'');
-    check(release.data.version===2&&updated.data.version===2&&updated.data.script==='return "project-a-release-2"','Same project loader delivers the newly published release');
+    check(release.data.version===2&&updated.data.version===2&&updated.data.script.includes('project-a-release-2'),'Same project loader delivers the newly published release');
     const otherScript=await req('/v1/check','POST',{projectId:bid,key,hwid:'test-device-a',loadScript:true},'');
     check(!otherScript.data.success&&!otherScript.data.script,'A license cannot download another developer hosted script');
     const wrongDevice=await req('/v1/check','POST',{projectId:id,key,hwid:'test-device-b'},'');
@@ -72,12 +72,24 @@ async function run() {
     check((await req('/v1/projects/'+id+'/licenses','POST',{},'',{Authorization:'Bearer '+rotated.data.apiToken})).status===201,'New token accepted');
     const checkpoint=await req('/projects/'+id+'/checkpoints','PUT',{apiToken:'creator-token-for-test',count:2});
     check(checkpoint.status===200 && checkpoint.data.postbackUrl,'LootLabs configuration produces authenticated callback URL');
+    const callbackDetail=await req('/projects/'+id);
+    check(callbackDetail.data.project.checkpointCallbackUrl===checkpoint.data.postbackUrl,'Owner can retrieve the saved callback after returning to the project');
+    const publicDetail=await req('/public/projects/'+id,'GET',undefined,'');
+    const listed=await req('/projects');
+    check(!JSON.stringify(publicDetail.data).includes('secret=')&&!JSON.stringify(listed.data).includes('secret='),'Public project and project listings do not expose callback secrets');
+    check((await req('/projects/'+id,'GET',undefined,f.cookies[1])).status===404,'Another developer cannot retrieve the callback');
+    const savedAgain=await req('/projects/'+id+'/checkpoints','PUT',{apiToken:'',count:2});
+    check(savedAgain.status===200&&savedAgain.data.postbackUrl===checkpoint.data.postbackUrl,'Saving with an empty token preserves credentials and the callback URL');
     const start=await req('/checkpoints/'+id+'/start','POST',{},'');
     check(start.status===200 && new URL(start.data.url).searchParams.get('puid')===start.data.session,'Provider link includes server-issued session');
     check(f.providerCalls[0].headers.Authorization==='Bearer creator-token-for-test','Creator token sent with Bearer authorization');
     const browserCookie=start.headers.get('set-cookie').split(';')[0], session=start.data.session;
+    await req('/projects/'+id+'/checkpoints','PUT',{apiToken:'',count:2});
+    check((await req('/checkpoints/'+session+'/status','GET',undefined,browserCookie)).data.status==='pending','Saving unchanged settings preserves an active checkpoint');
     check((await req('/checkpoints/'+session+'/status','GET',undefined,'')).status===403,'Other browsers cannot recover checkpoint key');
-    const callback=new URL(checkpoint.data.postbackUrl); callback.searchParams.set('click_id',session);callback.searchParams.set('unique_id','receipt-one');
+    const callback=new URL(checkpoint.data.postbackUrl); callback.searchParams.set('click_id',session);callback.searchParams.set('unique_id','receipt-one');callback.searchParams.set('ip','127.0.0.1');
+    const forgedCallback=new URL(callback);forgedCallback.searchParams.set('secret','0'.repeat(64));
+    check((await fetch(forgedCallback)).status===403,'A forged callback secret is rejected');
     async function sendCallback() {return fetch(callback).then(r=>r.json());}
     await sendCallback();await sendCallback();
     const pending=await req('/checkpoints/'+session+'/status','GET',undefined,browserCookie);
@@ -94,6 +106,13 @@ async function run() {
     const source=await fetch(f.base+'/api/platform/v1/loader/'+id).then(r=>r.text());
     require('luaparse').parse(source,{luaVersion:'5.3'});
     check(source.includes(id)&&!source.includes(token),'Generated Lua compiles and contains no API token');
+    const legacyId=(await req('/projects','POST',{name:'Legacy callbacks'})).data.project.id;
+    await req('/projects/'+legacyId+'/checkpoints','PUT',{apiToken:'legacy-provider-token',count:1});
+    const legacySecret='a'.repeat(64);
+    await f.pool.query('UPDATE developer_projects SET checkpoint_secret_hash=$1 WHERE id=$2',[require('./src/services/crypto').hashToken(legacySecret),legacyId]);
+    const legacyStart=await req('/checkpoints/'+legacyId+'/start','POST',{},'');
+    const legacyCallback=f.base+'/api/platform/checkpoints/'+legacyId+'/postback?secret='+legacySecret+'&click_id='+legacyStart.data.session+'&unique_id=legacy-receipt&ip=127.0.0.1';
+    check((await fetch(legacyCallback)).status===200,'Existing callbacks issued before this update still work');
     console.log(`Platform: ${assertions} checks passed in an isolated database.`);
   } finally { await f.close(); }
 }

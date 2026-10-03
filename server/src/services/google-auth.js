@@ -9,7 +9,7 @@ async function verifyIdToken(token,nonce) {
   const claims=JSON.parse(Buffer.from(parts[1],'base64url').toString());
   if(header.alg!=='RS256'||typeof header.kid!=='string') throw new Error('Invalid identity signature');
   if(!keysCache || keysCache.expires<Date.now() || !keysCache.keys.some(k=>k.kid===header.kid)) {
-    const result=await fetch('https://www.googleapis.com/oauth2/v3/certs',{signal:AbortSignal.timeout(10000)});
+    const result=await fetch('https://www.googleapis.com/oauth2/v3/certs',{redirect:'error',signal:AbortSignal.timeout(10000)});
     if(!result.ok) throw new Error('Identity service unavailable');
     const data=await result.json(); keysCache={keys:data.keys,expires:Date.now()+3600000};
   }

@@ -35,7 +35,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(dossier, 'manifest.json'),
 const empreinte = (liste) => nodeCrypto.createHash('sha256').update(liste.join('\n')).digest('hex').slice(0, 16);
 
 // Colonne identifiante pour produire une empreinte comparable.
-const CLE = { keys: 'kid', script_versions: 'version', script_builds: 'version', game_info: 'place_id' };
+const CLE = {developer_accounts:'discord_id',developer_scripts:'project_id',developer_listings:'project_id',developer_identities:'subject',developer_sessions:'token_hash',developer_email_tokens:'token_hash'};
 const colonneCle = (table, ligne) => CLE[table] || (ligne.id !== undefined ? 'id' : Object.keys(ligne)[0]);
 
 const resultats = [];
@@ -86,13 +86,13 @@ const planter = [];
     try {
       ({ decryptAES, sha256 } = require('../src/services/crypto'));
       const { rows } = await client.query(
-        'SELECT version, original_enc, original_iv, original_hash FROM script_versions ORDER BY version'
+        'SELECT project_id,version,content_enc,content_iv,build_hash FROM developer_scripts ORDER BY project_id'
       );
       let ok = 0;
       for (const r of rows) {
-        const clair = decryptAES(r.original_enc, r.original_iv);
-        if (!r.original_hash || sha256(clair) === r.original_hash) ok++;
-        else planter.push(`script v${r.version}: empreinte differente apres dechiffrement`);
+        const clair = decryptAES(r.content_enc, r.content_iv);
+        if (!r.build_hash || sha256(clair) === r.build_hash) ok++;
+        else planter.push(`project ${r.project_id} script v${r.version}: empreinte differente apres dechiffrement`);
       }
       console.log(`\n  ${ok === rows.length ? '✓' : '✗'} scripts chiffres: ${ok}/${rows.length} dechiffrables et conformes`);
       if (ok !== rows.length) planter.push('originaux chiffres non conformes');

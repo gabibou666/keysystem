@@ -26,7 +26,7 @@
     if(!options.google||!options.discord||!options.email) {$('setupNote').hidden=false;$('setupNote').textContent='Choose an available sign-in method below. Use the same method each time you return.';}
     if(!options.email) {$('emailStatus').hidden=false;$('emailStatus').textContent=signup?'Email registration is currently unavailable. Choose an available sign-in method above.':'Verification emails and password recovery are currently unavailable. Existing email accounts can still sign in.';if(signup)$('submitAuth').disabled=true;for(const el of document.querySelectorAll('[data-email-help]'))el.disabled=true;}
   }).catch(()=>notice('Unable to load sign-in options. Please refresh.',true));
-  const error=new URLSearchParams(location.search).get('error');if(error)notice(error==='google_unavailable'?'Google sign-in is currently unavailable. Choose another available method.':'Sign-in could not be completed. Please try again.',true);
+  const error=new URLSearchParams(location.search).get('error');if(error)notice({google_unavailable:'Google sign-in is currently unavailable. Choose another available method.',account_exists:'An account already uses this email. Sign in using the method you originally chose.',verified_email_required:'Verify your email in your Google or Discord account before creating a workspace.',account_creation_limit:'Account creation limit reached. Sign in to your existing account or try again tomorrow.'}[error]||'Sign-in could not be completed. Please try again.',true);
   $('authForm').addEventListener('submit',async event=>{
     event.preventDefault();const button=$('submitAuth');button.disabled=true;
     try {

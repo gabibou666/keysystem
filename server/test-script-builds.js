@@ -1,0 +1,75 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('fs/promises'),path=require('path'),os=require('os');
+const {startFixture}=require('./tests/platform-fixture');
+async function run(){
+  const f=await startFixture();let checks=0;
+  const builder=require('./src/services/script-builder'),crypto=require('./src/services/crypto');
+  const check=(condition,label)=>{assert.ok(condition,label);checks++;console.log('OK '+label);};
+  async function req(url,method='GET',body,cookie=f.cookies[0]){
+    const r=await fetch(f.base+url,{method,headers:{...(cookie?{Cookie:cookie}:{}),...(body===undefined?{}:{'Content-Type':'application/json',Origin:f.base})},body:body===undefined?undefined:JSON.stringify(body)});
+    return {status:r.status,data:r.headers.get('content-type')?.includes('json')?await r.json():await r.text()};
+  }
+  try{
+    const code='-- ORIGINAL_PRIVATE_COMMENT\nlocal privateVariableName: number = 4\nprivateVariableName += 2\nreturn privateVariableName';
+    const built=await builder.build(code,{targetMode:'single',placeId:123});
+    check(built.validated&&built.obfuscated&&built.targetMode==='single'&&built.placeId===123,'Luau is parsed and obfuscated with a single-place target');
+    check(!built.code.includes('ORIGINAL_PRIVATE_COMMENT')&&!built.code.includes('privateVariableName')&&!built.code.includes(': number'),'Build strips comments, renames locals and removes type annotations');
+    check(built.code.includes('game.PlaceId')&&built.code.includes('123'),'Single-place guard is embedded in generated code');
+    check(await builder.validate(built.code),'Generated build passes a second parse');
+    await assert.rejects(()=>builder.build('local x = ( PRIVATE_INVALID'),{code:'SCRIPT_INVALID'});checks++;console.log('OK Invalid syntax is rejected');
+    for(const input of [{targetMode:'unknown'},{targetMode:'single',placeId:0},{targetMode:'single',placeId:1.5},{targetMode:'single',placeId:Number.MAX_SAFE_INTEGER+1},{targetMode:'universal',placeId:123}])await assert.rejects(()=>builder.build('return 1',input),{code:'SCRIPT_INVALID'});
+    check(true,'Invalid and unsafe target values are rejected');
+    const noExecution=await builder.build('while true do end');check(noExecution.validated,'Validation does not execute an infinite-loop user script');
+    const concurrent=await Promise.allSettled([builder.build('return 1'),builder.build('return 2'),builder.build('return 3')]);
+    check(concurrent[0].status==='fulfilled'&&concurrent[1].status==='fulfilled'&&concurrent[2].reason?.code==='SCRIPT_BUSY','Only two builds run concurrently, with no unbounded queue');
+    check((await builder.build('return 4')).validated,'Build capacity recovers after previous work completes');
+    const id=(await req('/api/platform/projects','POST',{name:'Build verification'})).data.project.id;
+    const upload=await req('/api/platform/projects/'+id+'/script','PUT',{content:code,targetMode:'single',placeId:123});
+    check(upload.status===200&&upload.data.validated&&upload.data.obfuscated&&upload.data.placeId===123,'Upload persists verified build flags and target');
+    const stored=(await f.pool.query('SELECT * FROM developer_scripts WHERE project_id=$1',[id])).rows[0];
+    const decrypted=crypto.decryptAES(stored.content_enc,stored.content_iv);
+    check(!decrypted.includes('ORIGINAL_PRIVATE_COMMENT')&&!decrypted.includes('privateVariableName')&&stored.build_hash===crypto.sha256(decrypted),'Database retains encrypted obfuscated output, not original source');
+    const invalid=await req('/api/platform/projects/'+id+'/script','PUT',{content:'local x = ( PRIVATE_INVALID',targetMode:'universal'});
+    check(invalid.status===400&&!JSON.stringify(invalid.data).includes('PRIVATE_INVALID')&&(await f.pool.query('SELECT version FROM developer_scripts WHERE project_id=$1',[id])).rows[0].version===1,'Rejected upload has generic error and preserves the previous version');
+    const listing={title:'Built release',description:'',game:'A game',accessMode:'free',published:true};
+    check((await req('/api/catalog/projects/'+id,'PUT',listing)).status===200,'Publishing reparses a verified build');
+    const metadata=(await req('/api/catalog/scripts/'+id,'GET',undefined,'')).data.listing;
+    check(metadata.validated&&metadata.obfuscated&&metadata.targetMode==='single'&&metadata.placeId===123,'Public release metadata includes the verified target');
+    check((await req('/api/catalog/scripts/'+id+'/source','GET',undefined,'')).data===decrypted,'Free release serves the obfuscated snapshot, never original input');
+    await req('/api/platform/projects/'+id+'/script','PUT',{content:'return 7',targetMode:'universal'});
+    check((await req('/api/catalog/scripts/'+id,'GET',undefined,'')).data.listing.placeId===123,'Free snapshot target stays unchanged after a private upload');
+    await req('/api/catalog/projects/'+id,'PUT',{...listing,accessMode:'licensed'});
+    const universal=(await req('/api/catalog/scripts/'+id,'GET',undefined,'')).data.listing;
+    check(universal.targetMode==='universal'&&universal.placeId===null&&universal.game==='Universal','Universal release removes any game-specific target');
+    await req('/api/platform/projects/'+id+'/script','PUT',{content:'return 8',targetMode:'single',placeId:456});
+    const live=(await req('/api/catalog/scripts/'+id,'GET',undefined,'')).data.listing;
+    check(live.targetMode==='single'&&live.placeId===456&&live.scriptVersion===3,'Licensed metadata follows the live loader target and version');
+    const loader=await req('/api/platform/v1/loader/'+id,'GET',undefined,'');check(loader.data.includes('game.PlaceId == 456'),'Licensed loader checks the current Roblox place before requesting source');
+    const originalEnc=crypto.encryptAES('local BROKEN_PUBLISH = (');
+    await f.pool.query('UPDATE developer_scripts SET content_enc=$1,content_iv=$2 WHERE project_id=$3',[originalEnc.enc,originalEnc.iv,id]);
+    check((await req('/api/catalog/projects/'+id,'PUT',{...listing,accessMode:'licensed'})).status===400,'Publication detects a corrupt build even when stored flags claim validation');
+    const legacy=crypto.encryptAES('return "legacy-raw-source"');
+    await f.pool.query('UPDATE developer_scripts SET content_enc=$1,content_iv=$2,validated=false,obfuscated=false WHERE project_id=$3',[legacy.enc,legacy.iv,id]);
+    check((await req('/api/catalog/projects/'+id,'PUT',listing)).status===409,'Legacy unvalidated upload must be rebuilt before publication');
+    const key=(await req('/api/platform/projects/'+id+'/licenses','POST',{})).data.licenses[0].key;
+    const denied=await req('/api/platform/v1/check','POST',{projectId:id,key,hwid:'test-build-device',loadScript:true},'');
+    check(denied.data.reason==='build_required'&&!denied.data.script,'Legacy raw source is never delivered as a fallback');
+    const modulePath=require.resolve('./src/services/script-builder'),installerPath=require.resolve('./scripts/install-darklua');
+    const savedBuilder=require.cache[modulePath],savedInstaller=require.cache[installerPath];
+    try{
+      require.cache[installerPath]={...savedInstaller,exports:{...savedInstaller.exports,executable:path.join(os.tmpdir(),'does-not-exist-darklua-'+Date.now())}};
+      delete require.cache[modulePath];const unavailable=require('./src/services/script-builder');
+      await assert.rejects(()=>unavailable.build('return "PRIVATE_FALLBACK"'),{code:'SCRIPT_UNAVAILABLE'});check(true,'Missing parser fails closed without a source fallback');
+    }finally{require.cache[modulePath]=savedBuilder;require.cache[installerPath]=savedInstaller;}
+    const childProcess=require('child_process'),nativeSpawn=childProcess.spawn,dirs=new Set();
+    try{
+      childProcess.spawn=(exe,args,options)=>{if(args[0]==='process')dirs.add(path.dirname(args[1]));return nativeSpawn(exe,args,options);};
+      delete require.cache[modulePath];const tracked=require('./src/services/script-builder');
+      await tracked.build('return 1');await assert.rejects(()=>tracked.build('local x = ('),{code:'SCRIPT_INVALID'});
+      const remaining=await Promise.all([...dirs].map(dir=>fs.access(dir).then(()=>true,()=>false)));
+      check(remaining.every(exists=>!exists),'Temporary source directories are removed on success and parser failure');
+    }finally{childProcess.spawn=nativeSpawn;require.cache[modulePath]=savedBuilder;}
+    console.log(`Script builds: ${checks} checks passed using the pinned parser; no user script was executed.`);
+  }finally{await f.close();}
+}
+run().catch(e=>{console.error(e);process.exitCode=1;});

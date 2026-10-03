@@ -9,3 +9,6 @@ node_modules/
 
 # Generated local previews and test screenshots.
 artifacts/
+
+# Pinned parser binaries installed from the official release by npm postinstall.
+/server/tools/darklua/

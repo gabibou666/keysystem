@@ -1,7 +1,7 @@
 {
   "name": "keysystem",
   "version": "1.0.0",
-  "description": "Roblox key system with LootLabs monetization, universal executor compatibility and auto-obfuscation",
+  "description": "Developer workspaces, Lua script catalogue, project licenses and verified checkpoints",
   "main": "src/index.js",
   "type": "commonjs",
   "engines": {
@@ -10,8 +10,13 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test:platform": "node test-platform.js && node test-checkpoint-providers.js",
+    "test:platform": "node test-platform.js && node test-checkpoint-providers.js && node test-platform-security.js && node test-provider-guards.js",
+    "test:security": "node test-web-security.js && node test-flood-security.js && node test-platform-security.js && node test-account-guards.js && node test-data-privacy.js && node test-provider-guards.js",
     "test:platform:ui": "node test-platform-ui.js",
+    "test:catalog": "node test-catalog.js && node test-public-profiles.js",
+    "test:moderation": "node test-script-safety.js && node test-moderation.js",
+    "test:moderation:ui": "node test-moderation-ui.js",
+    "test:catalog:ui": "node test-catalog-ui.js",
     "preview:platform": "node tests/platform-fixture.js",
     "migrate": "node src/migrate.js",
     "check": "node scripts/check-assets.js && node scripts/check-design.js && node scripts/check-cost.js && node scripts/check-schema.js && node scripts/check-dom.js",
@@ -25,19 +30,22 @@
     "backup": "node scripts/backup-db.js",
     "restore": "node scripts/restore-db.js",
     "watchdog": "node scripts/watchdog.js",
-    "test": "node test-developer-auth.js && node test-auth-concurrency.js && node test-platform.js && node test-checkpoint-providers.js && node test-crypto-config.js && node test-healthz-cache.js && node test-alerts.js && node test-session-token.js && node test-prelude-session.js && node test-requests.js && node test-providers.js && node test-admin-generate.js && node test-booster.js",
-    "invite:ensure": "node scripts/ensure-discord-invite.js",
+    "test": "node test-developer-auth.js && node test-auth-concurrency.js && node test-account-guards.js && node test-platform.js && node test-catalog.js && node test-public-profiles.js && node test-checkpoint-providers.js && node test-platform-security.js && node test-provider-guards.js && node test-web-security.js && node test-flood-security.js && node test-data-privacy.js && node test-script-builds.js && node test-key-ui.js && node test-script-safety.js && node test-moderation.js && node test-crypto-config.js && node test-healthz-cache.js && node test-alerts.js && node test-antiddos.js && node test-legacy-removal.js",
     "fonts": "python scripts/selfhost-fonts.py",
-    "og": "python scripts/make-og-image.py",
-    "pages:polish": "python scripts/polish-pages.py",
-    "test:auth": "node test-developer-auth.js && node test-auth-concurrency.js"
+    "test:auth": "node test-developer-auth.js && node test-auth-concurrency.js && node test-account-guards.js",
+    "postinstall": "node scripts/install-darklua.js",
+    "test:privacy": "node test-data-privacy.js",
+    "test:providers:security": "node test-provider-guards.js",
+    "test:scripts": "node test-script-builds.js",
+    "test:key-ui:ui": "node test-key-ui-ui.js",
+    "test:key-ui": "node test-key-ui.js",
+    "test:cleanup": "node test-legacy-removal.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-rate-limit": "^7.4.0",
     "helmet": "^7.1.0",
-    "jsonwebtoken": "^9.0.3",
     "pg": "^8.12.0"
   },
   "devDependencies": {

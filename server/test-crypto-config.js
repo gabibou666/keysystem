@@ -3,9 +3,6 @@
 // Usage: node test-crypto-config.js
 // ----------------------------------------------------------------------------
 // Couvre precisement les regressions corrigees:
-//   - verifyKeyFormat ne doit JAMAIS lever d'exception sur une entree invalide
-//     (l'ancien code appelait timingSafeEqual sur des buffers de tailles
-//     differentes => erreur 500 au lieu de "cle invalide");
 //   - safeEqual doit refuser proprement les entrees de tailles differentes;
 //   - AES-256-GCM doit faire un aller-retour exact et la cle doit faire 32 octets;
 //   - la derivation de cle AES doit etre DETERMINISTE (un redeploiement ne doit
@@ -27,38 +24,6 @@ function test(name, fn) {
     console.error(`  ✗ ${name}\n      ${e.message}`);
   }
 }
-
-console.log('\n[1] Format et signature des cles');
-test('une cle generee est valide', () => {
-  const { key, kid } = cryptoService.generateKey();
-  assert.strictEqual(key.length, 65, 'format kid.signature attendu (32 + 1 + 32)');
-  const parsed = cryptoService.verifyKeyFormat(key);
-  assert.ok(parsed, 'la cle generee doit etre valide');
-  assert.strictEqual(parsed.kid, kid);
-});
-
-test('une signature falsifiee est refusee', () => {
-  const { kid } = cryptoService.generateKey();
-  const fake = `${kid}.${'0'.repeat(32)}`;
-  assert.strictEqual(cryptoService.verifyKeyFormat(fake), null);
-});
-
-test('entrees hostiles: aucune exception, toujours null', () => {
-  const hostile = [
-    '', '.', '..', 'a.b', 'x'.repeat(200),
-    `${'z'.repeat(32)}.${'z'.repeat(32)}`, // longueur bonne mais non hex
-    `${'0'.repeat(31)}.${'0'.repeat(32)}`,
-    `${'0'.repeat(32)}.${'0'.repeat(33)}`,
-    `${'0'.repeat(32)}.${'0'.repeat(31)}`,
-    '====.====',
-    null, undefined, 42, {}, [],
-    `${'A'.repeat(32)}.${'B'.repeat(32)}`, // hex MAJUSCULE: accepte (tolere)
-  ];
-  for (const value of hostile) {
-    const out = cryptoService.verifyKeyFormat(value);
-    assert.ok(out === null || typeof out.kid === 'string', `sortie inattendue pour ${String(value).slice(0, 20)}`);
-  }
-});
 
 console.log('\n[2] Comparaison de secrets a temps constant');
 test('safeEqual: egal / different / tailles differentes', () => {

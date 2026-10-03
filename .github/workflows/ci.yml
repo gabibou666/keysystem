@@ -65,11 +65,11 @@ jobs:
           }
 
           check http://localhost:3100/            '<title>AUDIT HUB'
-          check http://localhost:3100/getkey      'Get a Free Key'
+          check http://localhost:3100/dashboard   'workspaceView'
           check http://localhost:3100/robots.txt  'Sitemap:'
           check http://localhost:3100/sitemap.xml '<urlset'
           check http://localhost:3100/style.css   '@font-face'
-          check http://localhost:3100/app-index.js 'tickerEvents'
+          check http://localhost:3100/app-index.js 'demoTabs'
 
           # /healthz doit repondre: 200 si la DB est joignable, 503 sinon (attendu ici)
           code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3100/healthz)

@@ -28,7 +28,6 @@ const CRITICAL = ['DATABASE_URL', 'HMAC_SECRET'];
 const IMPORTANT = [
   'PUBLIC_URL',
   'AES_KEY',
-  'LOOTLABS_API_KEY',
   'DISCORD_CLIENT_ID',
   'DISCORD_CLIENT_SECRET',
   'DISCORD_WEBHOOK_URL',
@@ -127,12 +126,7 @@ function checkConfig() {
     if (process.env.PUBLIC_URL && !process.env.PUBLIC_URL.startsWith('https://')) {
       warnings.push('PUBLIC_URL devrait etre en https en production');
     }
-    if (!process.env.LOOTLABS_POSTBACK_SECRET) {
-      warnings.push(
-        'LOOTLABS_POSTBACK_SECRET absent: le postback ne peut pas etre authentifie par signature ' +
-          '(anti-bypass affaibli). A recuperer dans le dashboard LootLabs, puis ajouter la variable dans Render.'
-      );
-    }
+
   }
 
   const label = IS_PROD ? 'production' : 'developpement';

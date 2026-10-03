@@ -5,7 +5,10 @@ const rateLimit=require('express-rate-limit');
 const pool=require('../db');
 const auth=require('../services/developer-auth');
 const google=require('../services/google-auth');
+const {normalizeEmail,validEmail}=require('../services/account-identity');
+const registration=require('../services/registration-guard');
 const router=express.Router();
+router.use(require('../services/moderation-http-audit').middleware('auth'));
 const wrap=fn=>(req,res,next)=>Promise.resolve(fn(req,res,next)).catch(next);
 const fail=(res,status,error)=>res.status(status).json({success:false,error});
 router.use((req,res,next)=>{res.set('Cache-Control','no-store');next();});
@@ -16,27 +19,38 @@ router.use((req,res,next)=>{
   if(req.method==='POST') {
     if(!req.is('application/json')) return fail(res,415,'JSON required');
     if((req.get('origin') && req.get('origin')!==new URL(auth.origin()).origin)||req.get('sec-fetch-site')==='cross-site') return fail(res,403,'Invalid origin');
+    if(!req.body || typeof req.body!=='object' || Array.isArray(req.body)) return fail(res,400,'A JSON object is required.');
   }
   next();
 });
-const normalizeEmail=value=>typeof value==='string'?value.trim().toLowerCase():'';
-const validEmail=email=>email.length<=254 && /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email);
 const validPassword=p=>typeof p==='string'&&p.length>=12&&Buffer.byteLength(p)<=128;
+const accountLoginLimiter=rateLimit({windowMs:900000,max:10,skipSuccessfulRequests:true,standardHeaders:true,legacyHeaders:false,
+  keyGenerator:req=>crypto.createHmac('sha256',process.env.HMAC_SECRET).update(normalizeEmail(req.body?.email)).digest('hex'),
+  message:{success:false,error:'Too many attempts for this address. Try again in 15 minutes.'}});
 const message='If this address has an eligible account, an email will arrive shortly.';
-router.get('/options',(req,res)=>res.json({success:true,google:auth.googleEnabled(),discord:!!(process.env.DISCORD_CLIENT_ID&&process.env.DISCORD_CLIENT_SECRET),email:auth.emailEnabled()}));
+router.get('/options',(req,res)=>{registration.context(req,res);res.json({success:true,google:auth.googleEnabled(),discord:!!(process.env.DISCORD_CLIENT_ID&&process.env.DISCORD_CLIENT_SECRET),email:auth.emailEnabled()});});
 router.post('/signup',wrap(async(req,res)=>{
   if(!auth.emailEnabled()) return fail(res,503,'Email registration is not configured yet.');
   const email=normalizeEmail(req.body.email);const name=typeof req.body.name==='string'?req.body.name.trim():'';
   if(!validEmail(email)||!name||name.length>80||!validPassword(req.body.password)) return fail(res,400,'Enter your name, a valid email and a password of at least 12 characters (maximum 128 bytes).');
+  // Keep duplicate registrations on the same bounded password-work path so
+  // lookup timing and AUTH_BUSY do not expose whether an email already exists.
   const passwordHash=await auth.passwordHash(req.body.password);
   const existing=await pool.query('SELECT discord_id FROM developer_accounts WHERE email=$1',[email]);
   if(existing.rows[0]) return res.json({success:true,message:'Check your email to verify your account. If you already have an account, sign in or request a new verification email.'});
+  const creationContext=registration.context(req,res);
   const id=crypto.randomUUID();
-  const result=await pool.query('INSERT INTO developer_accounts(discord_id,username,email,password_hash) VALUES($1,$2,$3,$4) ON CONFLICT(email) DO NOTHING RETURNING discord_id',[id,name,email,passwordHash]);
+  req.auditActorId=id;
+  const client=await pool.connect();let result;
+  try {
+    await client.query('BEGIN');await registration.reserve(client,creationContext);
+    result=await client.query('INSERT INTO developer_accounts(discord_id,username,email,password_hash) VALUES($1,$2,$3,$4) ON CONFLICT(email) DO NOTHING RETURNING discord_id',[id,name,email,passwordHash]);
+    await client.query(result.rows[0]?'COMMIT':'ROLLBACK');
+  } catch(e) {await client.query('ROLLBACK');throw e;} finally {client.release();}
   if(result.rows[0]) await auth.sendToken(id,email,'verify');
   res.json({success:true,message:'Check your email to verify your account. If you already have an account, sign in or request a new verification email.'});
 }));
-router.post('/login',wrap(async(req,res)=>{
+router.post('/login',accountLoginLimiter,wrap(async(req,res)=>{
   const email=normalizeEmail(req.body.email);
   if(!validEmail(email)||typeof req.body.password!=='string'||Buffer.byteLength(req.body.password)>128) return fail(res,400,'Enter a valid email and password.');
   const client=await pool.connect();
@@ -48,10 +62,12 @@ router.post('/login',wrap(async(req,res)=>{
       await client.query('ROLLBACK');return fail(res,401,'Email or password incorrect, or email not verified.');
     }
     const token=await auth.createSession(user.discord_id,null,client);
+    req.auditActorId=user.discord_id;
     await client.query('COMMIT');auth.setSessionCookie(res,token);res.json({success:true});
   } catch(e) {await client.query('ROLLBACK');throw e;} finally {client.release();}
 }));
 router.post('/logout',wrap(async(req,res)=>{
+  req.auditActorId=(await auth.account(req))?.discord_id;
   if(req.cookies?.[auth.COOKIE]) await pool.query('DELETE FROM developer_sessions WHERE token_hash=$1',[auth.hash(req.cookies[auth.COOKIE])]);
   res.clearCookie(auth.COOKIE,auth.cookieOptions());res.clearCookie('ks_user',{path:'/'});res.json({success:true});
 }));
@@ -66,7 +82,7 @@ for(const purpose of ['verify','reset']) router.post('/'+purpose,wrap(async(req,
   const token=req.body.token;
   if(typeof token!=='string'||!/^[a-f0-9]{64}$/.test(token)) return fail(res,400,'Invalid or expired link.');
   if(purpose==='reset'&&!validPassword(req.body.password)) return fail(res,400,'Use at least 12 characters (maximum 128 bytes).');
-  const password=purpose==='reset'?await auth.passwordHash(req.body.password):null;
+  let password=null;
   const client=await pool.connect();
   try {
     await client.query('BEGIN');
@@ -75,10 +91,12 @@ for(const purpose of ['verify','reset']) router.post('/'+purpose,wrap(async(req,
     const pending=await client.query('SELECT account_id FROM developer_email_tokens WHERE token_hash=$1 AND purpose=$2 AND expires_at>now()',[auth.hash(token),purpose]);
     if(!pending.rows[0]) {await client.query('ROLLBACK');return fail(res,400,'Invalid or expired link.');}
     await client.query('SELECT discord_id FROM developer_accounts WHERE discord_id=$1 FOR UPDATE',[pending.rows[0].account_id]);
+    if(purpose==='reset') password=await auth.passwordHash(req.body.password);
     // Atomic consume prevents replay and concurrent password-reset races.
     const {rows}=await client.query('DELETE FROM developer_email_tokens WHERE token_hash=$1 AND purpose=$2 AND expires_at>now() RETURNING account_id',[auth.hash(token),purpose]);
     if(!rows[0]) {await client.query('ROLLBACK');return fail(res,400,'Invalid or expired link.');}
     const id=rows[0].account_id;
+    req.auditActorId=id;
     if(purpose==='verify') await client.query('UPDATE developer_accounts SET email_verified=true WHERE discord_id=$1',[id]);
     else {
       await client.query('UPDATE developer_accounts SET password_hash=$1 WHERE discord_id=$2',[password,id]);
@@ -92,6 +110,7 @@ router.get('/discord',(req,res)=>res.redirect('/api/discord/login?mode=developer
 const googleRedirect=()=>auth.origin()+'/api/auth/google/callback';
 router.get('/google',(req,res)=>{
   if(!auth.googleEnabled()) return res.redirect('/signup?error=google_unavailable');
+  registration.context(req,res);
   const state=auth.random(),nonce=auth.random(),verifier=auth.random();
   const exp=Date.now()+600000;const payload=Buffer.from(JSON.stringify({state,nonce,verifier,exp})).toString('base64url');
   const signed=payload+'.'+crypto.createHmac('sha256',process.env.HMAC_SECRET).update(payload).digest('hex');
@@ -108,15 +127,17 @@ router.get('/google/callback',wrap(async(req,res)=>{
     if(!/^[a-f0-9]{64}$/.test(sig||'')||!crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(expected))) throw new Error('Invalid state');
     const state=JSON.parse(Buffer.from(payload,'base64url').toString());
     if(state.exp<Date.now()||state.state!==req.query.state||typeof req.query.code!=='string'||req.query.code.length>4096) throw new Error('Invalid state');
-    const result=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({code:req.query.code,client_id:process.env.GOOGLE_CLIENT_ID,client_secret:process.env.GOOGLE_CLIENT_SECRET,redirect_uri:googleRedirect(),grant_type:'authorization_code',code_verifier:state.verifier}),signal:AbortSignal.timeout(15000)});
+    const result=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({code:req.query.code,client_id:process.env.GOOGLE_CLIENT_ID,client_secret:process.env.GOOGLE_CLIENT_SECRET,redirect_uri:googleRedirect(),grant_type:'authorization_code',code_verifier:state.verifier}),redirect:'error',signal:AbortSignal.timeout(15000)});
     if(!result.ok) throw new Error('OAuth exchange failed');
     const tokens=await result.json();const user=await google.verifyIdToken(tokens.id_token,state.nonce);
-    const id=await auth.socialAccount('google',user.sub,user.name);await auth.createSession(id,res);
+    const id=await auth.socialAccount('google',user.sub,user.name,{email:user.email,emailVerified:user.email_verified===true},registration.context(req,res));await auth.createSession(id,res);
     res.redirect('/dashboard');
-  } catch {res.redirect('/login?error=oauth_failed');}
+  } catch(e) {const reason={ACCOUNT_EXISTS:'account_exists',VERIFIED_EMAIL_REQUIRED:'verified_email_required',ACCOUNT_CREATION_LIMIT:'account_creation_limit'}[e.code]||'oauth_failed';res.redirect('/login?error='+reason);}
 }));
 router.use((error,req,res,next)=>{
   // Never log provider responses, credentials, passwords or one-time tokens.
+  if(error.code==='ACCOUNT_CREATION_LIMIT') {res.set('Retry-After','86400');return fail(res,429,error.message);}
+  if(error.code==='AUTH_BUSY') {res.set('Retry-After','2');return fail(res,503,'Sign-in service busy. Please try again shortly.');}
   if(error.code==='42P01'||error.code==='42703') return fail(res,503,'Account database setup is required.');
   fail(res,503,'Sign-in service temporarily unavailable. Please try again.');
 });

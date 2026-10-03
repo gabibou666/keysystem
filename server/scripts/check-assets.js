@@ -50,9 +50,9 @@ for (const file of htmlFiles) {
     const url = match[1].split('?')[0].split('#')[0];
     if (url.startsWith('/api/') || url === '/' || url === '') continue;
     // Routes de pages servies dynamiquement par le middleware HTML
-    // (/getkey, /admin/, /privacy/...): on retire le slash final avant le test.
+    // (/scripts, /docs/, /privacy/...): on retire le slash final avant le test.
     const clean = url.replace(/\/+$/, '');
-    const candidate = clean === '' ? path.join(WEB, 'index.html') : path.join(WEB, clean);
+    const candidate = clean === '/scripts' ? path.join(WEB, 'hubs.html') : clean === '' ? path.join(WEB, 'index.html') : path.join(WEB, clean);
     if (!fs.existsSync(candidate) && !fs.existsSync(`${candidate}.html`)) {
       errors.push(`${path.basename(file)}: asset manquant -> ${url}`);
     }
@@ -87,7 +87,7 @@ for (const file of htmlFiles) {
 
 // ---------- 4. versionnement des assets ----------
 const VERSIONED_ASSET_RE =
-  /(?:src|href)="(\/(?:style\.css|design\.css|effects\.js|guard\.js|polish\.js|cookie-consent\.js|site-config\.js|ad-init\.js|app-[a-z]+\.js|favicon\.[a-z]+))"/g;
+  /(?:src|href)="(\/(?:style\.css|platform\.css|dashboard-visuals\.css|app-[a-z]+\.js|favicon\.[a-z]+))"/g;
 for (const file of htmlFiles) {
   const html = fs.readFileSync(file, 'utf8');
   for (const match of html.matchAll(VERSIONED_ASSET_RE)) {
@@ -132,7 +132,6 @@ for (const match of css.matchAll(/url\('\/fonts\/([^']+)'\)/g)) {
 if (/@import\s+url\(['"]?https:\/\/fonts\.googleapis/.test(css)) {
   errors.push('style.css: @import Google Fonts encore present (RGPD + chaine bloquante)');
 }
-if (!fs.existsSync(path.join(WEB, 'og.png'))) warnings.push('web/og.png manquant (image de partage social)');
 if (!fs.existsSync(path.join(WEB, 'robots.txt'))) warnings.push('web/robots.txt manquant');
 if (!fs.existsSync(path.join(WEB, 'sitemap.xml'))) warnings.push('web/sitemap.xml manquant');
 
