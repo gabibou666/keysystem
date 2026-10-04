@@ -167,3 +167,13 @@
 .moderation-item {padding:22px;border:1px solid #292534;border-radius:12px;background:#111015;min-width:0}
 .moderation-item p,.moderation-item li,.moderation-item .mono {overflow-wrap:anywhere}
 .moderation-item pre {white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* Central bot control remains usable with long Discord names. */
+.bot-admin .metric strong, .bot-admin .status-pill { overflow-wrap: anywhere; }
+.bot-admin .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.bot-admin .field { min-width: 0; }
+.bot-admin .checkbox-field { display: flex; align-items: center; gap: 10px; }
+.bot-admin #botGuild { margin-bottom: 24px; }
+@media (max-width: 620px) {
+  .bot-admin .metric-grid, .bot-admin .form-grid { grid-template-columns: 1fr; }
+}

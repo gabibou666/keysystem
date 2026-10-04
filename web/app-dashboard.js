@@ -286,6 +286,6 @@
   $('logoutBtn').addEventListener('click', event => busy(event.currentTarget, async () => { const r = await fetch('/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); if (!r.ok) throw Error('Sign out failed.'); location.reload(); }));
   const login = new URLSearchParams(location.search).get('login');
   if (login && login !== 'ok') { $('loginMessage').textContent = login === 'denied' ? 'Discord sign-in was cancelled.' : 'Sign-in could not be completed. Please try again.'; $('loginMessage').hidden = false; }
-  api('/me').then(async me => { if (!me.loggedIn) return; $('moderationLink').hidden=!me.canModerate; $('developerName').textContent=me.username || 'Developer'; $('loginView').hidden=true; $('workspaceView').hidden=false; await projects(); await loadPublicHub(); view(new URLSearchParams(location.search).get('view')==='publichub'?'publichub':'overview'); })
+  api('/me').then(async me => { if (!me.loggedIn) return; $('moderationLink').hidden=!me.canModerate; $('discordBotLink').hidden=!me.canManageBot; $('developerName').textContent=me.username || 'Developer'; $('loginView').hidden=true; $('workspaceView').hidden=false; await projects(); await loadPublicHub(); view(new URLSearchParams(location.search).get('view')==='publichub'?'publichub':'overview'); })
     .catch(e => { if (!$('workspaceView').hidden) message(e.message,true); else { $('loginMessage').textContent=e.message; $('loginMessage').hidden=false; } });
 })();

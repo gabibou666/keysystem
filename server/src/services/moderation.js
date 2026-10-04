@@ -1,7 +1,7 @@
 'use strict';
 const pool=require('../db');
 const {randomUUID}=require('crypto');
-const ACTIONS=new Set(['upload.clear','upload.review','upload.blocked','submission.approved','submission.rejected','submission.stale','project.quarantined','report.created','report.resolved','role.updated','auth.signup','auth.verified','auth.login','auth.logout','auth.reset','project.created','project.updated','project.token_rotated','license.issued','license.revoked','license.restored','license.device_reset','checkpoint.updated','checkpoint.start','checkpoint.complete','checkpoint.failed','listing.published','listing.unpublished','profile.updated','key_ui.updated']);
+const ACTIONS=new Set(['bot.settings_updated','upload.clear','upload.review','upload.blocked','submission.approved','submission.rejected','submission.stale','project.quarantined','report.created','report.resolved','role.updated','auth.signup','auth.verified','auth.login','auth.logout','auth.reset','project.created','project.updated','project.token_rotated','license.issued','license.revoked','license.restored','license.device_reset','checkpoint.updated','checkpoint.start','checkpoint.complete','checkpoint.failed','listing.published','listing.unpublished','profile.updated','key_ui.updated']);
 function privateText(value){
   if(typeof value!=='string')return '';
   return value.slice(0,500).replace(/https?:\/\/[^\s<>]+/gi,'[link removed]').replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi,'[email removed]').replace(/\b(?:ahp?_[a-zA-Z0-9_-]+|[a-f0-9]{32,})\b/gi,'[credential removed]').replace(/\b(?:token|secret|password|api[_ -]?key|authorization)\s*[:=]\s*[^\s,;]+/gi,'[credential removed]').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g,'');

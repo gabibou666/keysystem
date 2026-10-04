@@ -96,7 +96,7 @@ router.get('/v1/sdk/:projectId',wrap(async(req,res)=>{
 }));
 router.get('/me', wrap(async (req, res) => {
   const user = await auth.account(req);
-  res.json({ success: true, loggedIn: !!user, username: user?.username,canModerate:!!user&&['moderator','admin'].includes(await moderation.role(user.discord_id)) });
+  res.json({ success: true, loggedIn: !!user, username: user?.username,canManageBot:!!user&&await moderation.role(user.discord_id)==='admin',canModerate:!!user&&['moderator','admin'].includes(await moderation.role(user.discord_id)) });
 }));
 router.get('/projects', requireDeveloper, wrap(async (req, res) => {
   const { rows } = await pool.query(`SELECT p.*,COALESCE(l.licenses,0) AS licenses,COALESCE(e.validations,0) AS validations

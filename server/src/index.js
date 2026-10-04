@@ -90,7 +90,7 @@ function serveHtml(req, res, next) {
   res.set('Content-Type', 'text/html; charset=UTF-8');
   res.set('Cache-Control', 'no-cache, must-revalidate');
   // Pages d'administration / d'attente: jamais indexees.
-  if (['dashboard.html','moderation.html', 'claim.html', 'signup.html', 'login.html', 'verify-email.html', 'reset-password.html'].includes(rel)) {
+  if (['discord-bot.html','dashboard.html','moderation.html', 'claim.html', 'signup.html', 'login.html', 'verify-email.html', 'reset-password.html'].includes(rel)) {
     res.set('X-Robots-Tag', 'noindex, nofollow');
   }
   res.send(html);
@@ -226,6 +226,7 @@ app.use('/api/platform',require('./routes/platform'));
 app.use('/api/auth',require('./routes/auth'));
 app.use('/api/catalog',require('./routes/catalog'));
 app.use('/api/moderation',require('./routes/moderation'));
+app.use('/api/bot',require('./routes/discord-bot'));
 app.use((req,res)=>res.status(404).type('text/plain').send('Not found'));
 app.use((err,req,res,next)=>{
   console.error('[server]',errorSummary(err));

@@ -42,12 +42,13 @@ async function startFixture(port = 0, preview = false) {
   app.use('/api/auth', require('../src/routes/auth'));
   app.use('/api/catalog', require('../src/routes/catalog'));
   app.use('/api/moderation', require('../src/routes/moderation'));
+  app.use('/api/bot', require('../src/routes/discord-bot'));
   const web = path.join(__dirname,'../../web');
   app.get(['/hubs','/hubs/:slug','/developers/:slug','/scripts/:projectId'],(req,res)=>{
     const name='hubs';
     res.type('html').send(fs.readFileSync(path.join(web,name+'.html'),'utf8').replaceAll('__V__','test').replaceAll('__SITE__',process.env.PUBLIC_URL));
   });
-  app.get(['/', '/dashboard','/moderation','/docs','/claim','/hubs','/hubs/:slug','/scripts','/scripts/:projectId','/signup','/login','/verify-email','/reset-password','/terms','/privacy','/cookies'], (req,res) => {
+  app.get(['/', '/dashboard','/moderation','/discord-bot','/docs','/claim','/hubs','/hubs/:slug','/scripts','/scripts/:projectId','/signup','/login','/verify-email','/reset-password','/terms','/privacy','/cookies'], (req,res) => {
     const name=req.path==='/'?'index':/^\/(hubs|scripts)(\/|$)/.test(req.path)?'hubs':req.path.slice(1);
     let html=fs.readFileSync(path.join(web,name+'.html'),'utf8').replaceAll('__V__','test').replaceAll('__SITE__',process.env.PUBLIC_URL);
     if(preview) html=html.replaceAll('/api/discord/login?mode=developer','/__preview/sign-in').replace('</body>','<div style="position:fixed;bottom:12px;right:12px;z-index:99;padding:7px 12px;background:#292032;border:1px solid #5b456d;border-radius:6px;font:11px sans-serif;color:#e6d5fa">Local preview · Test data only</div></body>');

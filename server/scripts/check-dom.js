@@ -22,6 +22,8 @@ const WEB = path.join(__dirname, '..', '..', 'web');
 // Page <-> script qui la pilote.
 const PAIRES = [
   ['index.html', 'app-index.js'],
+  ['discord-bot.html', 'app-discord-bot.js'],
+  ['moderation.html', 'app-moderation.js'],
   ['dashboard.html', 'app-dashboard.js'],
   ['hubs.html', 'app-catalog.js'],
   ['signup.html', 'app-auth.js'],
