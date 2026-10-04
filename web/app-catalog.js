@@ -17,9 +17,9 @@
   function message(text) { $('catalogMessage').textContent = text; $('catalogMessage').hidden = !text; }
   function title(text) { document.title = text + ' — AUDIT HUB'; document.querySelector('link[rel="canonical"]').href = location.origin + location.pathname; }
   const date = value => new Date(value).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
-  const covers = ['orbit','circuit','prism'];
   const mobileLabel=l=>l.mobileSupport==='yes'?'Mobile: Yes':l.mobileSupport==='no'?'Mobile: No':'Mobile: Not declared';
   const safetyLabel=l=>l.securityStatus==='approved'?'Moderator approved':l.securityStatus==='clear'?'Analysis: no alert detected':'Security check pending';
+  const metricLabel=l=>Number(l.views||0).toLocaleString()+' views · '+Number(l.executions||0).toLocaleString()+' executions (script deliveries)';
   function publicLink(id,value,discord=false){
     const element=$(id);element.hidden=true;element.removeAttribute('href');
     if(!value)return;
@@ -31,14 +31,16 @@
     }catch{}
   }
   const targetLabel = l => l.targetMode === 'single' ? (l.game || 'Roblox place') + ' / Place ' + l.placeId : l.targetMode === 'universal' ? 'Universal' : l.game || 'Lua script';
-  const theme = value => [...String(value)].reduce((sum,c)=>(sum*31+c.charCodeAt(0))>>>0,7)%covers.length;
-  const cover = value => '/assets/covers/'+covers[theme(value)]+'.svg?v='+encodeURIComponent(assetVersion);
+  const cover = () => '/assets/brand/hero-small.webp?v='+encodeURIComponent(assetVersion);
   const icon = name => {
-    const paths = {arrow:'M7 17 17 7M7 7h10v10',code:'m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 16',user:'M16 8a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 21v-2a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v2',key:'M14 10a5 5 0 1 1 0-1M14 10l7 7m-3-3-3 3'};
-    return `<svg class="catalog-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${paths[name]||paths.code}"/></svg>`;
+    const names={arrow:'arrow-right',code:'code',user:'user',key:'key',flag:'flag'};
+    return `<svg class="catalog-icon icon" aria-hidden="true" viewBox="0 0 24 24"><use href="/icons/lucide.svg#${names[name]||'code'}"></use></svg>`;
   };
   function scriptCards(listings) {
-    return listings.map(l => `<a class="catalog-card catalog-script-card" href="/scripts/${encodeURIComponent(l.projectId)}"><div class="catalog-cover"><img src="${cover(l.projectId)}" alt="" loading="lazy" decoding="async" width="800" height="320"><span class="catalog-cover-label">${icon('code')} LUA RELEASE</span><span class="status-pill catalog-cover-badge">${l.accessMode === 'free' ? 'Free access' : 'License required'}</span></div><div class="catalog-card-body"><span class="catalog-game">${escape(targetLabel(l))}</span><div class="catalog-script-meta"><span class="status-pill">${escape(mobileLabel(l))}</span><span class="status-pill">Key system: ${l.hasKeySystem?"Yes":"No"}</span><span class="status-pill">${escape(safetyLabel(l))}</span></div><h3>${escape(l.title)}</h3><p class="catalog-card-description">${escape(l.description)}</p><div class="catalog-card-footer"><span>${icon('user')} ${escape(l.author)}</span><span>Open script ${icon('arrow')}</span></div></div></a>`).join('');
+    return listings.map(l => {
+      const href='/scripts/'+encodeURIComponent(l.projectId);
+      return `<article class="catalog-card catalog-script-card"><a href="${href}" class="catalog-cover-link" aria-label="Open ${escape(l.title)}"><div class="catalog-cover"><img src="${cover()}" alt="" aria-hidden="true" loading="lazy" decoding="async" width="768" height="512"><span class="catalog-cover-label">${icon('code')} LUA RELEASE</span><span class="status-pill catalog-cover-badge">${l.accessMode === 'free' ? 'Free access' : 'License required'}</span></div></a><div class="catalog-card-body"><span class="catalog-game">${escape(targetLabel(l))}</span><div class="catalog-script-meta"><span class="status-pill">${escape(mobileLabel(l))}</span><span class="status-pill">Key system: ${l.hasKeySystem?'Yes':'No'}</span><span class="status-pill">${escape(safetyLabel(l))}</span></div><h3><a href="${href}">${escape(l.title)}</a></h3><p class="catalog-card-description">${escape(l.description)}</p><div class="catalog-card-footer"><span>${icon('user')} ${escape(l.author)}</span></div><p class="muted-copy script-metrics">${escape(metricLabel(l))}</p><div class="catalog-card-actions"><a class="text-link" href="${href}">Open script ${icon('arrow')}</a><button class="report-trigger" type="button" data-report="${escape(l.projectId)}" data-report-title="${escape(l.title)}" aria-label="Report ${escape(l.title)}">${icon('flag')} Report this script</button></div></div></article>`;
+    }).join('');
   }
   async function browse(page = 1) {
     const revision = ++state.revision;
@@ -62,8 +64,7 @@
     const {hub:h,listings} = await api('/hubs/' + encodeURIComponent(slug));
     title(h.name); $('publicHubName').textContent = h.name; $('publicHubAuthor').textContent = 'by ' + h.author;
     $('publicHubDescription').textContent = h.description; $('hubMonogram').textContent = h.name.slice(0,2).toUpperCase();
-    const avatar=covers.includes(h.avatarTheme)?h.avatarTheme:'orbit';
-    $('publicHubCoverImage').src='/assets/covers/'+avatar+'.svg?v='+encodeURIComponent(assetVersion); $('hubMonogram').className='catalog-avatar catalog-theme-'+covers.indexOf(avatar);
+    $('publicHubCoverImage').src=cover(); $('hubMonogram').className='catalog-avatar catalog-theme-0';
     $('publicHubJoined').textContent=h.joinedAt?'Profile created '+date(h.joinedAt):'';
     publicLink('publicHubDiscord',h.discordUrl,true);publicLink('publicHubWebsite',h.websiteUrl);
     $('publicHubScripts').innerHTML = scriptCards(listings); $('hubScriptCount').textContent = listings.length + (listings.length === 1 ? ' script' : ' scripts');
@@ -78,8 +79,11 @@
     $('publicScriptAccess').textContent = l.accessMode === 'free' ? 'Free access' : 'License required';
     $('publicScriptMobile').textContent=mobileLabel(l);$('publicScriptKeys').textContent=l.hasKeySystem?'Key system: Yes':'Key system: No';$('publicScriptSafety').textContent=safetyLabel(l);
     $('publicScriptSafetyHint').textContent='Mobile support is declared by the developer. Security checks and moderator approval do not guarantee that a script is harmless. Obfuscated code can hide behavior; report anything suspicious.';
-    publicLink('publicScriptDiscord',l.discordUrl,true);state.projectId=l.projectId;
+    publicLink('publicScriptDiscord',l.discordUrl,true);state.projectId=l.projectId; $('reportCurrentScript').dataset.report=l.projectId; $('reportCurrentScript').dataset.reportTitle=l.title;
     $('publicScriptUpdated').textContent = 'Updated ' + date(l.updatedAt); $('scriptHubLink').href = '/developers/' + encodeURIComponent(l.hubSlug);
+    const metrics=document.createElement('p');metrics.className='muted-copy script-metrics';metrics.textContent=metricLabel(l);$('publicScriptUpdated').after(metrics);
+    fetch('/api/catalog/scripts/'+encodeURIComponent(id)+'/view',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+      .then(r=>r.ok?r.json():null).then(counts=>{if(counts?.success)metrics.textContent=metricLabel(counts);}).catch(()=>{});
     // Only same-origin URLs from the public API become executable loader links.
     const loader = new URL(l.loaderUrl, location.origin);
     if (loader.origin !== location.origin) throw Error('Invalid loader destination.');
@@ -102,12 +106,21 @@
   $('catalogSort').addEventListener('change',()=>browse().catch(e=>message(e.message)));
   $('catalogPrevious').addEventListener('click',()=>browse(state.page-1).catch(e=>message(e.message)));
   $('catalogNext').addEventListener('click',()=>browse(state.page+1).catch(e=>message(e.message)));
+  document.addEventListener('click',event=>{
+    const trigger=event.target.closest('[data-report]');
+    if(!trigger) return;
+    state.reportProjectId=trigger.dataset.report;
+    $('reportScriptTitle').textContent=trigger.dataset.reportTitle||'Published script';
+    $('scriptReportForm').reset(); $('scriptReportMessage').textContent='';
+    $('scriptReportDialog').showModal();
+  });
+  $('closeScriptReport').addEventListener('click',()=>$('scriptReportDialog').close());
   $('scriptReportForm').addEventListener('submit',async event=>{
-    event.preventDefault();const button=event.submitter;button.disabled=true;
+    event.preventDefault();const button=event.submitter;button.disabled=true; $('scriptReportMessage').textContent='Sending report…';
     try{
-      const response=await fetch('/api/moderation/reports',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId:state.projectId,category:$('scriptReportCategory').value,description:$('scriptReportDescription').value})});
+      const response=await fetch('/api/moderation/reports',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId:state.reportProjectId,category:$('scriptReportCategory').value,description:$('scriptReportDescription').value})});
       const data=await response.json();if(!response.ok)throw Error(response.status===401?'Sign in before submitting a report.':data.error||'Report could not be sent.');
-      $('scriptReportDescription').value='';$('scriptReportMessage').textContent='Report sent to the moderators.';
+      $('scriptReportDescription').value='';$('scriptReportMessage').textContent='Report sent to the moderators. Thank you for helping the community.';
     }catch(error){$('scriptReportMessage').textContent=error.message;}finally{button.disabled=false;}
   });
   $('copyPublicLoader').addEventListener('click',async()=>{

@@ -1,4 +1,5 @@
 'use strict';
+const {settleResponse}=require('./tests/script-jobs');
 const {chromium}=require('@playwright/test');
 const assert=require('node:assert/strict');
 const fs=require('fs'),path=require('path');
@@ -8,7 +9,7 @@ async function run(){
   const artifacts=path.join(__dirname,'../artifacts/catalog');fs.mkdirSync(artifacts,{recursive:true});
   async function request(route,method='GET',body,cookie=f.cookies[0]){
     const res=await fetch(f.base+route,{method,headers:{...(cookie?{Cookie:cookie}:{}),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
-    const data=await res.json();assert.ok(res.ok,JSON.stringify(data));return data;
+    const result=await settleResponse(f,res,cookie);assert.ok(result.status<400,JSON.stringify(result.data));return result.data;
   }
   try{
     const id=(await request('/api/platform/projects','POST',{name:'Private project name'})).project.id;
@@ -17,10 +18,10 @@ async function run(){
     await request('/api/platform/projects/'+second+'/script','PUT',{content:'return "second-developer"',targetMode:'single',placeId:42},f.cookies[1]);
     await request('/api/catalog/me','PUT',{name:'Beta developer hub',slug:'beta-dev',description:'Independent creator',published:true},f.cookies[1]);
     await request('/api/catalog/projects/'+second,'PUT',{title:'Beta script',description:'Another author',game:'Obby',accessMode:'licensed',published:true},f.cookies[1]);
-    const owner=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
+    const owner=await browser.newContext({viewport:{width:1440,height:1000},locale:'en-US',reducedMotion:'reduce'});
     await owner.addCookies([{name:'ah_session',value:f.cookies[0].split('=')[1],url:f.base}]);
     const page=await owner.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
-    await page.goto(f.base+'/dashboard?view=publichub');await page.getByRole('heading',{name:'Publish scripts',exact:true}).waitFor();
+    await page.goto(f.base+'/dashboard?view=publichub');if(await page.locator('#cookieConsentReject').isVisible()) await page.locator('#cookieConsentReject').click();await page.getByRole('heading',{name:'Publish scripts',exact:true}).waitFor();
     assert.equal(await page.locator('#hubProfileName').isVisible(),false,'Developer profile settings are optional and collapsed');
     assert.equal(await page.locator('#publicListingForm').isVisible(),false,'Publication prompts for a project before showing its form');
     await page.locator('#projectSelect').selectOption(id);await page.locator('#listingTitle').waitFor({state:'visible'});
@@ -31,20 +32,37 @@ async function run(){
     await page.locator('#publishListingBtn').click();
     assert.equal((await request('/api/catalog/me')).listings.length,0,'Free release requires explicit acknowledgement before publication');
     await page.locator('#listingFreeConsent').check();
-    await page.locator('#publishListingBtn').click();await page.getByText('Script listing published.',{exact:false}).waitFor();
+    await page.locator('#publishListingBtn').click();await page.getByText('Public release updated after successful checks.',{exact:false}).waitFor();
     assert.equal((await request('/api/catalog/me')).hub.published,true,'First script publishes directly without requiring a hub form');
     await page.locator('#developerProfileOptions summary').click();
     await page.locator('#hubProfileName').fill('Alpha <script> profile');await page.locator('#hubProfileSlug').fill('alpha-dev');
     await page.locator('#hubProfileDescription').fill('Lua releases from an independent developer.');await page.locator('#hubProfilePublished').check();
     await page.locator('#hubProfileForm button[type="submit"]').click();await page.getByText('Developer profile saved publicly.',{exact:true}).waitFor();
     await page.screenshot({path:path.join(artifacts,'publisher-desktop.png'),fullPage:true});
-    const visitor=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
+    const visitor=await browser.newContext({viewport:{width:1440,height:1000},locale:'en-US',reducedMotion:'reduce'});
     const browse=await visitor.newPage();browse.on('pageerror',e=>errors.push(e.message));
-    await browse.goto(f.base+'/scripts');await browse.locator('#catalogCount').getByText('2 scripts',{exact:true}).waitFor();
+    await browse.goto(f.base+'/scripts');if(await browse.locator('#cookieConsentReject').isVisible()) await browse.locator('#cookieConsentReject').click();await browse.locator('#catalogCount').getByText('2 scripts',{exact:true}).waitFor();
     assert.equal(await browse.locator('.catalog-script-card').count(),2,'Published scripts from both developers appear directly in the catalogue');
     assert.equal(await browse.locator('#catalogGrid script, #catalogGrid iframe').count(),0,'Author-controlled titles cannot inject active HTML');
-    assert.equal(await browse.locator('#catalogGrid img').evaluateAll(images=>images.length===2 && images.every(img=>new URL(img.src).pathname.startsWith('/assets/covers/') && !img.hasAttribute('onerror') && img.complete && img.naturalWidth>0)),true,'Only valid local cover illustrations appear in the cards');
+    assert.equal(await browse.locator('#catalogGrid img').evaluateAll(images=>images.length===2 && images.every(img=>new URL(img.src).pathname.startsWith('/assets/brand/') && !img.hasAttribute('onerror') && img.complete && img.naturalWidth>0)),true,'Only valid local cover illustrations appear in the cards');
     await browse.screenshot({path:path.join(artifacts,'directory-desktop.png'),fullPage:true});
+    const reportButton=browse.locator('[data-report]').first();
+    await reportButton.click();
+    await browse.locator('#scriptReportDialog').waitFor({state:'visible'});
+    await browse.locator('#scriptReportDescription').fill('The description needs a review.');
+    await browse.locator('#scriptReportForm button[type="submit"]').click();
+    await browse.getByText('Sign in before submitting a report.',{exact:true}).waitFor();
+    await browse.locator('#closeScriptReport').click();
+    assert.equal(await browse.locator('#scriptReportDialog').isVisible(),false,'Report dialog closes and leaves card navigation available');
+    const reportPage=await owner.newPage();
+    await reportPage.goto(f.base+'/scripts');if(await reportPage.locator('#cookieConsentReject').isVisible()) await reportPage.locator('#cookieConsentReject').click();
+    await reportPage.locator('[data-report]').first().click();
+    await reportPage.locator('#scriptReportDescription').fill('Requesting a review of this published script.');
+    await reportPage.locator('#scriptReportForm button[type="submit"]').click();
+    await reportPage.getByText('Report sent to the moderators. Thank you for helping the community.',{exact:true}).waitFor();
+    assert.equal(Number((await f.pool.query('SELECT count(*) AS total FROM developer_moderation_reports')).rows[0].total),1,'A card report is stored in the existing moderation queue');
+    await reportPage.close();
+
     await browse.locator('#catalogSearch').fill('Universal');await browse.locator('#catalogSearchForm button').click();
     await browse.locator('#catalogCount').getByText('1 script',{exact:true}).waitFor();
     await browse.locator('#catalogSort').selectOption('name');await browse.locator('#catalogCount').getByText('1 script',{exact:true}).waitFor();
@@ -59,7 +77,7 @@ async function run(){
     await browse.locator('#scriptHubLink').click();await browse.locator('#publicHubName').getByText('Alpha <script> profile',{exact:true}).waitFor();
     await browse.screenshot({path:path.join(artifacts,'hub-desktop.png'),fullPage:true});
     for(const route of ['/scripts','/hubs/alpha-dev','/scripts/'+id]){
-      await browse.setViewportSize({width:390,height:844});await browse.goto(f.base+route);
+      await browse.setViewportSize({width:360,height:800});await browse.goto(f.base+route);if(await browse.locator('#cookieConsentReject').isVisible()) await browse.locator('#cookieConsentReject').click();
       await browse.locator(route==='/scripts'?'#catalogGrid .catalog-card':route.startsWith('/scripts/')?'#publicLoaderSnippet':'#publicHubName').first().waitFor({state:'visible'});
       assert.equal(await browse.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'No mobile overflow on '+route);
       await browse.screenshot({path:path.join(artifacts,route==='/scripts'?'directory-mobile.png':route.startsWith('/scripts/')?'script-mobile.png':'hub-mobile.png'),fullPage:true});
@@ -67,11 +85,11 @@ async function run(){
     await request('/api/platform/projects/'+id+'/script','PUT',{content:'return "public-v2"'});
     assert.equal(await (await fetch(f.base+'/api/catalog/scripts/'+id+'/source')).text(),firstBuild,'Private upload cannot silently overwrite public free source');
     await page.reload();await page.locator('#projectSelect').selectOption(id);await page.locator('#listingTitle').waitFor({state:'visible'});
-    await page.locator('#listingFreeConsent').check();await page.locator('#publishListingBtn').click();await page.getByText('Script listing published.',{exact:false}).waitFor();
+    await page.locator('#listingFreeConsent').check();await page.locator('#publishListingBtn').click();await page.getByText('Public release updated after successful checks.',{exact:false}).waitFor();
     assert.notEqual(await (await fetch(f.base+'/api/catalog/scripts/'+id+'/source')).text(),firstBuild,'Explicit republication updates free release');
-    await page.locator('#listingAccessMode').selectOption('licensed');await page.locator('#publishListingBtn').click();await page.getByText('Script listing published.',{exact:false}).waitFor();
+    await page.locator('#listingAccessMode').selectOption('licensed');await page.locator('#publishListingBtn').click();await page.getByText('Public release updated after successful checks.',{exact:false}).waitFor();
     assert.equal((await fetch(f.base+'/api/catalog/scripts/'+id+'/source')).status,404,'Switching to licensed access removes the public source endpoint');
-    await browse.goto(f.base+'/scripts/'+id);await browse.locator('#publicLoaderSnippet').waitFor({state:'visible'});
+    await browse.goto(f.base+'/scripts/'+id);if(await browse.locator('#cookieConsentReject').isVisible()) await browse.locator('#cookieConsentReject').click();await browse.locator('#publicLoaderSnippet').waitFor({state:'visible'});
     assert.match(await browse.locator('#publicLoaderSnippet').textContent(),/AUDIT_KEY/);
     assert.equal(await browse.locator('#publicGetKey').isVisible(),false,'Manually licensed publication does not offer an unconfigured key page');
     assert.match(await browse.locator('#publicLoaderHint').textContent(),/Contact this developer/);
@@ -90,18 +108,18 @@ async function run(){
     assert.equal((await fetch(f.base+'/api/catalog/scripts/'+id)).status,404,'Removing publication removes anonymous script details');
     await page.locator('#developerProfileOptions summary').click();
     await page.locator('#hubProfilePublished').uncheck();await page.locator('#hubProfileForm button[type="submit"]').click();await page.getByText('Developer profile saved privately.',{exact:true}).waitFor();
-    await browse.goto(f.base+'/scripts');await browse.locator('#catalogCount').getByText('1 script',{exact:true}).waitFor();
+    await browse.goto(f.base+'/scripts');if(await browse.locator('#cookieConsentReject').isVisible()) await browse.locator('#cookieConsentReject').click();await browse.locator('#catalogCount').getByText('1 script',{exact:true}).waitFor();
     await page.locator('[data-view="script"]').click();
     await page.locator('#scriptTargetMode').selectOption('single');
     assert.equal(await page.locator('#scriptPlaceField').isVisible(),true,'One-game targeting asks only for a Roblox Place ID');
     await page.locator('#scriptPlaceId').fill('https://www.roblox.com/games/123456789/Example');
     await page.locator('#scriptContent').fill('local greeting: string = "hello from game"\nreturn greeting');
     await page.locator('#scriptForm button[type="submit"]').click();
-    await page.getByText('Script checked, obfuscated and saved:',{exact:false}).waitFor();
+    await page.getByText('Build saved successfully. Your loader URL stays the same.',{exact:false}).waitFor();
     assert.equal(await page.locator('#scriptContent').inputValue(),'','Original code is cleared after a successful release');
     const deployed=await request('/api/platform/projects/'+id);
     assert.equal(deployed.script.targetMode,'single');assert.equal(deployed.script.placeId,123456789);
-    assert.equal(deployed.script.validated,true);assert.equal(deployed.script.obfuscated,true);
+    assert.equal(deployed.script.validated,true);assert.equal(deployed.script.obfuscated,false);assert.equal(deployed.script.originalAvailable,true);
     await page.locator('#scriptContent').fill('local broken =');
     await page.locator('#scriptForm button[type="submit"]').click();
     await page.locator('#workspaceMessage.error').waitFor({state:'visible'});

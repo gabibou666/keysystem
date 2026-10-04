@@ -2,8 +2,9 @@
 const fs=require('fs'),path=require('path');
 const {files}=require('../src/services/developer-schema');
 const db=path.resolve(__dirname,'../db');
-const expected=['developer_accounts','developer_identities','developer_sessions','developer_email_tokens','developer_registration_limits','developer_projects','developer_scripts','developer_licenses','developer_events','developer_checkpoints','developer_checkpoint_receipts','developer_hubs','developer_listings','developer_moderation_roles','developer_moderation_submissions','developer_moderation_reports','developer_moderation_audit','developer_checkpoint_proof_uses'];
+const expected=['developer_accounts','developer_identities','developer_sessions','developer_email_tokens','developer_registration_limits','developer_projects','developer_scripts','developer_licenses','developer_events','developer_checkpoints','developer_checkpoint_receipts','developer_hubs','developer_listings','developer_moderation_roles','developer_moderation_submissions','developer_moderation_reports','developer_moderation_audit','developer_checkpoint_proof_uses','developer_staff_roles','developer_staff_invitations','developer_admin_sessions','developer_admin_audit','developer_site_settings','developer_account_warnings','developer_script_jobs','developer_script_worker_lease'];
 const created=new Set();
+expected.push('developer_script_metrics','developer_script_metric_receipts','developer_script_revalidation');
 for(const file of files){
   const sql=fs.readFileSync(path.join(db,file),'utf8');
   for(const match of sql.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-z_]+)/gi))created.add(match[1]);

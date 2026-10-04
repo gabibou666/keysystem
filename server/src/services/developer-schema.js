@@ -8,6 +8,7 @@ const path = require('path');
 const files = [
   'migration-developer-platform.sql',
   'migration-developer-signup.sql',
+  'migration-account-legal-consent.sql',
   'migration-developer-zaccount-guards.sql',
   'migration-developer-zcheckpoint-providers.sql',
   'migration-developer-zhubs.sql',
@@ -16,6 +17,11 @@ const files = [
   'migration-developer-zprofiles.sql',
   'migration-developer-zmoderation.sql',
   'migration-developer-zprovider-guards.sql',
+  'migration-account-audit-privacy.sql',
+  'migration-admin-dashboard.sql',
+  'migration-script-jobs.sql',
+  'migration-script-metrics.sql',
+  'migration-script-revalidation.sql',
 ];
 
 async function ensureDeveloperSchema(pool) {

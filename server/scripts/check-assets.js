@@ -41,14 +41,15 @@ function walk(dir, filter, acc = []) {
 }
 
 // ---------- 1. assets references ----------
-const htmlFiles = walk(WEB, (n) => n.endsWith('.html'));
+const views = path.join(ROOT, 'server', 'views');
+const htmlFiles = [...walk(WEB, (n) => n.endsWith('.html')), ...(fs.existsSync(views) ? walk(views, n => n.endsWith('.html')) : [])];
 const refRe = /(?:src|href)="(\/(?!\/)[^"]+)"/g;
 
 for (const file of htmlFiles) {
   const html = fs.readFileSync(file, 'utf8');
   for (const match of html.matchAll(refRe)) {
     const url = match[1].split('?')[0].split('#')[0];
-    if (url.startsWith('/api/') || url === '/' || url === '') continue;
+    if (url.startsWith('/api/') || /^\/admin(?:\/|$)/.test(url) || url === '/' || url === '') continue;
     // Routes de pages servies dynamiquement par le middleware HTML
     // (/scripts, /docs/, /privacy/...): on retire le slash final avant le test.
     const clean = url.replace(/\/+$/, '');

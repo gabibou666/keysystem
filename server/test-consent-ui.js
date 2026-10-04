@@ -1,0 +1,103 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { chromium } = require('@playwright/test');
+const { startFixture } = require('./tests/platform-fixture');
+async function run() {
+  const f = await startFixture();
+  const browser = await chromium.launch({ headless: true });
+  let checks = 0;
+  const check = (condition, label) => { assert.ok(condition, label); checks++; console.log('OK ' + label); };
+  try {
+    const context = await browser.newContext({ locale: 'fr-FR', viewport: { width: 360, height: 800 } });
+    const page = await context.newPage();
+    const errors = []; page.on('pageerror', error => errors.push(error.message));
+    let optionalRequests = 0;
+    page.on('request', request => { if (request.url().includes('optional-loader-test=1')) optionalRequests++; });
+    await page.goto(f.base);
+    await page.locator('#cookieConsentBanner').waitFor({ state: 'visible' });
+    check(await page.locator('#cookieConsentAccept').textContent() === 'Tout accepter', 'Consent follows the French browser preference');
+    const buttons = await page.locator('.cookie-consent-actions button').evaluateAll(nodes => nodes.map(node => {
+      const style = getComputedStyle(node); return [style.color, style.backgroundColor, style.border, style.fontWeight, style.height];
+    }));
+    check(buttons.length === 3 && buttons.every(value => JSON.stringify(value) === JSON.stringify(buttons[0])), 'All three first-visit choices have equal visual weight');
+    check(await page.evaluate(() => document.activeElement === document.body), 'First visit does not steal keyboard focus');
+    check(!(await page.evaluate(() => window.AuditHubConsent.getState().optional)), 'Optional storage is disabled before consent');
+    await page.evaluate(() => {
+      window.consentTestStarts = 0; window.consentTestStops = 0;
+      window.AuditHubConsent.whenAllowed('optional', () => {
+        window.consentTestStarts++;
+        fetch('/api/site/config?optional-loader-test=1');
+        return () => { window.consentTestStops++; };
+      });
+    });
+    check(optionalRequests === 0 && await page.evaluate(() => window.consentTestStarts) === 0, 'Optional integrations do not start before consent');
+    await page.locator('#cookieConsentCustomize').click();
+    check(await page.locator('#cookieConsentNecessary').isChecked() && await page.locator('#cookieConsentNecessary').isDisabled(), 'Necessary category stays enabled');
+    check(!(await page.locator('#cookieConsentOptional').isChecked()), 'Optional category is unchecked by default');
+    check(await page.evaluate(() => document.activeElement.id === 'cookieConsentTitle'), 'Customization announces its heading to keyboard and screen-reader users');
+    await page.locator('#cookieConsentReject').click();
+    check(!(await page.locator('#cookieConsentBanner').isVisible()) && optionalRequests === 0, 'Reject all closes the banner without starting optional integrations');
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('audit-hub-cookie-consent')));
+    const saved = new Date(stored.savedAt), expected = new Date(saved); expected.setUTCDate(1); expected.setUTCMonth(expected.getUTCMonth() + 6);
+    expected.setUTCDate(Math.min(saved.getUTCDate(), new Date(Date.UTC(expected.getUTCFullYear(), expected.getUTCMonth() + 1, 0)).getUTCDate()));
+    check(stored.necessary === true && stored.optional === false && stored.expiresAt === expected.toISOString(), 'Refusal is saved for exactly six calendar months');
+    await page.evaluate(() => window.AuditHubConsent.openPreferences());
+    await page.locator('#cookieConsentAccept').click();
+    await page.waitForFunction(() => window.consentTestStarts === 1);
+    check(optionalRequests === 1, 'Optional integration starts only after explicit acceptance');
+    await page.evaluate(() => window.AuditHubConsent.openPreferences());
+    await page.locator('#cookieConsentReject').click();
+    check(await page.evaluate(() => window.consentTestStops) === 1 && !(await page.evaluate(() => window.AuditHubConsent.getState().optional)), 'Withdrawal calls the integration cleanup and disables its category');
+    await page.reload();
+    check(!(await page.locator('#cookieConsentBanner').isVisible()), 'A saved refusal survives navigation');
+    await page.evaluate(() => {
+      const value = JSON.parse(localStorage.getItem('audit-hub-cookie-consent'));
+      value.savedAt = '2025-01-31T12:00:00.000Z'; value.expiresAt = '2025-07-31T12:00:00.000Z'; value.optional = true;
+      localStorage.setItem('audit-hub-cookie-consent', JSON.stringify(value));
+    });
+    await page.reload(); await page.locator('#cookieConsentBanner').waitFor({ state: 'visible' });
+    check(!(await page.evaluate(() => window.AuditHubConsent.getState().optional)), 'Expired consent returns to the disabled default');
+    check(!(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)), 'The 360-pixel consent banner has no horizontal overflow');
+    const region = await page.locator('#cookieConsentBanner').getAttribute('role');
+    check(region === 'region' && !(await page.locator('#cookieConsentBanner').getAttribute('aria-modal')), 'The banner is an accessible non-modal region');
+    await page.locator('#cookieConsentReject').click();
+    process.env.RESEND_API_KEY = 'isolated-test-only'; process.env.AUTH_EMAIL_FROM = 'test@example.com';
+    process.env.GOOGLE_CLIENT_ID = 'isolated-test-client'; process.env.GOOGLE_CLIENT_SECRET = 'isolated-test-secret';
+    await page.goto(f.base + '/signup');
+    await page.locator('#acceptedTerms').waitFor();
+    check(!(await page.locator('#acceptedTerms').isChecked()) && await page.locator('#acceptedTerms').getAttribute('required') !== null, 'Signup agreement is mandatory and never preselected');
+    check(await page.locator('#termsChoice').textContent() === 'J’accepte les Conditions d’utilisation et la Politique de confidentialité.', 'Signup agreement is available in French');
+    check(await page.locator('#acceptedTerms').getAttribute('form') === 'authForm', 'The agreement participates in native email form validation');
+    let signupRequests = 0; page.on('request', request => { if (request.url().endsWith('/api/auth/signup')) signupRequests++; });
+    await page.locator('#nameInput').fill('Consent test developer');
+    await page.locator('#emailInput').fill('consent-test@example.com');
+    await page.locator('#passwordInput').fill('long-password-for-tests');
+    await page.locator('#submitAuth').click();
+    check(signupRequests === 0 && await page.evaluate(() => document.activeElement.id) === 'acceptedTerms', 'Email signup cannot submit until the agreement is checked');
+    await page.locator('#googleAuth').click();
+    check(page.url() === f.base + '/signup' && await page.locator('#authMessage').isVisible(), 'Google signup cannot begin until the agreement is checked');
+    await page.locator('#acceptedTerms').check();
+    check((await page.locator('#googleAuth').getAttribute('href')).endsWith('?acceptedTerms=1'), 'Explicit agreement is passed into the browser-bound OAuth flow');
+    const english = await browser.newContext({ locale: 'en-US', viewport: { width: 360, height: 800 } });
+    const enPage = await english.newPage(); await enPage.clock.install({ time: new Date('2026-08-31T12:00:00Z') });
+    await enPage.goto(f.base); await enPage.locator('#cookieConsentBanner').waitFor();
+    check(await enPage.locator('#cookieConsentAccept').textContent() === 'Accept all', 'Consent is available in English');
+    await enPage.locator('#cookieConsentAccept').click();
+    check((await enPage.evaluate(() => window.AuditHubConsent.getState().expiresAt)).startsWith('2027-02-28'), 'Six calendar months clamp a month-end date to the last valid day');
+    await enPage.evaluate(() => {
+      window.consentClockStops = 0;
+      window.AuditHubConsent.whenAllowed('optional', () => () => { window.consentClockStops++; });
+    });
+    const advance = async milliseconds => { while (milliseconds > 0) { const step = Math.min(milliseconds, 20 * 86400000); await enPage.clock.fastForward(step); milliseconds -= step; } };
+    await enPage.clock.fastForward(86400000);
+    await advance(30 * 86400000);
+    check(await enPage.evaluate(() => window.consentClockStops) === 0, 'An open tab keeps valid consent while rechecking its deadline');
+    const remaining = await enPage.evaluate(() => new Date(window.AuditHubConsent.getState().expiresAt).getTime() - Date.now());
+    await advance(remaining + 1);
+    check(await enPage.evaluate(() => window.consentClockStops) === 1 && await enPage.locator('#cookieConsentBanner').isVisible(), 'An open tab withdraws optional integrations when the six-month choice expires');
+    check(errors.length === 0, 'Consent and signup raise no browser errors');
+    await english.close(); await context.close();
+    console.log(`Consent UI: ${checks} checks passed against the isolated application.`);
+  } finally { await browser.close(); await f.close(); }
+}
+run().catch(error => { console.error(error); process.exitCode = 1; });

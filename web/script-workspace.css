@@ -1,0 +1,41 @@
+/* Private build controls use the shared Studio palette. */
+.script-version-summary,.script-job-summary,.script-source-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.script-version-summary{justify-content:flex-end;gap:8px}
+.script-source-heading{margin:28px 0 20px;padding-top:24px;border-top:1px solid var(--p-border);align-items:flex-start}
+.script-source-heading h3{font-size:15px;margin:0 0 8px;color:var(--p-text)}
+.script-source-heading .muted-copy{margin:0;overflow-wrap:anywhere}
+.script-protection{min-width:0;margin:24px 0;padding:22px;border:1px solid #405047;border-radius:14px;background:linear-gradient(125deg,#17251d,#101b16)}
+.script-protection legend{padding:0 8px;font-weight:600;font-size:13px;color:#e7efda}
+.script-protection-toggle{display:flex;align-items:flex-start;gap:13px;cursor:pointer}
+.script-protection-toggle input{width:20px;height:20px;margin:2px 0 0;flex-shrink:0;accent-color:#d4eb9b}
+.script-protection-toggle strong{font-size:14px;display:block;color:#f0f1e9}
+.script-protection-toggle small{display:block;line-height:1.65;color:#bbc7bd;margin-top:6px;font-size:12px}
+.script-protection #scriptObfuscationOptions{margin-top:20px}
+.script-protection .muted-copy{font-size:12px;line-height:1.8;color:#bdc8be}
+.script-build-activity{margin-bottom:28px}
+.script-job-summary strong{font-size:15px;color:var(--p-text);overflow-wrap:anywhere}
+.script-job-summary .muted-copy{margin:7px 0 0}
+.script-job-progress{display:flex;align-items:center;gap:14px;margin:22px 0 6px}
+.script-job-progress progress{width:100%;height:8px;appearance:none;border:0;border-radius:100px;overflow:hidden;background:#29362e}
+.script-job-progress progress::-webkit-progress-bar{background:#29362e;border-radius:100px}
+.script-job-progress progress::-webkit-progress-value{background:#d5eaa2;border-radius:100px}
+.script-job-progress progress::-moz-progress-bar{background:#d5eaa2;border-radius:100px}
+.script-job-progress span{font-size:12px;color:#dce7d6;min-width:36px}
+.script-build-error{padding:14px 16px;background:#321e21;border:1px solid #805057;border-radius:9px;color:#ffdce1;line-height:1.7;font-size:13px;overflow-wrap:anywhere}
+#scriptJobLogs{border-top:1px solid var(--p-border);margin-top:24px;padding-top:16px}
+#scriptJobLogs summary{font-size:13px;cursor:pointer;color:#dce7d6;padding:6px 0}
+.script-job-log{list-style:none;padding:0;margin:16px 0 0;max-height:260px;overflow:auto}
+.script-job-log li{display:grid;grid-template-columns:140px 1fr;gap:16px;padding:10px 0;border-bottom:1px solid var(--p-border);font-size:12px;line-height:1.7}
+.script-job-log time{color:#a4b5a9;font-variant-numeric:tabular-nums}
+.script-job-log span{overflow-wrap:anywhere;color:#d1dfd3}
+.script-job-log .log-error span{color:#ffc8d0}
+.script-job-log .log-warning span{color:#eedca4}
+.script-history td{vertical-align:top}
+.script-history .file-meta{display:block;margin-top:6px;font-size:11px;color:#abbcaf;white-space:normal;overflow-wrap:anywhere;max-width:220px}
+.script-history .script-log-button{white-space:nowrap}
+.script-original-dialog{width:min(860px,calc(100vw - 32px));max-height:calc(100dvh - 40px)}
+.script-original-dialog #scriptOriginalContent{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.7;max-height:50dvh;resize:vertical;overflow:auto;white-space:pre;tab-size:2}
+.script-original-dialog .dialog-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.script-original-dialog .dialog-heading h2{margin:0;font-size:20px}
+.script-protection input:focus-visible,.script-protection select:focus-visible,#scriptJobLogs summary:focus-visible{outline:3px solid #d5eaa2;outline-offset:4px}
+@media(max-width:680px){.script-protection{padding:18px 16px}.script-source-heading{gap:14px}.script-source-heading .checkpoint-actions{width:100%;gap:8px}.script-source-heading .action-button{flex:1;font-size:11px;padding:9px 8px}.script-job-log li{grid-template-columns:1fr;gap:3px}.script-version-summary{justify-content:flex-start}.script-job-summary{align-items:flex-start}.script-original-dialog{padding:20px}}

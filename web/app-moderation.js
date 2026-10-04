@@ -1,11 +1,12 @@
 'use strict';
 (()=>{
   const $=id=>document.getElementById(id),esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const state={tab:'queue',page:1,pages:1,items:[],revision:0};
+  const state={tab:'queue',page:1,pages:1,items:[],revision:0,csrfToken:''};
   function message(text,error=false){$('moderationMessage').hidden=!text;$('moderationMessage').textContent=text;$('moderationMessage').className='message-bar'+(error?' error':'');}
   async function api(path,method='GET',body){
-    const response=await fetch('/api/moderation'+path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
+    const response=await fetch('/api/moderation'+path,{method,credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json','X-CSRF-Token':state.csrfToken}:{},body:body?JSON.stringify(body):undefined});
     const data=await response.json().catch(()=>({error:'Unexpected server response.'}));
+    if(response.status===401){state.csrfToken='';state.items=[];$('moderationItems').replaceChildren();location.assign('/admin');throw Error('Activate your administrative session first.');}
     if(!response.ok)throw Error(data.error||'Request refused.');return data;
   }
   const date=value=>new Date(value).toLocaleString();
@@ -43,13 +44,16 @@
     });
   });
   $('quarantineForm').addEventListener('submit',event=>{event.preventDefault();busy(event.submitter,async()=>{await api('/projects/'+$('quarantineProject').value.trim()+'/quarantine','POST',{expectedVersion:Number($('quarantineVersion').value),expectedHash:$('quarantineHash').value.trim(),note:$('quarantineNote').value.trim()});await Promise.all([overview(),list()]);message('Project quarantined.');});});
-  $('moderationRoleForm').addEventListener('submit',event=>{event.preventDefault();busy(event.submitter,async()=>{await api('/accounts/'+encodeURIComponent($('roleAccount').value.trim())+'/role','PUT',{role:$('roleValue').value});message('Moderator access updated.');});});
   $('moderationExport').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(state.items,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='audit-hub-'+state.tab+'-page-'+state.page+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
-  api('/me').then(async me=>{
-    $('moderationRole').textContent=me.role;
-    if(!['moderator','admin'].includes(me.role)){$('moderationDenied').hidden=false;return;}
-    $('moderationAdmin').hidden=me.role!=='admin';$('moderationWorkspace').hidden=false;await Promise.all([overview(),list()]);
+  fetch('/admin/api/me',{credentials:'same-origin',cache:'no-store'}).then(async response=>{
+    const me=await response.json().catch(()=>({}));
+    if(response.status===401&&me.code==='ADMIN_ACTIVATION_REQUIRED'){location.assign('/admin');return;}
+    if(!response.ok||!['OWNER','CO_OWNER','ADMIN','MODERATOR'].includes(me.staff?.role)){$('moderationDenied').hidden=false;return;}
+    state.csrfToken=me.csrfToken;
+    $('moderationRole').textContent=me.staff.role;
+    document.querySelector('[data-mod-tab="audit"]').hidden=!['OWNER','CO_OWNER'].includes(me.staff.role);
+    $('moderationAdmin').hidden=!['OWNER','CO_OWNER','ADMIN'].includes(me.staff.role);$('moderationWorkspace').hidden=false;await Promise.all([overview(),list()]);
   }).catch(error=>{$('moderationDenied').hidden=false;message(error.message,true);});
-  window.addEventListener('pagehide',()=>{$('moderationItems').replaceChildren();state.items=[];document.querySelectorAll('input').forEach(input=>input.value='');});
+  window.addEventListener('pagehide',()=>{$('moderationItems').replaceChildren();state.items=[];state.csrfToken='';document.querySelectorAll('input').forEach(input=>input.value='');});
   window.addEventListener('pageshow',event=>{if(event.persisted)location.reload();});
 })();

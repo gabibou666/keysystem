@@ -7,9 +7,10 @@ const crypto = require('../services/crypto');
 const auth = require('../services/developer-auth');
 const providers = require('../services/checkpoint-providers');
 const checkpointSecurity=require('../services/checkpoint-security');
-const scriptBuilder = require('../services/script-builder');
+const scriptJobs = require('../services/publication-queue');
 const moderation=require('../services/moderation');
-const {scanScript}=require('../services/script-safety');
+const siteControls=require('../services/site-controls');
+const scriptMetrics=require('../services/script-metrics');
 const {errorSummary}=require('../services/private-diagnostics');
 const router = express.Router();
 router.use(require('../services/moderation-http-audit').middleware('platform'));
@@ -40,6 +41,8 @@ const ownProject = wrap(async (req, res, next) => {
   if (!UUID.test(req.params.projectId)) return fail(res, 404, 'Project not found');
   const { rows } = await pool.query('SELECT * FROM developer_projects WHERE id=$1 AND owner_id=$2', [req.params.projectId, req.developerId]);
   if (!rows[0]) return fail(res, 404, 'Project not found');
+  if (rows[0].deleted_at) return fail(res, 404, 'Project not found');
+  if (req.method !== 'GET' && rows[0].disabled) return fail(res, 403, 'This project was disabled by the site team. Contact support.');
   req.project = rows[0]; next();
 });
 function projectView(p) {
@@ -50,7 +53,7 @@ function projectView(p) {
     keyUiColor:p.key_ui_color||'violet', keyUiButtonSize:p.key_ui_button_size||'medium',
     checkpointLinkUrl: p.checkpoint_link_url, checkpointLinkId: p.checkpoint_link_id,
     checkpointsConfigured: checkpointConfigured(p),
-    checkpointCount: p.checkpoint_count, createdAt: p.created_at };
+    checkpointCount: p.checkpoint_count, createdAt: p.created_at, disabled: p.disabled === true };
 }
 function checkpointConfigured(p) {
   if (!p) return false;
@@ -79,6 +82,7 @@ function callbackUrl(req, project) {
 }
 router.get('/v1/loader/:projectId', wrap(async (req, res) => {
   if (!UUID.test(req.params.projectId)) return fail(res, 404, 'Project not found');
+  if (!await siteControls.projectAvailable(req.params.projectId)) return fail(res, 404, 'Project not found');
   const { rows } = await pool.query('SELECT p.*,s.target_mode,s.place_id FROM developer_projects p LEFT JOIN developer_scripts s ON s.project_id=p.id WHERE p.id=$1', [req.params.projectId]);
   if (!rows[0]) return fail(res, 404, 'Project not found');
   res.type('text/plain').send(require('../services/platform-loader').loader(req.params.projectId, site(req),loaderOptions(rows[0],req)));
@@ -90,23 +94,27 @@ function loaderOptions(p,req){
 }
 router.get('/v1/sdk/:projectId',wrap(async(req,res)=>{
   if(!UUID.test(req.params.projectId))return fail(res,404,'Project not found');
+  if(!await siteControls.projectAvailable(req.params.projectId))return fail(res,404,'Project not found');
   const {rows}=await pool.query('SELECT p.*,s.target_mode,s.place_id FROM developer_projects p LEFT JOIN developer_scripts s ON s.project_id=p.id WHERE p.id=$1',[req.params.projectId]);
   if(!rows[0])return fail(res,404,'Project not found');
   res.type('text/plain').send(require('../services/platform-loader').sdk(req.params.projectId,site(req),loaderOptions(rows[0],req)));
 }));
 router.get('/me', wrap(async (req, res) => {
   const user = await auth.account(req);
-  res.json({ success: true, loggedIn: !!user, username: user?.username,canManageBot:!!user&&await moderation.role(user.discord_id)==='admin',canModerate:!!user&&['moderator','admin'].includes(await moderation.role(user.discord_id)) });
+  const canModerate=!!user && require('../services/staff-access').isStaff(await require('../services/staff-access').role(user.discord_id));
+  const warnings=user?(await pool.query('SELECT reason,created_at FROM developer_account_warnings WHERE account_id=$1 ORDER BY created_at DESC LIMIT 20',[user.discord_id])).rows:[];
+  res.json({ success: true, loggedIn: !!user, username: user?.username, canManageBot:!!user && await moderation.role(user.discord_id)==='admin', canModerate, warnings });
 }));
 router.get('/projects', requireDeveloper, wrap(async (req, res) => {
-  const { rows } = await pool.query(`SELECT p.*,COALESCE(l.licenses,0) AS licenses,COALESCE(e.validations,0) AS validations
+  const { rows } = await pool.query(`SELECT p.*,COALESCE(l.licenses,0) AS licenses,COALESCE(e.validations,0) AS validations,COALESCE(m.views,0) AS views,COALESCE(m.executions,0) AS executions
     FROM developer_projects p
+    LEFT JOIN developer_script_metrics m ON m.project_id=p.id
     LEFT JOIN (SELECT project_id,COUNT(*)::int AS licenses FROM developer_licenses
       WHERE project_id IN (SELECT id FROM developer_projects WHERE owner_id=$1) GROUP BY project_id) l ON l.project_id=p.id
     LEFT JOIN (SELECT project_id,COUNT(*)::int AS validations FROM developer_events
       WHERE success=true AND project_id IN (SELECT id FROM developer_projects WHERE owner_id=$1) GROUP BY project_id) e ON e.project_id=p.id
     WHERE p.owner_id=$1 ORDER BY p.created_at DESC`, [req.developerId]);
-  res.json({ success: true, projects: rows.map(p => ({ ...projectView(p), licenses: p.licenses, validations: p.validations })) });
+  res.json({ success: true, projects: rows.map(p => ({ ...projectView(p), ...scriptMetrics.view(p),licenses: p.licenses, validations: p.validations })) });
 }));
 router.post('/projects', sameOrigin, requireDeveloper, wrap(async (req, res) => {
   const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
@@ -115,7 +123,8 @@ router.post('/projects', sameOrigin, requireDeveloper, wrap(async (req, res) => 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('SELECT discord_id FROM developer_accounts WHERE discord_id=$1 FOR UPDATE', [req.developerId]);
+    const account = (await client.query('SELECT discord_id FROM developer_accounts WHERE discord_id=$1 FOR UPDATE', [req.developerId])).rows[0];
+    if (!account) { await client.query('ROLLBACK'); return fail(res, 401, 'Sign in again to continue.'); }
     const count = await client.query('SELECT COUNT(*)::int AS count FROM developer_projects WHERE owner_id=$1', [req.developerId]);
     if (count.rows[0].count >= 10) { await client.query('ROLLBACK'); return fail(res, 409, 'Your account can have up to 10 projects.'); }
     const { rows } = await client.query('INSERT INTO developer_projects(id,owner_id,name,api_token_hash) VALUES($1,$2,$3,$4) RETURNING *',
@@ -125,16 +134,18 @@ router.post('/projects', sameOrigin, requireDeveloper, wrap(async (req, res) => 
 }));
 router.get('/projects/:projectId', requireDeveloper, ownProject, wrap(async (req, res) => {
   const id = req.project.id;
-  const [licenses, events, script, stats,submissions] = await Promise.all([
+  const [licenses, events, script, stats,submissions,metrics,securityChecks] = await Promise.all([
     pool.query('SELECT id,key_prefix,note,expires_at,revoked,(hwid_hash IS NOT NULL) AS bound,created_at FROM developer_licenses WHERE project_id=$1 ORDER BY created_at DESC LIMIT 100', [id]),
     pool.query('SELECT success,reason,executor,created_at FROM developer_events WHERE project_id=$1 ORDER BY created_at DESC LIMIT 30', [id]),
-    pool.query('SELECT version,updated_at,validated,obfuscated,target_mode,place_id,safety_status,safety_hash FROM developer_scripts WHERE project_id=$1', [id]),
+    pool.query('SELECT version,updated_at,validated,obfuscated,target_mode,place_id,safety_status,safety_hash,filename,original_size_bytes,output_size_bytes,obfuscation_level,(original_content_enc IS NOT NULL) AS original_available FROM developer_scripts WHERE project_id=$1', [id]),
     pool.query(`SELECT COUNT(*)::int AS total,COUNT(*) FILTER (WHERE NOT revoked AND expires_at>now())::int AS active FROM developer_licenses WHERE project_id=$1`, [id]),
     pool.query("SELECT id,status,findings,created_at FROM developer_moderation_submissions WHERE project_id=$1 AND owner_id=$2 AND status='pending' ORDER BY created_at DESC LIMIT 10",[id,req.developerId]),
+    pool.query('SELECT views,executions FROM developer_script_metrics WHERE project_id=$1',[id]),
+    pool.query('SELECT target_kind,checked_at,result,findings FROM developer_script_revalidation WHERE project_id=$1 ORDER BY checked_at DESC',[id]),
   ]);
   res.json({ success: true, project: { ...projectView(req.project), checkpointCallbackUrl: callbackUrl(req, req.project), checkpointSetup: providers.setup(req.project, site(req), callbackUrl(req, req.project)) }, licenses: licenses.rows, events: events.rows,
-    pendingSubmissions:submissions.rows.map(s=>({id:s.id,status:s.status,findings:moderation.findings(s.findings),createdAt:s.created_at})),
-    script: script.rows[0] ? {version:script.rows[0].version,updated_at:script.rows[0].updated_at,validated:script.rows[0].validated,obfuscated:script.rows[0].obfuscated,securityStatus:script.rows[0].safety_status,securityHash:script.rows[0].safety_hash,targetMode:script.rows[0].target_mode,placeId:script.rows[0].place_id?Number(script.rows[0].place_id):null} : null, stats: stats.rows[0] });
+    metrics:scriptMetrics.view(metrics.rows[0]),securityChecks:securityChecks.rows.map(c=>({target:c.target_kind,checkedAt:c.checked_at,result:c.result,findings:moderation.findings(c.findings)})),pendingSubmissions:submissions.rows.map(s=>({id:s.id,status:s.status,findings:moderation.findings(s.findings),createdAt:s.created_at})),
+    script: script.rows[0] ? {version:script.rows[0].version,updated_at:script.rows[0].updated_at,updatedAt:script.rows[0].updated_at,filename:script.rows[0].filename,originalAvailable:script.rows[0].original_available,originalSizeBytes:script.rows[0].original_size_bytes,outputSizeBytes:script.rows[0].output_size_bytes,obfuscationLevel:script.rows[0].obfuscation_level,validated:script.rows[0].validated,obfuscated:script.rows[0].obfuscated,securityStatus:script.rows[0].safety_status,securityHash:script.rows[0].safety_hash,targetMode:script.rows[0].target_mode,placeId:script.rows[0].place_id?Number(script.rows[0].place_id):null} : null, stats: stats.rows[0] });
 }));
 router.patch('/projects/:projectId', sameOrigin, requireDeveloper, ownProject, wrap(async (req, res) => {
   const { name, description, durationHours, hwidBinding } = req.body;
@@ -142,6 +153,7 @@ router.patch('/projects/:projectId', sameOrigin, requireDeveloper, ownProject, w
     !Number.isInteger(durationHours) || durationHours < 1 || durationHours > 8760 || typeof hwidBinding !== 'boolean') return fail(res, 400, 'Invalid project settings.');
   const { rows } = await pool.query('UPDATE developer_projects SET name=$1,description=$2,duration_hours=$3,hwid_binding=$4 WHERE id=$5 AND owner_id=$6 RETURNING *',
     [name.trim(), description, durationHours, hwidBinding, req.project.id, req.developerId]);
+  if (!rows[0]) return fail(res, 404, 'Project not found');
   res.json({ success: true, project: projectView(rows[0]) });
 }));
 router.put('/projects/:projectId/key-ui',sameOrigin,requireDeveloper,ownProject,wrap(async(req,res)=>{
@@ -153,45 +165,37 @@ router.put('/projects/:projectId/key-ui',sameOrigin,requireDeveloper,ownProject,
 }));
 router.post('/projects/:projectId/token', sameOrigin, requireDeveloper, ownProject, wrap(async (req, res) => {
   const apiToken = 'ahp_' + crypto.randomToken(32);
-  await pool.query('UPDATE developer_projects SET api_token_hash=$1 WHERE id=$2 AND owner_id=$3', [crypto.hashToken(apiToken), req.project.id, req.developerId]);
+  const changed = await pool.query('UPDATE developer_projects SET api_token_hash=$1 WHERE id=$2 AND owner_id=$3 RETURNING id', [crypto.hashToken(apiToken), req.project.id, req.developerId]);
+  if (!changed.rows[0]) return fail(res, 404, 'Project not found');
   res.json({ success: true, apiToken });
 }));
 router.put('/projects/:projectId/script', sameOrigin, requireDeveloper, ownProject, wrap(async (req, res) => {
-  const content = req.body.content;
-  if (typeof content !== 'string' || !content.trim() || Buffer.byteLength(content) > 1024 * 1024) return fail(res, 400, 'Provide a Lua script smaller than 1 MB.');
-  const previous=(await pool.query('SELECT version,build_hash,safety_status FROM developer_scripts WHERE project_id=$1',[req.project.id])).rows[0];
-  const sourceScan=scanScript(content,{phase:'source'});
-  if(sourceScan.status==='blocked'){
-    await moderation.audit(pool,{actorId:req.developerId,action:'upload.blocked',projectId:req.project.id,hash:sourceScan.hash,findings:sourceScan.findings});
-    return res.status(422).json({success:false,error:'This release was blocked by security checks.',findings:moderation.findings(sourceScan.findings)});
-  }
-  const build = await scriptBuilder.build(content,req.body);
-  const outputScan=scanScript(build.code,{phase:'output'});
-  const scan={...outputScan,findings:[...sourceScan.findings,...outputScan.findings]};
-  if(sourceScan.status==='review'&&scan.status==='clear')scan.status='review';
-  if(previous?.safety_status==='quarantined'&&scan.status==='clear'){scan.status='review';scan.findings.push({rule:'quarantine.replacement',severity:'review',line:null});}
-  if(scan.status==='blocked'){
-    await moderation.audit(pool,{actorId:req.developerId,action:'upload.blocked',projectId:req.project.id,hash:build.buildHash,findings:scan.findings});
-    return res.status(422).json({success:false,error:'This release was blocked by security checks.',findings:moderation.findings(scan.findings)});
-  }
-  const enc = crypto.encryptAES(build.code);
-  const client=await pool.connect();
-  try{
-    await client.query('BEGIN');
-    await client.query('SELECT id FROM developer_projects WHERE id=$1 FOR UPDATE',[req.project.id]);
-    const current=(await client.query('SELECT version,build_hash,safety_status FROM developer_scripts WHERE project_id=$1',[req.project.id])).rows[0];
-    if((current?.version||0)!==(previous?.version||0)||(current?.build_hash||null)!==(previous?.build_hash||null)||(current?.safety_status||null)!==(previous?.safety_status||null)){await client.query('ROLLBACK');return fail(res,409,'Release changed during checks. Upload again.');}
-    if(scan.status==='review'){
-      const pendingCount=Number((await client.query("SELECT count(*) AS total FROM developer_moderation_submissions WHERE project_id=$1 AND status='pending'",[req.project.id])).rows[0].total);
-      if(pendingCount>=5){await client.query('ROLLBACK');return fail(res,409,'This project already has five pending releases. Wait for review.');}
-      const id=await moderation.stage(client,{id:req.project.id,version:current?.version||0,build_hash:current?.build_hash||null},{content_enc:enc.enc,content_iv:enc.iv,build_hash:build.buildHash,target_mode:build.targetMode,place_id:build.placeId,builder_version:build.builderVersion},scan,req.developerId);
-      await client.query('COMMIT');return res.status(202).json({success:true,pendingReview:true,submissionId:id,version:current?.version||0,findings:moderation.findings(scan.findings)});
-    }
-    const { rows } = await client.query(`INSERT INTO developer_scripts(project_id,content_enc,content_iv,validated,obfuscated,target_mode,place_id,builder_version,build_hash,safety_status,safety_hash,scanner_version) VALUES($1,$2,$3,true,true,$4,$5,$6,$7,'clear',$7,$8)
-      ON CONFLICT(project_id) DO UPDATE SET content_enc=$2,content_iv=$3,validated=true,obfuscated=true,target_mode=$4,place_id=$5,builder_version=$6,build_hash=$7,safety_status='clear',safety_hash=$7,scanner_version=$8,version=developer_scripts.version+1,updated_at=now() RETURNING version`, [req.project.id, enc.enc, enc.iv,build.targetMode,build.placeId,build.builderVersion,build.buildHash,scan.scannerVersion]);
-    await moderation.audit(client,{actorId:req.developerId,action:'upload.clear',projectId:req.project.id,version:rows[0].version,hash:build.buildHash,findings:scan.findings});
-    await client.query('COMMIT');res.json({ success: true, version: rows[0].version,validated:true,obfuscated:true,securityStatus:'clear',targetMode:build.targetMode,placeId:build.placeId });
-  }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
+  const job = await scriptJobs.enqueue({projectId:req.project.id,ownerId:req.developerId,content:req.body.content,filename:req.body.filename,body:req.body});
+  res.status(202).json({success:true,queued:true,jobId:job.id,job});
+}));
+router.get('/projects/:projectId/jobs',requireDeveloper,ownProject,wrap(async(req,res)=>{
+  const limit=Number(req.query.limit||10);
+  if(!Number.isSafeInteger(limit)||limit<1||limit>20)return fail(res,400,'Choose a job limit between 1 and 20.');
+  res.json({success:true,jobs:await scriptJobs.list(req.project.id,req.developerId,limit)});
+}));
+router.get('/projects/:projectId/jobs/:jobId',requireDeveloper,ownProject,wrap(async(req,res)=>{
+  if(!UUID.test(req.params.jobId))return fail(res,404,'Job not found.');
+  const job=await scriptJobs.get(req.project.id,req.developerId,req.params.jobId);
+  if(!job)return fail(res,404,'Job not found.');res.json({success:true,job});
+}));
+router.post('/projects/:projectId/jobs/:jobId/cancel',sameOrigin,requireDeveloper,ownProject,wrap(async(req,res)=>{
+  if(!UUID.test(req.params.jobId))return fail(res,404,'Job not found.');
+  res.json({success:true,job:await scriptJobs.cancel(req.project.id,req.developerId,req.params.jobId)});
+}));
+function sendOriginal(req,res,value){
+  res.set('Cache-Control','no-store').set('X-Content-Type-Options','nosniff');
+  res.set('Content-Disposition',`attachment; filename="script.lua"; filename*=UTF-8''${encodeURIComponent(value.filename||'script.lua')}`);
+  res.type('text/plain; charset=utf-8').send(value.code);
+}
+router.get('/projects/:projectId/source',requireDeveloper,ownProject,wrap(async(req,res)=>sendOriginal(req,res,await scriptJobs.original(req.project.id,req.developerId))));
+router.get('/projects/:projectId/jobs/:jobId/source',requireDeveloper,ownProject,wrap(async(req,res)=>{
+  if(!UUID.test(req.params.jobId))return fail(res,404,'Job not found.');
+  sendOriginal(req,res,await scriptJobs.original(req.project.id,req.developerId,req.params.jobId));
 }));
 const issueLicenses = wrap(async (req, res) => {
   const hours = req.body.durationHours ?? req.project.duration_hours;
@@ -202,6 +206,8 @@ const issueLicenses = wrap(async (req, res) => {
   try {
     await client.query('BEGIN');
     const lockedProject = await client.query('SELECT id,api_token_hash FROM developer_projects WHERE id=$1 FOR UPDATE', [req.project.id]);
+    if (!lockedProject.rows[0]) { await client.query('ROLLBACK'); return fail(res, 404, 'Project not found'); }
+    if (!await siteControls.projectAvailable(req.project.id, client)) { await client.query('ROLLBACK'); return fail(res, 403, 'This project is unavailable.'); }
     if (req.apiTokenHash && lockedProject.rows[0]?.api_token_hash !== req.apiTokenHash) {
       await client.query('ROLLBACK'); return fail(res, 401, 'Invalid API token');
     }
@@ -223,8 +229,8 @@ router.post('/projects/:projectId/licenses/:licenseId/:action', sameOrigin, requ
   const { licenseId, action } = req.params;
   if (!UUID.test(licenseId) || !['revoke','restore','reset-device'].includes(action)) return fail(res, 400, 'Invalid license action.');
   const assignment = { revoke: 'revoked=true', restore: 'revoked=false', 'reset-device': 'hwid_hash=NULL' }[action];
-  const result = await pool.query(`UPDATE developer_licenses SET ${assignment} WHERE id=$1 AND project_id=$2 RETURNING id`, [licenseId, req.project.id]);
-  if (!result.rows[0]) return fail(res, 404, 'License not found');
+  const result = await pool.query(`UPDATE developer_licenses SET ${assignment} WHERE id=$1 AND project_id=$2${action==='restore'?' AND admin_revoked=false':''} RETURNING id`, [licenseId, req.project.id]);
+  if (!result.rows[0]) return fail(res, 404, 'License not found or restricted by the site team');
   res.json({ success: true });
 }));
 
@@ -242,28 +248,34 @@ router.post('/v1/projects/:projectId/licenses', wrap(async (req, res, next) => {
 
 router.post('/v1/check', wrap(async (req, res) => {
   const { projectId, key, hwid, executor } = req.body || {};
+  if(req.body?.executionId!==undefined&&(typeof req.body.executionId!=='string'||!scriptMetrics.UUID.test(req.body.executionId)))return fail(res,400,'Invalid execution ID');
   if (typeof projectId !== 'string' || typeof key !== 'string' || !UUID.test(projectId) || !/^ah_[a-f0-9]{48}$/.test(key)) return fail(res, 400, 'Invalid key or project');
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Hold the project before its licence. Account deletion removes licences
+    // after locking projects; this also protects the validation-event FK.
+    const project = await client.query('SELECT hwid_binding FROM developer_projects WHERE id=$1 FOR KEY SHARE', [projectId]);
+    if (!project.rows[0]) { await client.query('ROLLBACK'); return res.status(401).json({ success: false, reason: 'invalid_key' }); }
+    if (!await siteControls.projectAvailable(projectId, client)) { await client.query('ROLLBACK'); return res.status(403).json({ success: false, reason: 'project_unavailable' }); }
     const result = await client.query('SELECT * FROM developer_licenses WHERE project_id=$1 AND key_hash=$2 FOR UPDATE', [projectId, crypto.hashToken(key)]);
     const license = result.rows[0];
-    const project = license ? await client.query('SELECT hwid_binding FROM developer_projects WHERE id=$1', [projectId]) : { rows: [] };
     let reason = !license ? 'invalid_key' : license.revoked ? 'revoked' : new Date(license.expires_at).getTime() <= Date.now() ? 'expired' : null;
     let hwidHash = null;
     if (!reason && project.rows[0].hwid_binding) {
       if (typeof hwid !== 'string' || hwid.trim().length < 8 || hwid.length > 256) reason = 'hwid_required';
       else { hwidHash = crypto.hashToken(projectId + ':' + hwid.trim()); if (license.hwid_hash && license.hwid_hash !== hwidHash) reason = 'bound_to_other_device'; }
     }
-    const script = !reason ? await client.query('SELECT content_enc,content_iv,version,validated,obfuscated,safety_status FROM developer_scripts WHERE project_id=$1', [projectId]) : { rows: [] };
+    const script = !reason ? await client.query('SELECT content_enc,content_iv,version,validated,obfuscated,safety_status FROM developer_scripts WHERE project_id=$1 AND disabled=false AND deleted_at IS NULL', [projectId]) : { rows: [] };
     if (!reason && req.body.loadScript === true && !script.rows[0]) reason = 'no_script';
-    if (!reason && req.body.loadScript === true && (!script.rows[0].validated||!script.rows[0].obfuscated)) reason = 'build_required';
+    if (!reason && req.body.loadScript === true && (!script.rows[0].validated)) reason = 'build_required';
     if(!reason&&script.rows[0]&&!moderation.approved(script.rows[0].safety_status))reason='security_review_required';
     if (!license) { await client.query('ROLLBACK'); return res.status(401).json({ success: false, reason }); }
     if (!reason && hwidHash && !license.hwid_hash) await client.query('UPDATE developer_licenses SET hwid_hash=$1 WHERE id=$2', [hwidHash, license.id]);
     await client.query('INSERT INTO developer_events(project_id,license_id,success,reason,executor) VALUES($1,$2,$3,$4,$5)',
       [projectId, license.id, !reason, reason || 'valid', typeof executor === 'string' ? executor.slice(0, 40) : '']);
     const content = !reason && req.body.loadScript === true ? crypto.decryptAES(script.rows[0].content_enc, script.rows[0].content_iv) : undefined;
+    if(content!==undefined)await scriptMetrics.record(client,projectId,'executions',scriptMetrics.executionReceipt(license.id,req.body.executionId||nodeCrypto.randomUUID()));
     await client.query('COMMIT');
     if (reason) return res.status(403).json({ success: false, reason });
     res.json({ success: true, expiresAt: license.expires_at, script: content, version: script.rows[0]?.version });
@@ -294,7 +306,10 @@ router.put('/projects/:projectId/checkpoints', sameOrigin, requireDeveloper, own
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const account = (await client.query('SELECT discord_id FROM developer_accounts WHERE discord_id=$1 FOR UPDATE', [req.developerId])).rows[0];
+    if (!account) { await client.query('ROLLBACK'); return fail(res, 401, 'Sign in again to continue.'); }
     const current = await client.query('SELECT * FROM developer_projects WHERE id=$1 AND owner_id=$2 FOR UPDATE', [req.project.id, req.developerId]);
+    if (!current.rows[0]) { await client.query('ROLLBACK'); return fail(res, 404, 'Project not found'); }
     if (!sameCheckpointConfig(req.project, current.rows[0])) { await client.query('ROLLBACK'); return fail(res, 409, 'Checkpoint settings changed. Refresh this project and try again.'); }
     await client.query(`UPDATE developer_projects SET checkpoint_provider=$1,checkpoint_link_url=$2,checkpoint_link_id=$3,
     checkpoint_token_enc=$4,checkpoint_token_iv=$5,lootlabs_token_enc=$6,lootlabs_token_iv=$7,
@@ -314,6 +329,7 @@ router.put('/projects/:projectId/checkpoints', sameOrigin, requireDeveloper, own
 }));
 router.get('/public/projects/:projectId', wrap(async (req, res) => {
   if (!UUID.test(req.params.projectId)) return fail(res, 404, 'Project not found');
+  if (!await siteControls.projectAvailable(req.params.projectId)) return fail(res, 404, 'Project not found');
   const { rows } = await pool.query(`SELECT p.id,p.duration_hours,p.checkpoint_count,p.checkpoint_provider,p.checkpoint_link_url,p.checkpoint_link_id,p.checkpoint_token_enc,p.lootlabs_token_enc,
     l.title AS public_title,l.description AS public_description FROM developer_projects p
     LEFT JOIN (SELECT listing.project_id,listing.title,listing.description FROM developer_listings listing
@@ -327,6 +343,7 @@ router.get('/public/projects/:projectId', wrap(async (req, res) => {
 }));
 router.post('/checkpoints/:projectId/start', sameOrigin, checkpointStartLimiter, wrap(async (req, res) => {
   if (!UUID.test(req.params.projectId)) return fail(res, 404, 'Project not found');
+  if (!await siteControls.projectAvailable(req.params.projectId)) return fail(res, 404, 'Project not found');
   const { rows } = await pool.query('SELECT * FROM developer_projects WHERE id=$1', [req.params.projectId]);
   const p = rows[0]; if (!checkpointConfigured(p)) return fail(res, 409, 'The developer has not configured checkpoints yet.');
   const ipHash=checkpointSecurity.ipHash(req.ip);
@@ -339,6 +356,7 @@ router.post('/checkpoints/:projectId/start', sameOrigin, checkpointStartLimiter,
   try {
     await client.query('BEGIN');
     const lockedProject = await client.query('SELECT * FROM developer_projects WHERE id=$1 FOR UPDATE', [p.id]);
+    if (!await siteControls.projectAvailable(p.id, client)) { await client.query('ROLLBACK'); return fail(res, 404, 'Project not found'); }
     if (!sameCheckpointConfig(p, lockedProject.rows[0])) {
       await client.query('ROLLBACK'); return fail(res, 409, 'Checkpoint settings changed. Start again.');
     }
@@ -354,6 +372,7 @@ router.post('/checkpoints/:projectId/start', sameOrigin, checkpointStartLimiter,
 router.get('/checkpoints/:projectId/return', wrap(async (req, res) => {
   res.set('Referrer-Policy', 'no-referrer');
   if (!UUID.test(req.params.projectId)) return fail(res, 404, 'Project not found');
+  if (!await siteControls.projectAvailable(req.params.projectId)) return fail(res, 404, 'Project not found');
   if(req.query.session!==undefined&&typeof req.query.session!=='string')return fail(res,403,'Checkpoint session invalid.');
   const id = typeof req.query.session === 'string' ? req.query.session : req.cookies?.['ah_checkpoint_current_' + req.params.projectId];
   if (!/^[a-f0-9]{64}$/.test(id || '')) return fail(res, 403, 'Checkpoint session missing.');
@@ -383,6 +402,7 @@ router.get('/checkpoints/:projectId/return', wrap(async (req, res) => {
   try {
     await client.query('BEGIN');
     await client.query('SELECT id FROM developer_projects WHERE id=$1 FOR UPDATE', [project.id]);
+    if (!await siteControls.projectAvailable(project.id, client)) { await client.query('ROLLBACK'); return fail(res, 404, 'Project not found'); }
     const locked = await client.query('SELECT * FROM developer_checkpoints WHERE id=$1 AND project_id=$2 AND browser_hash=$3 AND expires_at>now() FOR UPDATE',
       [id, project.id, crypto.hashToken(browser)]);
     if (!locked.rows[0] || locked.rows[0].provider !== session.provider) { await client.query('ROLLBACK'); return fail(res, 403, 'Checkpoint session invalid or expired.'); }
@@ -409,6 +429,7 @@ router.get('/checkpoints/:projectId/postback', wrap(async (req, res) => {
     await client.query('BEGIN');
     const project = await client.query("SELECT id,checkpoint_secret_hash FROM developer_projects WHERE id=$1 AND checkpoint_provider='lootlabs' FOR UPDATE", [req.params.projectId]);
     const stored = project.rows[0];
+    if (!stored || !await siteControls.projectAvailable(stored.id, client)) { await client.query('ROLLBACK'); return fail(res, 403, 'Invalid callback'); }
     const derived = stored && callbackSecret(stored);
     const valid = derived && (nodeCrypto.timingSafeEqual(Buffer.from(req.query.secret, 'hex'), Buffer.from(derived, 'hex')) ||
       nodeCrypto.timingSafeEqual(Buffer.from(crypto.hashToken(req.query.secret), 'hex'), Buffer.from(stored.checkpoint_secret_hash, 'hex')));
@@ -437,6 +458,7 @@ router.get('/checkpoints/:session/status', wrap(async (req, res) => {
     const sessionProject = await client.query('SELECT project_id FROM developer_checkpoints WHERE id=$1 AND browser_hash=$2', [id, crypto.hashToken(browser)]);
     if (!sessionProject.rows[0]) { await client.query('ROLLBACK'); return fail(res, 410, 'Session expired. Start again.'); }
     await client.query('SELECT id FROM developer_projects WHERE id=$1 FOR UPDATE', [sessionProject.rows[0].project_id]);
+    if (!await siteControls.projectAvailable(sessionProject.rows[0].project_id, client)) { await client.query('ROLLBACK'); return fail(res, 410, 'Project unavailable.'); }
     const { rows } = await client.query('SELECT * FROM developer_checkpoints WHERE id=$1 AND browser_hash=$2 AND expires_at>now() FOR UPDATE', [id, crypto.hashToken(browser)]);
     const c = rows[0];
     if (!c) { await client.query('ROLLBACK'); return fail(res, 410, 'Session expired. Start again.'); }
@@ -457,6 +479,7 @@ router.get('/checkpoints/:session/status', wrap(async (req, res) => {
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
 }));
 router.use((error, req, res, next) => {
+  if(error.status&&error.code)return res.status(error.status).json({success:false,code:error.code,error:error.message});
   if (res.headersSent) return next(error);
   if(['SCRIPT_INVALID','SCRIPT_BUSY','SCRIPT_TIMEOUT','SCRIPT_UNAVAILABLE'].includes(error.code)) {
     const status=error.code==='SCRIPT_INVALID'?400:error.code==='SCRIPT_TIMEOUT'?422:503;

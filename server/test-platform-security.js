@@ -1,4 +1,5 @@
 'use strict';
+const {settleResponse}=require('./tests/script-jobs');
 // Regression tests use an isolated database and mocked provider responses.
 const assert = require('node:assert/strict');
 const { startFixture } = require('./tests/platform-fixture');
@@ -10,8 +11,7 @@ async function run() {
     const response = await fetch(f.base + '/api/platform' + path, { method, redirect: 'manual',
       headers: { ...(cookie ? { Cookie: cookie } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...extra },
       body: body === undefined ? undefined : JSON.stringify(body) });
-    return { status: response.status, headers: response.headers,
-      data: response.headers.get('content-type')?.includes('json') ? await response.json() : null };
+    return settleResponse(f,response,cookie);
   }
   const cookies = headers => headers.getSetCookie().map(v => v.split(';')[0]).join('; ');
   const providerFetch = global.fetch;

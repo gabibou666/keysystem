@@ -9,7 +9,7 @@ async function run() {
   const nativeFetch=global.fetch,mailbox=[];
   global.fetch=async(url,options)=>String(url)==='https://api.resend.com/emails'?(mailbox.push(JSON.parse(options.body)),new Response('{"id":"test"}',{status:200})):nativeFetch(url,options);
   const post=async(email,cookie='')=>{
-    const r=await fetch(f.base+'/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json',Origin:f.base,Cookie:cookie},body:JSON.stringify({name:'Developer',email,password:'strong-password-for-tests'})});
+    const r=await fetch(f.base+'/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json',Origin:f.base,Cookie:cookie},body:JSON.stringify({name:'Developer',email,password:'strong-password-for-tests',acceptedTerms:true})});
     return {status:r.status,data:await r.json(),cookie:r.headers.getSetCookie().map(v=>v.split(';')[0]).join('; ')};
   };
   async function reserve(keys){const c=await f.pool.connect();try{await c.query('BEGIN');await registration.reserve(c,keys);await c.query('COMMIT');}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}}
@@ -30,11 +30,12 @@ async function run() {
     await assert.rejects(()=>auth.socialAccount('discord','same-email-discord','Discord',{email:'FirstLast@gmail.com',emailVerified:true}),{code:'ACCOUNT_EXISTS'});checks++;console.log('OK Discord cannot create a second account for an existing email');
     check((await f.pool.query('SELECT password_hash FROM developer_accounts WHERE discord_id=$1',[original.discord_id])).rows[0].password_hash===original.password_hash,'Duplicate OAuth does not replace credentials or take over an account');
     await assert.rejects(()=>auth.socialAccount('google','unverified-google','Bad',{email:'unverified@example.com',emailVerified:false}),{code:'VERIFIED_EMAIL_REQUIRED'});checks++;console.log('OK Unverified provider email cannot create a developer account');
-    const google=await auth.socialAccount('google','verified-google','Google',{email:'unique-google@example.com',emailVerified:true});
+    await assert.rejects(()=>auth.socialAccount('google','no-agreement-google','No agreement',{email:'no-agreement@example.com',emailVerified:true}),{code:'TERMS_REQUIRED'});checks++;console.log('OK New OAuth identity requires explicit legal agreement');
+    const google=await auth.socialAccount('google','verified-google','Google',{email:'unique-google@example.com',emailVerified:true},undefined,true);
     check(await auth.socialAccount('google','verified-google','Return')===google,'Returning provider identity signs into its original account');
     const legacy=await auth.socialAccount('discord','900000000000000001','Legacy');
     check(legacy==='900000000000000001','Existing Discord account IDs remain unchanged');
-    const races=await Promise.allSettled(['racing-google-a','racing-google-b'].map(sub=>auth.socialAccount('google',sub,'Race',{email:'race@example.com',emailVerified:true})));
+    const races=await Promise.allSettled(['racing-google-a','racing-google-b'].map(sub=>auth.socialAccount('google',sub,'Race',{email:'race@example.com',emailVerified:true},undefined,true)));
     check(races.filter(r=>r.status==='fulfilled').length===1&&(await f.pool.query('SELECT discord_id FROM developer_accounts WHERE email=$1',['race@example.com'])).rows.length===1,'Concurrent OAuth registrations cannot duplicate an email');
     for(let i=0;i<5;i++) await reserve({network:'test-network',browser:'test-browser-'+i});
     await assert.rejects(()=>reserve({network:'test-network',browser:'sixth-browser'}),{code:'ACCOUNT_CREATION_LIMIT'});checks++;console.log('OK Network limit survives a fresh browser cookie');

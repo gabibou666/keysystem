@@ -1,4 +1,5 @@
 'use strict';
+const {settleResponse}=require('./tests/script-jobs');
 const assert=require('node:assert/strict');
 const {startFixture}=require('./tests/platform-fixture');
 const {errorSummary,diagnosticUrl,diagnosticDirective}=require('./src/services/private-diagnostics');
@@ -8,7 +9,7 @@ async function run(){
   const secrets=['PRIVATE_PROJECT_TITLE','PRIVATE_PROJECT_NOTES','PRIVATE_SCRIPT_BODY','PRIVATE_CUSTOMER_NOTE','private-developer@example.com','private-provider-api-token'];
   async function req(path,method='GET',body,cookie=f.cookies[0],headers={}){
     const r=await fetch(f.base+path,{method,headers:{...(cookie?{Cookie:cookie}:{}),...(body===undefined?{}:{'Content-Type':'application/json',Origin:f.base}),...headers},body:body===undefined?undefined:JSON.stringify(body)});
-    return {status:r.status,headers:r.headers,text:await r.text()};
+    return settleResponse(f,r,cookie);
   }
   function clean(result){return secrets.every(secret=>!result.text.includes(secret));}
   try{

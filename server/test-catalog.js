@@ -1,4 +1,5 @@
 'use strict';
+const {settleResponse}=require('./tests/script-jobs');
 const assert=require('node:assert/strict');
 const {startFixture}=require('./tests/platform-fixture');
 async function run(){
@@ -6,7 +7,7 @@ async function run(){
   const check=(condition,label)=>{assert.ok(condition,label);checks++;console.log('OK '+label);};
   async function req(path,method='GET',body,cookie=f.cookies[0],extra={}){
     const r=await fetch(f.base+path,{method,headers:{...(cookie?{Cookie:cookie}:{}),...(body===undefined?{}:{'Content-Type':'application/json',Origin:f.base}),...extra},body:body===undefined?undefined:JSON.stringify(body)});
-    return {status:r.status,headers:r.headers,data:r.headers.get('content-type')?.includes('json')?await r.json():await r.text()};
+    return settleResponse(f,r,cookie);
   }
   const cat=(path,...args)=>req('/api/catalog'+path,...args);
   const hub={name:'Public hub',slug:'public-hub',description:'Script collection',published:false};

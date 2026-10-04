@@ -1,4 +1,5 @@
 'use strict';
+const {settleResponse}=require('./tests/script-jobs');
 const assert=require('node:assert/strict'),fs=require('fs'),path=require('path');
 const {randomUUID}=require('crypto');
 const {startFixture}=require('./tests/platform-fixture');
@@ -8,20 +9,27 @@ async function run(){
   const service=require('./src/services/moderation');
   const ids=['900000000000000001','900000000000000002'];
   process.env.MODERATION_ADMIN_IDS=ids[1];
+  const csrf=new Map();
+  async function activate(index){const r=await req('/admin/api/session','POST',{confirmation:'ACTIVATE'},f.cookies[index]);assert.equal(r.status,200);const c=r.headers.getSetCookie().find(x=>x.startsWith('ah_admin_session=')).split(';')[0];f.cookies[index]+='; '+c;csrf.set(f.cookies[index],r.data.csrfToken);}
   async function req(url,method='GET',body,cookie=f.cookies[0],origin=f.base){
-    const r=await fetch(f.base+url,{method,headers:{...(cookie?{Cookie:cookie}:{}),...(body!==undefined?{'Content-Type':'application/json',Origin:origin}:{})},body:body===undefined?undefined:JSON.stringify(body)});
-    return {status:r.status,data:await r.json(),headers:r.headers};
+    const r=await fetch(f.base+url,{method,headers:{...(cookie?{Cookie:cookie}:{}),...(csrf.has(cookie)?{'X-CSRF-Token':csrf.get(cookie)}:{}),...(body!==undefined?{'Content-Type':'application/json',Origin:origin}:{})},body:body===undefined?undefined:JSON.stringify(body)});
+    return settleResponse(f,r,cookie);
   }
   try{
     check((await req('/api/moderation/me','GET',undefined,'')).status===401,'Anonymous cannot access moderator data');
     check((await req('/api/moderation/me')).data.role==='user','Signup never grants a moderator role');
     check((await req('/api/moderation/me')).data.accountId===ids[0]&&!('email' in (await req('/api/moderation/me')).data),'Current session exposes only its own account identifier');
     check((await req('/api/moderation/me','GET',undefined,f.cookies[1])).data.role==='admin','Server allowlist bootstrap grants admin');
-    for(const endpoint of ['overview','queue','reports','audit'])check((await req('/api/moderation/'+endpoint)).status===403,'Ordinary account cannot read '+endpoint);
-    check((await req('/api/moderation/accounts/'+ids[0]+'/role','PUT',{role:'admin'})).status===403,'Ordinary account cannot self-promote');
+    await activate(1);
+    const ownerId=randomUUID();await f.pool.query('INSERT INTO developer_accounts(discord_id,username) VALUES($1,$2)',[ownerId,'Verified owner']);
+    await f.pool.query("INSERT INTO developer_identities(provider,subject,account_id,oauth_verified_at) VALUES('discord',$1,$2,now())",[require('./src/services/staff-access').ownerDiscordId(),ownerId]);
+    f.cookies[2]='ah_session='+await require('./src/services/developer-auth').createSession(ownerId);await activate(2);
+    for(const endpoint of ['overview','queue','reports','audit'])check((await req('/api/moderation/'+endpoint)).status===404,'Ordinary account cannot read '+endpoint);
+    check((await req('/api/moderation/accounts/'+ids[0]+'/role','PUT',{role:'admin'})).status===404,'Ordinary account cannot self-promote');
     check((await req('/api/moderation/accounts/'+ids[0]+'/role','PUT',{role:'moderator'},f.cookies[1],'https://evil.test')).status===403,'Cross-origin role mutation rejected');
     check((await req('/api/moderation/accounts/'+ids[0]+'/role','PUT',{role:'moderator'},f.cookies[1])).status===200,'Admin can grant moderator role');
-    check((await req('/api/moderation/accounts/'+ids[1]+'/role','PUT',{role:'user'},f.cookies[1])).status===409,'Server-managed bootstrap admin cannot be silently demoted by API');
+    await activate(0);
+    check((await req('/api/moderation/accounts/'+ids[1]+'/role','PUT',{role:'user'},f.cookies[1])).status===403,'Administrators cannot change their own staff role');
     check((await req('/api/moderation/accounts/'+ids[1]+'/role','PUT',{role:'admin'})).status===403,'Moderator cannot grant roles');
     const project=randomUUID(),hash='a'.repeat(64),nextHash='b'.repeat(64);
     await f.pool.query('INSERT INTO developer_projects(id,owner_id,name,api_token_hash) VALUES($1,$2,$3,$4)',[project,ids[0],'SECRET_PROJECT_NAME','SECRET_API_TOKEN']);
@@ -49,13 +57,14 @@ async function run(){
     check((await req('/api/moderation/projects/'+project+'/quarantine','POST',{expectedVersion:2,expectedHash:nextHash},f.cookies[1])).status===200,'Moderator quarantines current release');
     check(!(await service.deliveryAllowed(project,2,nextHash)),'Quarantined licensed delivery is denied');
     check(!(await service.snapshotAllowed(project,'clear',hash)),'Quarantine also denies old free snapshots');
-    const audit=await req('/api/moderation/audit');
+    const audit=await req('/api/moderation/audit','GET',undefined,f.cookies[2]);
     const encoded=JSON.stringify(audit.data);
     check(!encoded.includes('SECRET')&&!encoded.includes('secret.test'),'Audit journal contains neither source nor credentials');
     check(audit.data.items.some(x=>x.action==='submission.approved')&&audit.data.items.some(x=>x.action==='project.quarantined'),'Journal includes approvals and quarantine');
-    check(audit.data.items.some(x=>x.action==='role.updated'&&x.details.subjectId===ids[0]&&x.details.role==='moderator'),'Role journal includes target account and approved role');
+    const staffAudit=await req('/admin/api/audit','GET',undefined,f.cookies[2]);
+    check(staffAudit.data.items.some(x=>x.action==='team.role_changed'&&x.targetId===ids[0]&&x.after.role==='MODERATOR'),'Restricted team journal includes target account and assigned role');
     check(audit.headers.get('cache-control')==='no-store'&&audit.headers.get('referrer-policy')==='no-referrer','Moderator data cannot be cached or leaked by referrer');
-    check((await req('/api/moderation/audit?action=secretSQL')).status===400,'Audit filter is whitelisted');
+    check((await req('/api/moderation/audit?action=secretSQL','GET',undefined,f.cookies[2])).status===400,'Audit filter is whitelisted');
     check((await req('/api/moderation/queue?page=-1')).status===400,'Pagination rejects unbounded or invalid offsets');
     const hub=randomUUID();
     await f.pool.query("INSERT INTO developer_hubs(id,owner_id,slug,name,published_at) VALUES($1,$2,'moderation-test','Public creator',now())",[hub,ids[0]]);
@@ -111,15 +120,13 @@ async function run(){
       check((await raceUpload).status===409,'Quarantine during a build cannot be overwritten by a clear upload');
     }finally{builder.build=originalBuild;resumeBuild();if(raceUpload)await raceUpload;}
     await require('./src/services/moderation-http-audit').flush();
-    const history=(await req('/api/moderation/audit')).data;
+    const history=(await req('/api/moderation/audit','GET',undefined,f.cookies[2])).data;
     check(history.items.some(e=>e.action==='upload.blocked')&&history.items.some(e=>e.action==='project.created'),'Journal includes security blocks and route mutations');
     check(!JSON.stringify(history).includes('SECRET_ATTACK_TOKEN')&&!JSON.stringify(history).includes('SECRET_NOTE'),'Audit excludes uploaded source and private decision text');
     check(history.items.some(e=>e.action==='submission.rejected'&&e.details.note.includes('Remote execution pattern.')&&e.details.note.includes('[credential removed]')),'Journal retains useful moderator reason while redacting credential patterns');
     await req('/api/moderation/accounts/'+ids[0]+'/role','PUT',{role:'user'},f.cookies[1]);
-    check((await req('/api/moderation/audit')).status===403,'Revoked moderator loses access immediately');
-    await req('/api/moderation/accounts/'+ids[1]+'/role','PUT',{role:'admin'},f.cookies[1]);
-    delete process.env.MODERATION_ADMIN_IDS;
-    check((await req('/api/moderation/accounts/'+ids[1]+'/role','PUT',{role:'user'},f.cookies[1])).status===409,'Last database administrator cannot lock out all moderators');
+    check((await req('/api/moderation/audit')).status===404,'Revoked moderator loses access immediately');
+    check((await req('/api/moderation/accounts/'+ids[1]+'/role','PUT',{role:'user'},f.cookies[1])).status===403,'An administrator cannot demote itself through the legacy role endpoint');
     console.log('Moderation: '+checks+' checks passed.');
   }finally{delete process.env.MODERATION_ADMIN_IDS;await f.close();}
 }

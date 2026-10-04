@@ -9,17 +9,17 @@ async function run() {
   const browser=await chromium.launch({headless:true});
   const artifacts=path.join(__dirname,'../artifacts/platform');fs.mkdirSync(artifacts,{recursive:true});
   try {
-    const context=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
+    const context=await browser.newContext({locale:'en-US',viewport:{width:1440,height:1000},reducedMotion:'reduce'});
     const page=await context.newPage(),errors=[];
     page.on('pageerror',e=>errors.push(e.message));
-    await page.goto(f.base);await page.screenshot({path:path.join(artifacts,'home-desktop.png'),fullPage:true});
-    assert.equal(await page.getByRole('heading',{level:1}).textContent(),'Your scripts.Your rules.');
+    await page.goto(f.base);await page.locator('#cookieConsentReject').click();await page.screenshot({path:path.join(artifacts,'home-desktop.png'),fullPage:true});
+    assert.equal((await page.getByRole('heading',{level:1}).textContent()).replace(/\s+/g,''),'Yourscripts.Yourrules.');
     await page.getByText('How do I create a developer account?').click();
     assert.equal(await page.locator('details[open]').count(),1);
-    await page.getByRole('tab',{name:'Script publishing'}).click();
-    assert.equal(await page.locator('#demo-script').isVisible(),true);
-    await page.getByRole('tab',{name:'Checkpoints',exact:true}).click();
-    assert.equal(await page.locator('#demo-checkpoint').isVisible(),true);
+    assert.equal(await page.locator('.workspace-capture img').count(),1,'The landing uses an actual dashboard capture');
+    assert.equal(await page.locator('.workspace-capture img').getAttribute('loading'),'lazy','The dashboard screenshot loads below the fold');
+    assert.equal(await page.locator('.release-workflow li').count(),4,'One four-step release workflow remains');
+    assert.equal(await page.locator('[data-demo]').count(),0,'Repeated sample-data previews have been replaced');
     await page.goto(f.base+'/signup');
     await page.locator('#emailStatus').waitFor({state:'visible'});
     assert.equal(await page.locator('#submitAuth').isDisabled(),true);
@@ -31,6 +31,8 @@ async function run() {
     await page.getByLabel('Your name',{exact:true}).fill('UI Email Developer');
     await page.getByLabel('Email address',{exact:true}).fill('ui@example.com');
     await page.locator('#passwordInput').fill('ui-test-strong-password');
+    assert.equal(await page.locator('#acceptedTerms').isChecked(),false,'Legal agreement is never preselected');
+    await page.locator('#acceptedTerms').check();
     await page.locator('#submitAuth').click();
     await page.getByText('Check your email to verify your account.',{exact:false}).waitFor();
     const verifyUrl=mailbox[0].text.match(/https?:\/\/\S+/)[0];
@@ -63,9 +65,9 @@ async function run() {
     await page.locator('#licensesBody').getByRole('button',{name:'Revoke',exact:true}).click();
     await page.locator('#licensesBody tr').first().getByText('Revoked',{exact:true}).waitFor();
     await page.locator('[data-view="script"]').click();
-    await page.getByLabel('Lua source',{exact:true}).fill('return "ui-test-script"');
+    await page.locator('#scriptContent').fill('return "ui-test-script"');
     await page.getByRole('button',{name:'Publish script',exact:true}).click();
-    await page.getByText('Script checked, obfuscated and saved: version 1.',{exact:false}).waitFor();
+    await page.getByText('Build saved successfully. Your loader URL stays the same.',{exact:false}).waitFor();
     await page.locator('[data-view="settings"]').click();
     await page.getByLabel('Project name',{exact:true}).first().fill('My launch');
     await page.getByRole('button',{name:'Save settings',exact:true}).click();

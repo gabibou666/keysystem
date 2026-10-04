@@ -2,9 +2,10 @@
 const express=require('express'),rateLimit=require('express-rate-limit');
 const pool=require('../db'),auth=require('../services/developer-auth'),crypto=require('../services/crypto');
 const {randomUUID}=require('crypto');
-const scriptBuilder=require('../services/script-builder');
+const scriptJobs=require('../services/publication-queue');
 const profileFields=require('../services/public-profile').fields;
 const moderation=require('../services/moderation');
+const metrics=require('../services/script-metrics');
 const router=express.Router();
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const wrap=fn=>(req,res,next)=>Promise.resolve(fn(req,res,next)).catch(next);
@@ -18,6 +19,7 @@ const checkpointConfiguredSql=`CASE COALESCE(p.checkpoint_provider,'lootlabs')
   WHEN 'linkunlocker' THEN p.checkpoint_link_url IS NOT NULL AND length(p.checkpoint_link_url)>0 AND p.checkpoint_token_enc IS NOT NULL AND length(p.checkpoint_token_enc)>0
   ELSE false END`;
 const listingColumns=`l.project_id,l.title,l.description,l.game,l.access_mode,l.mobile_support,l.published_at,l.updated_at,h.discord_url,
+  COALESCE(m.views,0) AS views,COALESCE(m.executions,0) AS executions,
   CASE WHEN l.access_mode='licensed' THEN s.version ELSE l.script_version END AS script_version,
   CASE WHEN l.access_mode='licensed' THEN s.target_mode ELSE l.target_mode END AS target_mode,
   CASE WHEN l.access_mode='licensed' THEN s.place_id ELSE l.place_id END AS place_id,
@@ -25,8 +27,10 @@ const listingColumns=`l.project_id,l.title,l.description,l.game,l.access_mode,l.
   CASE WHEN l.access_mode='licensed' THEN COALESCE(s.obfuscated,false) ELSE l.snapshot_obfuscated END AS snapshot_obfuscated,
   CASE WHEN l.access_mode='licensed' THEN s.safety_status ELSE l.safety_status END AS security_status,
   p.key_ui_mode,h.slug AS hub_slug,h.name AS hub_name,a.username AS author,${checkpointConfiguredSql} AS checkpoints_configured`;
-const joinListings='FROM developer_listings l JOIN developer_hubs h ON h.id=l.hub_id JOIN developer_accounts a ON a.discord_id=h.owner_id JOIN developer_projects p ON p.id=l.project_id LEFT JOIN developer_scripts s ON s.project_id=p.id';
-const publicListing="l.published_at IS NOT NULL AND h.published_at IS NOT NULL AND l.snapshot_validated=true AND l.snapshot_obfuscated=true AND l.safety_status IN ('clear','approved') AND s.safety_status IN ('clear','approved')";
+const joinListings='FROM developer_listings l JOIN developer_hubs h ON h.id=l.hub_id JOIN developer_accounts a ON a.discord_id=h.owner_id JOIN developer_projects p ON p.id=l.project_id LEFT JOIN developer_scripts s ON s.project_id=p.id LEFT JOIN developer_script_metrics m ON m.project_id=p.id';
+const publisherActive="a.banned_at IS NULL AND (a.suspended_until IS NULL OR a.suspended_until<=now())";
+const projectActive="p.disabled=false AND p.hidden=false AND p.deleted_at IS NULL AND s.disabled=false AND s.deleted_at IS NULL";
+const publicListing=`l.published_at IS NOT NULL AND h.published_at IS NOT NULL AND l.snapshot_validated=true AND l.safety_status IN ('clear','approved') AND s.safety_status IN ('clear','approved') AND ${publisherActive} AND ${projectActive}`;
 router.use((req,res,next)=>{res.set('Cache-Control','no-store');next();});
 router.use(rateLimit({windowMs:60000,max:120,standardHeaders:true,legacyHeaders:false,message:{success:false,error:'Too many requests. Try again in a minute.'}}));
 const owner=wrap(async(req,res,next)=>{
@@ -42,7 +46,7 @@ function hubView(row){return {id:row.id,slug:row.slug,name:row.name,description:
 function listingView(row,req){
   const base=origin(req),free=row.access_mode==='free';
   return {projectId:row.project_id,hubSlug:row.hub_slug,hubName:row.hub_name,author:row.author,title:row.title,description:row.description,game:row.target_mode==='universal'?'Universal':row.game,accessMode:row.access_mode,published:!!row.published_at,publishedAt:row.published_at,updatedAt:row.updated_at,scriptVersion:row.script_version,
-    mobileSupport:row.mobile_support||'unknown',hasKeySystem:!free,discordUrl:row.discord_url||null,securityStatus:row.security_status,
+    ...metrics.view(row),mobileSupport:row.mobile_support||'unknown',hasKeySystem:!free,discordUrl:row.discord_url||null,securityStatus:row.security_status,
     ...(free?{}:{keyUiMode:row.key_ui_mode||'custom'}),
     targetMode:row.target_mode,placeId:row.place_id?Number(row.place_id):null,validated:row.snapshot_validated,obfuscated:row.snapshot_obfuscated,
     checkpointsConfigured:!!row.checkpoints_configured,loaderUrl:free?`${base}/api/catalog/scripts/${row.project_id}/source`:`${base}/api/platform/v1/loader/${row.project_id}`,claimUrl:!free&&row.checkpoints_configured?`${base}/claim?project=${row.project_id}`:null};
@@ -60,6 +64,8 @@ router.put('/me',sameOrigin,owner,wrap(async(req,res)=>{
   const client=await pool.connect();
   try{
   await client.query('BEGIN');
+  const account=(await client.query('SELECT discord_id FROM developer_accounts WHERE discord_id=$1 FOR UPDATE',[req.account.discord_id])).rows[0];
+  if(!account){await client.query('ROLLBACK');return fail(res,401,'Sign in again to continue.');}
   const row=(await client.query(`INSERT INTO developer_hubs(id,owner_id,slug,name,description,published_at,discord_url,website_url,avatar_theme) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
     ON CONFLICT(owner_id) DO UPDATE SET slug=$3,name=$4,description=$5,published_at=CASE WHEN $6::timestamptz IS NULL THEN NULL ELSE COALESCE(developer_hubs.published_at,$6) END,discord_url=$7,website_url=$8,avatar_theme=$9,auto_profile=false,updated_at=now() RETURNING id,slug,name,description,discord_url,website_url,avatar_theme,created_at,published_at,updated_at`,[randomUUID(),req.account.discord_id,slug,name.trim(),description,published?new Date():null,profile.discordUrl,profile.websiteUrl,profile.avatarTheme])).rows[0];
   await moderation.audit(client,{action:'profile.updated',actorId:req.account.discord_id});
@@ -72,27 +78,25 @@ router.put('/projects/:projectId',sameOrigin,owner,wrap(async(req,res)=>{
   if(!['yes','no','unknown'].includes(mobileSupport))return fail(res,400,'Choose a mobile compatibility declaration.');
   if(!UUID.test(req.params.projectId))return fail(res,404,'Project not found.');
   if(!text(title,80,true)||!text(description,2000)||!text(game,100)||!['licensed','free'].includes(accessMode)||typeof published!=='boolean')return fail(res,400,'Enter valid listing details and an access mode.');
-  const candidate=(await pool.query(`SELECT s.content_enc,s.content_iv,s.version,s.validated,s.obfuscated,s.target_mode,s.place_id,s.safety_status,s.safety_hash FROM developer_scripts s
-    JOIN developer_projects p ON p.id=s.project_id WHERE p.id=$1 AND p.owner_id=$2`,[req.params.projectId,req.account.discord_id])).rows[0];
-  if(published&&candidate){
-    if(!moderation.approved(candidate.safety_status))return fail(res,409,'This release is held or unreviewed. Upload a checked release and wait for moderation when required.');
-    if(!candidate.validated||!candidate.obfuscated)return fail(res,409,'Upload your script again to validate and obfuscate this release.');
-    await scriptBuilder.validate(crypto.decryptAES(candidate.content_enc,candidate.content_iv));
+  if(published){
+    const project=(await pool.query('SELECT id FROM developer_projects WHERE id=$1 AND owner_id=$2',[req.params.projectId,req.account.discord_id])).rows[0];
+    if(!project)return fail(res,404,'Project not found.');
+    const job=await scriptJobs.enqueue({projectId:project.id,ownerId:req.account.discord_id,body:req.body,publication:{title:title.trim(),description,game:game.trim(),accessMode,mobileSupport}});
+    return res.status(202).json({success:true,queued:true,jobId:job.id,job});
   }
   const client=await pool.connect();
   try {
     await client.query('BEGIN');
     // Serialize creation of the optional author profile for this developer.
-    await client.query('SELECT discord_id FROM developer_accounts WHERE discord_id=$1 FOR UPDATE',[req.account.discord_id]);
+    const account=(await client.query('SELECT discord_id FROM developer_accounts WHERE discord_id=$1 FOR UPDATE',[req.account.discord_id])).rows[0];
+    if(!account){await client.query('ROLLBACK');return fail(res,401,'Sign in again to continue.');}
     let hub=(await client.query('SELECT id,auto_profile,published_at FROM developer_hubs WHERE owner_id=$1 FOR UPDATE',[req.account.discord_id])).rows[0];
-    const project=(await client.query('SELECT id FROM developer_projects WHERE id=$1 AND owner_id=$2 FOR UPDATE',[req.params.projectId,req.account.discord_id])).rows[0];
+    const project=(await client.query('SELECT id,disabled,hidden,deleted_at FROM developer_projects WHERE id=$1 AND owner_id=$2 FOR UPDATE',[req.params.projectId,req.account.discord_id])).rows[0];
     if(!project){await client.query('ROLLBACK');return fail(res,404,'Project not found.');}
+    if(project.disabled || project.hidden || project.deleted_at){await client.query('ROLLBACK');return fail(res,403,'This publication was restricted by the site team. Contact support.');}
     const script=(await client.query('SELECT content_enc,content_iv,version,validated,obfuscated,target_mode,place_id,safety_status,safety_hash FROM developer_scripts WHERE project_id=$1',[project.id])).rows[0];
     if(published&&!script){await client.query('ROLLBACK');return fail(res,400,'Upload a script before publishing this listing.');}
     if(published&&!moderation.approved(script.safety_status)){await client.query('ROLLBACK');return fail(res,409,'This release is held for moderation.');}
-    if(published&&(!candidate||script.version!==candidate.version||script.content_enc!==candidate.content_enc)){
-      await client.query('ROLLBACK');return fail(res,409,'Your script changed during validation. Reload and publish again.');
-    }
     if(!hub){
       const id=randomUUID();
       hub=(await client.query(`INSERT INTO developer_hubs(id,owner_id,slug,name,description,published_at,auto_profile) VALUES($1,$2,$3,$4,'',$5,true)
@@ -115,18 +119,19 @@ router.get('/hubs',wrap(async(req,res)=>{
   if(!Number.isSafeInteger(page)||page<1||page>10000||typeof q!=='string'||q.length>100||!['recent','name'].includes(sort))return fail(res,400,'Invalid catalogue search or page.');
   // Escape LIKE wildcards so a user search is treated as literal text.
   const query='%'+q.replace(/[\\%_]/g,'\\$&')+'%';
-  const eligible="l.published_at IS NOT NULL AND l.snapshot_validated=true AND l.snapshot_obfuscated=true AND l.safety_status IN ('clear','approved') AND s.safety_status IN ('clear','approved')";
-  const where=`h.published_at IS NOT NULL AND (h.name ILIKE $1 OR h.description ILIKE $1 OR a.username ILIKE $1 OR h.id IN (SELECT l.hub_id FROM developer_listings l JOIN developer_scripts s ON s.project_id=l.project_id WHERE ${eligible} AND l.game ILIKE $1))`;
+  const eligible=`l.published_at IS NOT NULL AND l.snapshot_validated=true AND l.safety_status IN ('clear','approved') AND s.safety_status IN ('clear','approved') AND ${projectActive}`;
+  const eligibleFrom='FROM developer_listings l JOIN developer_scripts s ON s.project_id=l.project_id JOIN developer_projects p ON p.id=l.project_id';
+  const where=`h.published_at IS NOT NULL AND ${publisherActive} AND (h.name ILIKE $1 OR h.description ILIKE $1 OR a.username ILIKE $1 OR h.id IN (SELECT l.hub_id ${eligibleFrom} WHERE ${eligible} AND l.game ILIKE $1))`;
   const total=(await pool.query(`SELECT count(*)::int AS total FROM developer_hubs h JOIN developer_accounts a ON a.discord_id=h.owner_id WHERE ${where}`,[query])).rows[0].total;
   const order=sort==='name'?'h.name ASC,h.id':'h.published_at DESC,h.id';
   const hubs=(await pool.query(`SELECT ${hubColumns},COALESCE(counts.script_count,0) AS script_count FROM developer_hubs h JOIN developer_accounts a ON a.discord_id=h.owner_id
-    LEFT JOIN (SELECT l.hub_id,count(*)::int AS script_count FROM developer_listings l JOIN developer_scripts s ON s.project_id=l.project_id WHERE ${eligible} GROUP BY l.hub_id) counts ON counts.hub_id=h.id
+    LEFT JOIN (SELECT l.hub_id,count(*)::int AS script_count ${eligibleFrom} WHERE ${eligible} GROUP BY l.hub_id) counts ON counts.hub_id=h.id
     WHERE ${where} ORDER BY ${order} LIMIT 24 OFFSET $2`,[query,(page-1)*24])).rows;
   res.json({success:true,hubs:hubs.map(hubView),page,total,pages:Math.ceil(total/24)});
 }));
 router.get('/hubs/:slug',wrap(async(req,res)=>{
   if(typeof req.params.slug!=='string'||req.params.slug.length>60)return fail(res,404,'Hub not found.');
-  const hub=(await pool.query(`SELECT ${hubColumns} FROM developer_hubs h JOIN developer_accounts a ON a.discord_id=h.owner_id WHERE h.slug=$1 AND h.published_at IS NOT NULL`,[req.params.slug])).rows[0];
+  const hub=(await pool.query(`SELECT ${hubColumns} FROM developer_hubs h JOIN developer_accounts a ON a.discord_id=h.owner_id WHERE h.slug=$1 AND h.published_at IS NOT NULL AND ${publisherActive}`,[req.params.slug])).rows[0];
   if(!hub)return fail(res,404,'Hub not found.');
   const listings=(await pool.query(`SELECT ${listingColumns} ${joinListings} WHERE h.id=$1 AND ${publicListing} ORDER BY l.published_at DESC,l.project_id`,[hub.id])).rows;
   res.json({success:true,hub:hubView({...hub,script_count:listings.length}),listings:listings.map(l=>listingView(l,req))});
@@ -146,13 +151,36 @@ router.get('/scripts/:projectId',wrap(async(req,res)=>{
   const listing=(await pool.query(`SELECT ${listingColumns} ${joinListings} WHERE l.project_id=$1 AND ${publicListing}`,[req.params.projectId])).rows[0];
   if(!listing)return fail(res,404,'Script not found.');res.json({success:true,listing:listingView(listing,req)});
 }));
+router.post('/scripts/:projectId/view',sameOrigin,wrap(async(req,res)=>{
+  if(req.get('origin')!==new URL(origin(req)).origin)return fail(res,403,'Invalid origin');
+  if(!UUID.test(req.params.projectId))return fail(res,404,'Script not found.');
+  const client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    await client.query('SELECT id FROM developer_projects WHERE id=$1 FOR KEY SHARE',[req.params.projectId]);
+    const listing=(await client.query(`SELECT l.project_id ${joinListings} WHERE l.project_id=$1 AND ${publicListing}`,[req.params.projectId])).rows[0];
+    if(!listing){await client.query('ROLLBACK');return fail(res,404,'Script not found.');}
+    await metrics.record(client,listing.project_id,'views',metrics.visitorReceipt(req,listing.project_id));
+    const counts=(await client.query('SELECT views,executions FROM developer_script_metrics WHERE project_id=$1',[listing.project_id])).rows[0];
+    await client.query('COMMIT');res.json({success:true,...metrics.view(counts)});
+  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+}));
 router.get('/scripts/:projectId/source',wrap(async(req,res)=>{
   if(!UUID.test(req.params.projectId))return fail(res,404,'Script not found.');
-  const listing=(await pool.query(`SELECT l.snapshot_content_enc,l.snapshot_content_iv ${joinListings} WHERE l.project_id=$1 AND ${publicListing} AND l.access_mode='free'`,[req.params.projectId])).rows[0];
-  if(!listing?.snapshot_content_enc)return fail(res,404,'Script not found.');
-  res.set('X-Content-Type-Options','nosniff').type('text/plain').send(crypto.decryptAES(listing.snapshot_content_enc,listing.snapshot_content_iv));
+  const client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    await client.query('SELECT id FROM developer_projects WHERE id=$1 FOR KEY SHARE',[req.params.projectId]);
+    const listing=(await client.query(`SELECT l.snapshot_content_enc,l.snapshot_content_iv ${joinListings} WHERE l.project_id=$1 AND ${publicListing} AND l.access_mode='free'`,[req.params.projectId])).rows[0];
+    if(!listing?.snapshot_content_enc){await client.query('ROLLBACK');return fail(res,404,'Script not found.');}
+    const content=crypto.decryptAES(listing.snapshot_content_enc,listing.snapshot_content_iv);
+    if(req.method!=='HEAD')await metrics.record(client,req.params.projectId,'executions',metrics.visitorReceipt(req,req.params.projectId,'executions'));
+    await client.query('COMMIT');
+    res.set('X-Content-Type-Options','nosniff').type('text/plain').send(content);
+  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
 }));
 router.use((error,req,res,next)=>{
+  if(error.status&&error.code)return res.status(error.status).json({success:false,code:error.code,error:error.message});
   if(['SCRIPT_INVALID','SCRIPT_BUSY','SCRIPT_TIMEOUT','SCRIPT_UNAVAILABLE'].includes(error.code)){
     const status=error.code==='SCRIPT_INVALID'?400:error.code==='SCRIPT_TIMEOUT'?422:503;
     if(status===503)res.set('Retry-After','2');return fail(res,status,error.message);

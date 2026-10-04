@@ -1,4 +1,5 @@
 'use strict';
+const {settleResponse}=require('./tests/script-jobs');
 const assert=require('node:assert/strict');
 const {startFixture}=require('./tests/platform-fixture');
 async function run(){
@@ -6,7 +7,7 @@ async function run(){
  const check=(value,label)=>{assert.ok(value,label);count++;console.log('OK '+label);};
  async function req(path,method='GET',body,cookie=f.cookies[0]){
   const response=await fetch(f.base+path,{method,headers:{...(cookie?{Cookie:cookie}:{}),...(body?{'Content-Type':'application/json',Origin:f.base}:{})},body:body?JSON.stringify(body):undefined});
-  return {status:response.status,data:await response.json()};
+  return settleResponse(f,response,cookie);
  }
  try{
   const profile={name:'Public creator',slug:'public-creator',description:'My public biography',published:true,discordUrl:'https://discord.gg/creator-community',websiteUrl:'https://example.com/',avatarTheme:'prism'};

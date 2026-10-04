@@ -2,7 +2,7 @@
 const express = require('express');
 const helmet = require('helmet');
 
-const pages = new Set(['/', '/index', '/dashboard', '/moderation', '/discord-bot', '/docs', '/claim', '/signup', '/login', '/verify-email', '/reset-password', '/hubs', '/scripts', '/terms', '/privacy', '/cookies']);
+const pages = new Set(['/', '/index', '/dashboard', '/moderation', '/discord-bot', '/docs', '/claim', '/signup', '/login', '/verify-email', '/reset-password', '/hubs', '/scripts', '/terms', '/privacy', '/cookies', '/legal', '/changelog']);
 const platformCsp = helmet.contentSecurityPolicy({
   useDefaults: false,
   directives: {
@@ -16,7 +16,7 @@ const platformCsp = helmet.contentSecurityPolicy({
 
 function platformHeaders(req, res, next) {
   const path = req.path.replace(/\.html$/, '');
-  if (!pages.has(path) && !/^\/(hubs|scripts|developers)\//.test(path) && !/^\/api\/(auth|platform|catalog|discord|moderation|bot)(\/|$)/.test(path)) return next();
+  if (!pages.has(path) && !/^\/admin(?:\/|$)/i.test(path) && !/^\/(hubs|scripts|developers)\//.test(path) && !/^\/api\/(auth|platform|catalog|discord|moderation|bot|site|account)(\/|$)/.test(path)) return next();
   res.set('X-Frame-Options', 'DENY');
   res.set('Referrer-Policy', 'no-referrer');
   res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');

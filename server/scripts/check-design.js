@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path');
 const web=path.resolve(__dirname,'../../web');
-for(const file of ['style.css','platform.css','dashboard-visuals.css']){
+for(const file of ['style.css','platform.css','dashboard-visuals.css','studio.css','landing.css','site-shell.css','cookie-consent.css','legal.css','admin-dashboard.css','script-workspace.css']){
   const css=fs.readFileSync(path.join(web,file),'utf8').replace(/\/\*[\s\S]*?\*\//g,'');
   let depth=0;for(const char of css){if(char==='{')depth++;if(char==='}')depth--;if(depth<0)throw Error('Unbalanced CSS: '+file);}if(depth)throw Error('Unbalanced CSS: '+file);
 }

@@ -1,4 +1,5 @@
 'use strict';
+const {settleResponse}=require('./tests/script-jobs');
 const assert=require('node:assert/strict');
 const {chromium}=require('@playwright/test');
 const {startFixture}=require('./tests/platform-fixture');
@@ -7,7 +8,7 @@ async function run(){
   require('fs').mkdirSync(require('path').resolve(__dirname,'../artifacts/platform'),{recursive:true});
   async function api(path,method='GET',body){
     const response=await fetch(fixture.base+path,{method,headers:{Cookie:fixture.cookies[0],...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
-    const data=await response.json();assert.ok(response.ok,JSON.stringify(data));return data;
+    const result=await settleResponse(fixture,response,fixture.cookies[0]);assert.ok(result.status<400,JSON.stringify(result.data));return result.data;
   }
   try{
     const id=(await api('/api/platform/projects','POST',{name:'Interface project'})).project.id;
@@ -16,7 +17,7 @@ async function run(){
     await context.addCookies([{name:'ah_session',value:fixture.cookies[0].split('=')[1],url:fixture.base}]);
     await context.grantPermissions(['clipboard-read','clipboard-write']);
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
-    await page.goto(fixture.base+'/dashboard');await page.locator('#projectSelect').selectOption(id);
+    await page.goto(fixture.base+'/dashboard');if(await page.locator('#cookieConsentReject').isVisible()) await page.locator('#cookieConsentReject').click();await page.locator('#projectSelect').selectOption(id);
     await page.locator('[data-view="script"]').click();
     await page.locator('#scriptVersion').getByText('Published',{exact:false}).waitFor();
     assert.equal(await page.locator('#keyUiMode').inputValue(),'custom');
@@ -48,13 +49,13 @@ async function run(){
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'Interface editor fits mobile');
     await page.screenshot({path:require('path').resolve(__dirname,'../artifacts/platform/key-interface-mobile.png'),fullPage:true});
     await api('/api/catalog/projects/'+id,'PUT',{title:'Interface release',description:'',game:'Universal',accessMode:'licensed',published:true});
-    await page.goto(fixture.base+'/scripts/'+id);await page.locator('#publicLoaderSnippet').waitFor({state:'visible'});
+    await page.goto(fixture.base+'/scripts/'+id);if(await page.locator('#cookieConsentReject').isVisible()) await page.locator('#cookieConsentReject').click();await page.locator('#publicLoaderSnippet').waitFor({state:'visible'});
     assert.equal(await page.locator('#publicLicenseInput').count(),0,'Built-in GUI collects the license in game');
     await page.locator('#copyPublicLoader').click();await page.locator('#publicLoaderMessage').getByText('Copied.',{exact:true}).waitFor();
     assert.doesNotMatch(await page.evaluate(()=>navigator.clipboard.readText()),/AUDIT_KEY|YOUR_LICENSE/);
     await api('/api/platform/projects/'+id+'/key-ui','PUT',{keyUiMode:'custom',keyUiLayout:'card',keyUiColor:'rose',keyUiButtonSize:'medium'});
     await page.reload();await page.locator('#publicLicenseInput').waitFor({state:'visible'});
-    await page.goto(fixture.base+'/docs#custom-gui');await page.locator('#custom-gui').waitFor();
+    await page.goto(fixture.base+'/docs#custom-gui');if(await page.locator('#cookieConsentReject').isVisible()) await page.locator('#cookieConsentReject').click();await page.locator('#custom-gui').waitFor();
     assert.match(await page.locator('article').textContent(),/client\.load\(keyText\)/);
     assert.deepEqual(errors,[]);
     console.log('Key interface UI: modes, 15 layout/color previews, button sizing, saved config, loader variants, mobile and custom GUI documentation passed.');

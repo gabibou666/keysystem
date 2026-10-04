@@ -7,10 +7,12 @@ async function purgeNow() {
   const results = {};
   try {const r=await pool.query("DELETE FROM developer_registration_limits WHERE window_start < now() - interval '30 days'");if(r.rowCount) results.developer_registration_limits=r.rowCount;}
   catch(e) {console.error('[purge] developer_registration_limits:',errorSummary(e));}
-  for (const table of ['developer_sessions', 'developer_email_tokens']) {
+  for (const table of ['developer_sessions', 'developer_email_tokens', 'developer_script_metric_receipts']) {
     try { const r = await pool.query(`DELETE FROM ${table} WHERE expires_at < now()`); if (r.rowCount) results[table] = r.rowCount; }
     catch (e) { console.error(`[purge] ${table}:`, errorSummary(e)); }
   }
+  try { const r = await pool.query("DELETE FROM developer_admin_sessions WHERE last_activity_at < now() - interval '2 hours'"); if (r.rowCount) results.developer_admin_sessions = r.rowCount; }
+  catch (e) { console.error('[purge] developer_admin_sessions:', errorSummary(e)); }
   for (const [table, interval] of Object.entries(INTERVALS)) {
     try {
       const r = await pool.query(

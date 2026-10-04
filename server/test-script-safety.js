@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert/strict');
-const { scanScript, SCANNER_VERSION, MAX_BYTES } = require('./src/services/script-safety');
+const { scanScript, combineScans, SCANNER_VERSION, MAX_BYTES } = require('./src/services/script-safety');
 let checks = 0;
 function test(name, run) { run(); checks++; console.log('PASS ' + name); }
 function scan(code) { return scanScript(code); }
@@ -75,7 +75,7 @@ test('findings are bounded without downgrading a later high finding', () => {
   const code = Array.from({ length: 80 }, (_, i) => 'request({Url="https://example.org/' + i + '"})').join('\n') + '\nreadfile("secret")';
   const result = scan(code); assert(result.findings.length <= 64); assert.equal(result.status, 'blocked'); assert(result.findings.some(f => f.severity === 'high'));
 });
-test('token explosion is bounded and refused', () => assert.equal(scan(';'.repeat(150001)).status, 'blocked'));
+test('token explosion is bounded and requires independent review', () => {const result=scan(';'.repeat(150001));assert.equal(result.status,'review');assert(result.findings.some(x=>x.rule==='scan_token_limit'));});
 test('a clear obfuscated output does not erase source triage evidence', () => {
   const before = scan('loadstring(remote)()'); const after = scanScript('local a=1;print(a)', { phase: 'output' });
   assert.equal(before.status, 'review'); assert.equal(after.status, 'clear');
@@ -85,4 +85,22 @@ test('scanner never executes uploaded source', () => {
   assert.doesNotThrow(() => scan(source));
 });
 test('operating system process execution is blocked', () => assert.equal(scan('os.execute("echo evil")').status, 'blocked'));
+test('computed global capabilities require review',()=>assert.equal(scan('_G[hiddenName](payload)').status,'review'));
+test('dynamic environment aliases require review',()=>assert.equal(scan('local env=getfenv(); env[secret](data)').status,'review'));
+test('decoder aliases cannot hide variable character decoding',()=>assert.equal(scan('local c=string.char; c(value)').status,'review'));
+test('literal character decoding remains inspectable',()=>assert.equal(scan('print(string.char(65,66,67))').status,'clear'));
+test('runtime decryption requires review',()=>assert.equal(scan('local text=crypto.decrypt(secret); print(text)').status,'review'));
+test('XOR decoder requires review',()=>assert.equal(scan('local text=bit32.bxor(byte,42)').status,'review'));
+test('decoder names in plain strings do not imply execution',()=>assert.equal(scan('print("decode decrypt bxor")').status,'clear'));
+test('clear source never waives an opaque generated VM',()=>{
+ const before=scan('return 1'),after=scanScript('local bytes={'+Array(1100).fill(42).join(',')+'};while true do local op=bytes[1] end',{phase:'output'});
+ const combined=combineScans(before,after);assert.equal(combined.status,'review');assert.equal(combined.hash,after.hash);
+});
+test('token limits on output always require review',()=>assert.equal(combineScans(scan('return 1'),scanScript(';'.repeat(150001),{phase:'output'})).status,'review'));
+test('clear output cannot erase suspicious source',()=>assert.equal(combineScans(scan('loadstring(remote)()'),scan('return 1')).status,'review'));
+test('malicious output remains blocked',()=>assert.equal(combineScans(scan('return 1'),scan('os.execute("never run")')).status,'blocked'));
+test('missing or stale scan results fail closed',()=>{
+ assert.throws(()=>combineScans(scan('return 1'),null));
+ assert.throws(()=>combineScans({...scan('return 1'),scannerVersion:'stale'},scan('return 1')));
+});
 console.log('Script safety: ' + checks + ' checks passed.');

@@ -21,10 +21,14 @@ const WEB = path.join(__dirname, '..', '..', 'web');
 
 // Page <-> script qui la pilote.
 const PAIRES = [
+  ['../server/views/admin.html', 'app-admin-dashboard.js'],
   ['index.html', 'app-index.js'],
   ['discord-bot.html', 'app-discord-bot.js'],
   ['moderation.html', 'app-moderation.js'],
   ['dashboard.html', 'app-dashboard.js'],
+  ['dashboard.html', 'app-account.js'],
+  ['dashboard.html', 'script-workspace.js'],
+  ['docs.html', 'script-docs.js'],
   ['hubs.html', 'app-catalog.js'],
   ['signup.html', 'app-auth.js'],
   ['login.html', 'app-auth.js'],

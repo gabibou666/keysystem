@@ -1,0 +1,117 @@
+'use strict';
+const {settleResponse}=require('./tests/script-jobs');
+const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const path = require('node:path');
+const { chromium } = require('@playwright/test');
+const { startFixture } = require('./tests/platform-fixture');
+const root = path.resolve(__dirname, '../artifacts/admin');
+require('node:fs').mkdirSync(root, { recursive: true });
+let checks = 0;
+function check(value, description) { assert.ok(value, description); checks++; }
+async function main() {
+  const fixture = await startFixture(0, true);
+  const browser = await chromium.launch();
+  const errors = [];
+  try {
+    await fixture.pool.query('UPDATE developer_accounts SET email=$1,email_verified=true WHERE discord_id=$2', ['developer2@example.test', '900000000000000002']);
+    for (let index=3;index<=29;index++) await fixture.pool.query('INSERT INTO developer_accounts(discord_id,username,email,email_verified) VALUES($1,$2,$3,true)', ['test-account-'+index, 'Local test developer '+index, 'developer'+index+'@example.test']);
+    const request = async (route, method='GET', body, cookie=fixture.cookies[1]) => {
+      const response = await fetch(fixture.base+route, {method,headers:{Cookie:cookie,Origin:fixture.base,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+      const result=await settleResponse(fixture,response,cookie);assert.ok(result.status<400,JSON.stringify(result.data));return result.data;
+    };
+    const project = (await request('/api/platform/projects','POST',{name:'Local test release project'})).project.id;
+    await request('/api/platform/projects/'+project+'/script','PUT',{content:'return "Local isolated browser test release"'});
+    await request('/api/catalog/projects/'+project,'PUT',{title:'Local test published release',description:'Data stored in the isolated UI test database only.',game:'',accessMode:'free',published:true});
+    await request('/api/platform/projects/'+project+'/licenses','POST',{count:3,note:'UI test licenses',durationHours:24});
+    await request('/api/moderation/reports','POST',{projectId:project,category:'other',description:'Local test report.'},fixture.cookies[0]);
+    const context=await browser.newContext({viewport:{width:1440,height:1000},locale:'fr-FR'});
+    const page=await context.newPage();
+    page.on('pageerror',error=>errors.push(error.message));
+    await page.goto(fixture.base+'/__preview/admin-sign-in');
+    await page.locator('#adminActivateSession').waitFor({state:'visible'});
+    check(await page.locator('#adminWorkspace').isHidden(),'Private data remains hidden before activation');
+    const banner=page.getByRole('button',{name:'Tout refuser',exact:true});if(await banner.isVisible())await banner.click();
+    await page.locator('#adminActivateSession').click();
+    await page.locator('#adminMetrics .admin-metric').first().waitFor();
+    check(await page.locator('#adminActorRole').textContent()==='Owner','Verified fixture owner is displayed');
+    check(await page.locator('#adminMetrics').textContent().then(value=>value.includes('29')),'Overview contains the actual database account count');
+    check(await page.locator('#adminChart svg').getAttribute('role')==='img','Activity graph has an accessible image role');
+    await page.locator('[data-admin-tab="users"]').click();
+    await page.locator('#adminUserList tbody tr').first().waitFor();
+    check(await page.locator('#adminUserList tbody tr').count()===25,'Users are paginated at 25 records');
+    await page.locator('[data-admin-pagination="users"] [data-admin-page="2"]').click();
+    await page.waitForFunction(()=>document.querySelector('#adminUserList tbody')?.children.length===4);
+    check(await page.locator('#adminUserList tbody tr').count()===4,'Second user page has the remaining records');
+    await page.locator('#adminUserSearch').fill('test-account-3');await page.locator('[data-admin-search="users"]').evaluate(form=>form.requestSubmit());
+    await page.waitForFunction(()=>document.querySelector('#adminUserList tbody')?.children.length===1);
+    check(await page.locator('#adminUserList').textContent().then(value=>value.includes('Local test developer 3')),'Search uses the backend query');
+    await page.locator('[data-admin-action="users/ban"]').click();
+    check(await page.locator('#adminConfirmActor').textContent().then(value=>value.includes('Developer 1')),'Confirmation names the actor');
+    check(await page.locator('#adminConfirmTarget').textContent()==='Local test developer 3','Confirmation names the target');
+    await page.locator('#adminConfirmReason').fill('Isolated test account ban');
+    await page.locator('#adminConfirmPhrase').fill('WRONG');
+    await page.locator('#adminConfirmForm').evaluate(form=>form.requestSubmit());
+    check((await fixture.pool.query('SELECT banned_at FROM developer_accounts WHERE discord_id=$1',['test-account-3'])).rows[0].banned_at===null,'Wrong confirmation cannot ban the account');
+    await page.locator('#adminConfirmPhrase').fill('BAN');await page.locator('#adminConfirmSubmit').click();
+    await page.waitForFunction(()=>!document.getElementById('adminConfirmDialog').open);
+    check(!!(await fixture.pool.query('SELECT banned_at FROM developer_accounts WHERE discord_id=$1',['test-account-3'])).rows[0].banned_at,'Confirmed ban is stored');
+    await page.locator('[data-admin-action="users/unban"]').waitFor();await page.locator('[data-admin-action="users/unban"]').click();await page.locator('#adminConfirmReason').fill('Isolated test unban');await page.locator('#adminConfirmSubmit').click();await page.waitForFunction(()=>!document.getElementById('adminConfirmDialog').open);
+    await page.locator('[data-admin-action="user-detail"]').click();await page.locator('#adminDetailDialog').waitFor({state:'visible'});
+    await page.locator('[data-admin-action="users/delete"]').click();await page.locator('#adminConfirmReason').fill('Remove isolated test account');await page.locator('#adminConfirmPhrase').fill('DELETE');await page.locator('#adminConfirmSubmit').click();await page.waitForFunction(()=>!document.getElementById('adminConfirmDialog').open);
+    check((await fixture.pool.query('SELECT discord_id FROM developer_accounts WHERE discord_id=$1',['test-account-3'])).rows.length===0,'Confirmed deletion removes the isolated account');
+    await page.locator('[data-admin-tab="projects"]').click();await page.locator('[data-admin-action="project-licenses"]').waitFor();await page.locator('[data-admin-action="project-licenses"]').click();await page.locator('[data-admin-action="licenses/revoke"]').first().waitFor();
+    check(await page.locator('#adminProjectList tbody tr').count()===3,'Project action lists its licenses');
+    await page.locator('[data-admin-action="licenses/revoke"]').first().click();await page.locator('#adminConfirmReason').fill('Isolated license review');await page.locator('#adminConfirmSubmit').click();await page.waitForFunction(()=>!document.getElementById('adminConfirmDialog').open);
+    check((await fixture.pool.query('SELECT id FROM developer_licenses WHERE admin_revoked=true AND project_id=$1',[project])).rows.length===1,'License revocation is stored without exposing its key');
+    await page.locator('[data-admin-tab="scripts"]').click();await page.locator('[data-admin-action="scripts/hide"]').waitFor();await page.locator('[data-admin-action="scripts/hide"]').click();await page.locator('#adminConfirmReason').fill('Isolated script review');await page.locator('#adminConfirmSubmit').click();await page.waitForFunction(()=>!document.getElementById('adminConfirmDialog').open);
+    check((await fixture.pool.query('SELECT hidden FROM developer_projects WHERE id=$1',[project])).rows[0].hidden,'Quick script hide is stored');
+    await page.locator('[data-admin-tab="reports"]').click();await page.locator('[data-admin-action="reports/processed"]').waitFor();await page.locator('[data-admin-action="reports/processed"]').click();await page.locator('#adminConfirmReason').fill('Isolated report reviewed');await page.locator('#adminConfirmSubmit').click();await page.waitForFunction(()=>!document.getElementById('adminConfirmDialog').open);
+    check((await fixture.pool.query('SELECT status FROM developer_moderation_reports WHERE project_id=$1',[project])).rows[0].status==='resolved','Report decision is stored');
+    await page.locator('[data-admin-tab="team"]').click();await page.locator('#adminInviteTarget').waitFor();await page.locator('#adminInviteTarget').fill('future-admin@example.test');await page.locator('#adminInviteRole').selectOption('ADMIN');await page.locator('#adminInviteReason').fill('Isolated team invitation');await page.locator('#adminInviteForm').evaluate(form=>form.requestSubmit());
+    check(await page.locator('#adminConfirmPhraseField').isVisible(),'Elevated invitation requires explicit role confirmation');
+    await page.locator('#adminConfirmPhrase').fill('ADMIN');await page.locator('#adminConfirmSubmit').click();await page.waitForFunction(()=>!document.getElementById('adminConfirmDialog').open);
+    check((await fixture.pool.query('SELECT target_value FROM developer_staff_invitations WHERE target_value=$1',['future-admin@example.test'])).rows.length===1,'Pending invitation is stored');
+    await page.locator('[data-admin-tab="audit"]').click();await page.locator('#adminAuditList tbody tr').first().waitFor();
+    check(await page.locator('#adminAuditList').textContent().then(value=>value.includes('user.ban')),'Owner sees action journal');
+    check(await page.locator('#adminAuditList').textContent().then(value=>value.includes('127.0.0.1')),'Owner audit includes the actual action IP');
+    await page.locator('[data-admin-tab="settings"]').click();await page.locator('#adminAnnouncement').fill('Local UI test announcement');await page.locator('#adminSettingsReason').fill('Isolated settings test');await page.locator('#adminSettingsForm').evaluate(form=>form.requestSubmit());
+    check(await page.locator('#adminConfirmTarget').textContent().then(value=>value.includes('Local UI test announcement')),'Settings confirmation shows the exact public text');
+    await page.locator('#adminConfirmSubmit').click();await page.waitForFunction(()=>!document.getElementById('adminConfirmDialog').open);
+    check((await request('/api/site/config')).announcement==='Local UI test announcement','Confirmed announcement is served by public config');
+    await page.locator('#adminLanguage').selectOption('en');
+    check(await page.locator('[data-admin-view="settings"] h1').textContent()==='Set the tone for the platform.','Admin text switches to English');
+    for(const locale of ['en','fr']) {
+      await page.locator('#adminLanguage').selectOption(locale);await page.setViewportSize({width:360,height:800});
+      for(const view of ['overview','users','projects','scripts','reports','team','audit','settings']) {
+        await page.locator('[data-admin-tab="'+view+'"]').click();await page.waitForTimeout(30);
+        check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Mobile 360px has no page overflow: '+locale+'/'+view);
+      }
+    }
+    await page.setViewportSize({width:1440,height:1000});await page.locator('[data-admin-tab="overview"]').click();await page.waitForTimeout(30);await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(root,'admin-desktop.png')});
+    await page.setViewportSize({width:360,height:800});await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(root,'admin-mobile.png')});
+    await page.locator('#adminEndSession').click();await page.locator('#adminSessionGate').waitFor({state:'visible'});
+    check(await page.locator('#adminUserList').textContent()==='','Closing a session clears account data from the DOM');
+    await page.locator('#adminActivateSession').click();await page.locator('#adminWorkspace').waitFor({state:'visible'});
+    await fixture.pool.query("UPDATE developer_admin_sessions SET last_activity_at=$1 WHERE account_id=$2",[new Date(Date.now()-3*3600000),'900000000000000001']);
+    await page.locator('[data-admin-tab="users"]').click();await page.locator('#adminSessionGate').waitFor({state:'visible'});
+    check(await page.locator('#adminAuditList').textContent()==='','Expired admin session clears private journal content');
+    const roleContext=await browser.newContext({viewport:{width:360,height:800},locale:'en-GB'});const parts=fixture.cookies[1].split('=');
+    await fixture.pool.query('INSERT INTO developer_staff_roles(account_id,role) VALUES($1,$2)',['900000000000000002','MODERATOR']);
+    await roleContext.addCookies([{name:parts[0],value:parts[1],url:fixture.base}]);
+    const moderator=await roleContext.newPage();moderator.on('pageerror',error=>errors.push(error.message));await moderator.goto(fixture.base+'/admin');await moderator.locator('#adminActivateSession').click();await moderator.locator('#adminWorkspace').waitFor({state:'visible'});
+    check(await moderator.locator('[data-admin-tab="audit"]').isHidden(),'Moderator cannot navigate to audit');
+    check(await moderator.locator('[data-admin-tab="settings"]').isHidden(),'Moderator cannot navigate to settings');
+    await moderator.locator('[data-admin-tab="team"]').click();await moderator.waitForTimeout(30);
+    check(await moderator.locator('#adminInviteForm').isHidden(),'Moderator team view has no invitation form');
+    check(await moderator.locator('[data-admin-action="team/role"]').count()===0,'Moderator team view has no role mutation');
+    await fixture.pool.query('DELETE FROM developer_staff_roles WHERE account_id=$1',['900000000000000002']);
+    await moderator.locator('[data-admin-tab="users"]').click();await moderator.locator('#adminWorkspace').waitFor({state:'hidden'});
+    check(await moderator.locator('#adminWorkspace').isHidden(),'Revoked role removes visible private data');
+    check((await roleContext.request.get(fixture.base+'/admin')).status()===404,'Revoked role gets server-side 404 for admin page');
+    check(errors.length===0,'No browser JavaScript errors: '+errors.join(', '));
+    await context.close();await roleContext.close();
+    console.log(checks+' admin browser checks passed (isolated DB, real permissions, confirmations, mobile and locales).');
+  } finally { await browser.close(); await fixture.close(); }
+}
+main().catch(error=>{console.error(error);process.exitCode=1;});

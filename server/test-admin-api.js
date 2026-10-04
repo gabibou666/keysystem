@@ -1,0 +1,155 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { randomUUID } = require('crypto');
+const { startFixture } = require('./tests/platform-fixture');
+async function run() {
+  const f = await startFixture(), access = require('./src/services/staff-access'), auth = require('./src/services/developer-auth'), crypto = require('./src/services/crypto');
+  let checks = 0; const check = (value, name) => { assert.ok(value, name); checks++; console.log('OK ' + name); };
+  const originalOwner = process.env.OWNER_DISCORD_ID, originalAdmins = process.env.MODERATION_ADMIN_IDS;
+  process.env.OWNER_DISCORD_ID = '899294059225579531'; delete process.env.MODERATION_ADMIN_IDS;
+  const actors = {};
+  async function req(route, actor, method = 'GET', body, extra = {}) {
+    const response = await fetch(f.base + route, { method, headers: { ...(actor?.cookie ? { Cookie: actor.cookie } : {}), ...(body !== undefined ? { 'Content-Type': 'application/json', Origin: f.base } : {}), ...(actor?.csrf ? { 'X-CSRF-Token': actor.csrf } : {}), ...extra }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const text = await response.text(); let data; try { data = JSON.parse(text); } catch { data = { html: text }; }
+    return { status: response.status, data, headers: response.headers };
+  }
+  async function createActor(label, role) {
+    const id = randomUUID(); await f.pool.query('INSERT INTO developer_accounts(discord_id,username,email,email_verified,password_hash) VALUES($1,$2,$3,true,$4)', [id, label, label.toLowerCase() + '@example.test', 'PASSWORD_PRIVATE']);
+    if (role !== 'OWNER') await f.pool.query('INSERT INTO developer_staff_roles(account_id,role) VALUES($1,$2)', [id, role]);
+    else await f.pool.query("INSERT INTO developer_identities(provider,subject,account_id,oauth_verified_at,provider_username) VALUES('discord',$1,$2,now(),'Verified owner')", [process.env.OWNER_DISCORD_ID, id]);
+    const actor = { id, role, normal: 'ah_session=' + await auth.createSession(id) }; actor.cookie = actor.normal; actors[label] = actor; return actor;
+  }
+  async function activate(actor) {
+    const response = await req('/admin/api/session', actor, 'POST', { confirmation: 'ACTIVATE' });
+    assert.equal(response.status, 200, 'Activation failed: ' + JSON.stringify(response.data));
+    const adminCookie = response.headers.getSetCookie().find(s => s.startsWith('ah_admin_session=')).split(';')[0];
+    actor.cookie = actor.normal + '; ' + adminCookie; actor.csrf = response.data.csrfToken; return response;
+  }
+  async function project(ownerId, name) {
+    const id = randomUUID(), hub = randomUUID(), key = 'ah_' + crypto.randomToken(24), license = randomUUID(), source = crypto.encryptAES('return "PRIVATE_CODE_' + name + '"');
+    await f.pool.query('INSERT INTO developer_projects(id,owner_id,name,api_token_hash) VALUES($1,$2,$3,$4)', [id, ownerId, name, 'API_TOKEN_PRIVATE']);
+    await f.pool.query("INSERT INTO developer_scripts(project_id,content_enc,content_iv,validated,obfuscated,safety_status,build_hash,safety_hash) VALUES($1,$2,$3,true,true,'clear',$4,$4)", [id, source.enc, source.iv, 'a'.repeat(64)]);
+    const existing = (await f.pool.query('SELECT id FROM developer_hubs WHERE owner_id=$1', [ownerId])).rows[0];
+    let hubId = existing?.id;
+    if (!hubId) { hubId = hub; await f.pool.query('INSERT INTO developer_hubs(id,owner_id,slug,name,published_at) VALUES($1,$2,$3,$4,now())', [hub, ownerId, 'admin-fixture-' + hub, name]); }
+    await f.pool.query("INSERT INTO developer_listings(project_id,hub_id,title,published_at,snapshot_content_enc,snapshot_content_iv,snapshot_validated,snapshot_obfuscated,safety_status,safety_hash,access_mode) VALUES($1,$2,$3,now(),$4,$5,true,true,'clear',$6,'free')", [id, hubId, name, source.enc, source.iv, 'a'.repeat(64)]);
+    await f.pool.query('INSERT INTO developer_licenses(id,project_id,key_hash,key_prefix,expires_at,hwid_hash) VALUES($1,$2,$3,$4,now()+interval \'1 day\',$5)', [license, id, crypto.hashToken(key), key.slice(0, 11), 'DEVICE_PRIVATE']);
+    return { id, license, key };
+  }
+  try {
+    const owner = await createActor('Owner', 'OWNER'), co = await createActor('Coowner', 'CO_OWNER'), admin = await createActor('Admin', 'ADMIN'), peer = await createActor('Peer', 'ADMIN'), mod = await createActor('Moderator', 'MODERATOR');
+    const user = { id: '900000000000000001', normal: f.cookies[0], cookie: f.cookies[0] }, other = { id: '900000000000000002', normal: f.cookies[1], cookie: f.cookies[1] };
+    await f.pool.query("UPDATE developer_accounts SET email='user@example.test',email_verified=true WHERE discord_id=$1", [user.id]);
+    const published = await project(user.id, 'User project'), peerProject = await project(peer.id, 'Peer project'), ownProject = await project(mod.id, 'Moderator project');
+    check((await req('/admin/api/me')).status === 404 && (await req('/admin/api/me', user)).status === 404 && (await req('/admin/api/session', user, 'POST', { confirmation: 'ACTIVATE', role: 'OWNER' })).status === 404, 'Nonstaff administration and client role spoofing return404');
+    check((await req('/admin', user)).status === 404, 'The protected admin HTML is unavailable to an ordinary account');
+    check((await access.role(owner.id)) === 'OWNER' && owner.id !== process.env.OWNER_DISCORD_ID, 'OWNER comes from verified OAuth identity rather than a matching internal ID');
+    await f.pool.query('INSERT INTO developer_accounts(discord_id,username) VALUES($1,$2)', [process.env.OWNER_DISCORD_ID, 'Unverified matching ID']);
+    check((await access.role(process.env.OWNER_DISCORD_ID)) === 'USER', 'A matching account ID without OAuth verification never becomes OWNER');
+    check((await req('/admin/api/me', admin)).status === 401, 'Staff must explicitly activate administration before reads');
+    check((await req('/admin/api/session', admin, 'POST', {})).status === 409, 'Activation requires the explicit ACTIVATE confirmation');
+    const activation = await activate(owner); await activate(co); await activate(admin); await activate(peer); await activate(mod);
+    check(activation.data.staff.role === 'OWNER' && activation.data.csrfToken && !JSON.stringify(activation.data).includes('identities') && !JSON.stringify(activation.data).includes('emailVerified'), 'Activation returns only projected identity and CSRF context');
+    const me = await req('/admin/api/me', owner);
+    check(me.data.permissions.viewAudit && me.data.staff.username === 'Owner' && me.headers.get('cache-control') === 'no-store', 'Admin context includes permissions and cannot be cached');
+    const overview = await req('/admin/api/overview', owner);
+    check(overview.status === 200 && overview.data.periodDays === 30 && overview.data.daily.length === 30 && overview.data.stats.licenses === 3, 'Overview displays30 real days and actual resource counts');
+    const privateId = randomUUID(), privateSource = crypto.encryptAES('return "private unpublished fixture"');
+    await f.pool.query('INSERT INTO developer_projects(id,owner_id,name,api_token_hash) VALUES($1,$2,$3,$4)', [privateId, other.id, 'Unpublished script', 'PRIVATE_FIXTURE_TOKEN']);
+    await f.pool.query("INSERT INTO developer_scripts(project_id,content_enc,content_iv,validated,obfuscated,safety_status) VALUES($1,$2,$3,true,false,'clear')", [privateId, privateSource.enc, privateSource.iv]);
+    check((await req('/admin/api/overview', owner)).data.stats.scripts === 3, 'Published script count excludes private hosted uploads');
+    await f.pool.query('UPDATE developer_projects SET hidden=true WHERE id=$1', [privateId]);
+    await f.pool.query('UPDATE developer_projects SET hidden=true WHERE id=$1', [peerProject.id]);
+    check((await req('/admin/api/overview', owner)).data.stats.scripts === 2, 'Published script count excludes releases hidden by moderation');
+    await f.pool.query('UPDATE developer_projects SET hidden=false WHERE id=$1', [peerProject.id]);
+    const users = await req('/admin/api/users', mod);
+    check(users.status === 200 && !JSON.stringify(users.data).includes('@example.test'), 'Moderator user lists omit email addresses');
+    const privateList = await req('/admin/api/users', admin);
+    check(privateList.data.items.some(row => row.email === 'user@example.test'), 'Administrator user lists include necessary account contact metadata');
+    const allLists = await Promise.all(['projects', 'licenses', 'scripts', 'reports', 'team'].map(name => req('/admin/api/' + name, mod)));
+    check(allLists.every(r => r.status === 200) && !/PASSWORD_PRIVATE|API_TOKEN_PRIVATE|DEVICE_PRIVATE|PRIVATE_CODE|content_enc|content_iv|token_hash|csrf_hash/.test(JSON.stringify(allLists)), 'Read-only staff sections expose metadata without secrets or source');
+    check((await req('/admin/api/licenses?q=' + published.id, admin)).data.total === 1, 'Licence search accepts the project ID');
+    check((await req('/admin/api/users?page=0', admin)).status === 400 && (await req('/admin/api/users?q=%25', admin)).status === 200, 'Pagination is bounded and search wildcards stay literal');
+    check((await req('/admin/api/audit', admin)).status === 403 && (await req('/admin/api/audit', mod)).status === 403 && (await req('/api/moderation/audit', admin)).status === 403, 'Both new and legacy journals are restricted to OWNER and CO_OWNER');
+    check((await req('/admin/api/settings', admin)).status === 403 && (await req('/admin/api/settings', co)).status === 200, 'Settings are restricted to OWNER and CO_OWNER');
+    check((await req('/admin/api/users/' + user.id + '/warn', { cookie: mod.cookie }, 'POST', { message: 'Notice' })).status === 403, 'Staff mutations require the CSRF token');
+    check((await req('/admin/api/users/' + user.id + '/warn', mod, 'POST', { message: 'Notice' }, { Origin: 'https://foreign.example' })).status === 403, 'Staff mutations reject foreign origins even with valid CSRF');
+    check((await req('/admin/api/users/' + user.id + '/warn', mod, 'POST', { message: 'Please review the published release.' })).status === 200, 'A moderator can warn a lower-ranked user');
+    check((await req('/admin/api/users/' + user.id, mod)).data.warnings.length === 1, 'Warnings appear in user detail without secret session data');
+    check((await req('/admin/api/users/' + user.id + '/ban', mod, 'POST', { confirmation: 'BAN' })).status === 403, 'Moderators cannot ban users');
+    for (const target of [owner, co, peer, admin]) check((await req('/admin/api/users/' + target.id + '/ban', admin, 'POST', { confirmation: 'BAN' })).status === 403, 'ADMIN cannot ban OWNER, CO_OWNER, a peer or itself: ' + target.role);
+    check((await req('/admin/api/users/' + user.id + '/ban', admin, 'POST', {})).status === 409, 'Banning requires a separate explicit confirmation');
+    check((await req('/admin/api/scripts/' + peerProject.id + '/hide', admin, 'POST', {})).status === 403 && (await req('/admin/api/scripts/' + ownProject.id + '/hide', mod, 'POST', {})).status === 403, 'Resource mutations enforce the publisher’s rank and forbid self action');
+    check((await req('/admin/api/scripts/' + published.id + '/remove', mod, 'POST', { reason: 'Review publication.' })).status === 200, 'Moderator removal only withdraws a lower-ranked publication');
+    const removed = (await f.pool.query('SELECT p.hidden,s.content_enc,l.published_at FROM developer_projects p JOIN developer_scripts s ON s.project_id=p.id JOIN developer_listings l ON l.project_id=p.id WHERE p.id=$1', [published.id])).rows[0];
+    check(removed.hidden && removed.content_enc && !removed.published_at, 'Withdrawal preserves stored source and prevents immediate republication');
+    check((await req('/admin/api/scripts/' + published.id + '/unhide', mod, 'POST', {})).status === 200, 'A moderator can reopen an ordinarily hidden publication');
+    check((await req('/admin/api/projects/' + published.id + '/disable', admin, 'POST', { reason: 'Temporary safety hold' })).status === 200 && !(await require('./src/services/site-controls').projectAvailable(published.id)), 'Project disabling blocks license and script delivery');
+    await req('/admin/api/projects/' + published.id + '/enable', admin, 'POST', {});
+    check((await req('/admin/api/licenses/' + published.license + '/revoke', admin, 'POST', { reason: 'Abuse' })).status === 200 && (await f.pool.query('SELECT admin_revoked FROM developer_licenses WHERE id=$1', [published.license])).rows[0].admin_revoked, 'Administrative revocation persists a separate protected flag');
+    check((await req('/api/platform/projects/' + published.id + '/licenses/' + published.license + '/restore', user, 'POST', {})).status !== 200, 'A project owner cannot undo an administrative revocation');
+    check((await req('/admin/api/licenses/' + published.license + '/restore', admin, 'POST', {})).status === 200, 'Only authorized staff can remove administrative revocation');
+    const report = randomUUID();
+    await f.pool.query("INSERT INTO developer_moderation_reports(id,project_id,reporter_id,reason,description) VALUES($1,$2,$3,'privacy','Sensitive behavior')", [report, published.id, other.id]);
+    check((await req('/admin/api/reports/' + report + '/decision', mod, 'POST', { decision: 'processed', action: 'hide', note: 'Publication paused' })).status === 200, 'Report processing records a note and the requested quick action transactionally');
+    check((await req('/admin/api/reports?status=processed', mod)).data.items.some(r => r.id === report && r.note === 'Publication paused'), 'Processed report history preserves its decision and note');
+    check((await req('/admin/api/reports/' + report + '/decision', mod, 'POST', { decision: 'rejected' })).status === 409, 'A processed report cannot be changed silently');
+    check((await req('/admin/api/team/' + other.id + '/role', admin, 'PUT', { role: 'ADMIN', confirmation: 'ADMIN' })).status === 403, 'ADMIN cannot assign its own rank');
+    check((await req('/admin/api/team/' + other.id + '/role', co, 'PUT', { role: 'CO_OWNER', confirmation: 'CO_OWNER' })).status === 403, 'CO_OWNER cannot create another CO_OWNER');
+    check((await req('/admin/api/team/' + other.id + '/role', owner, 'PUT', { role: 'OWNER', confirmation: 'OWNER' })).status === 400, 'OWNER is never an assignable database role');
+    check((await req('/admin/api/team/' + other.id + '/role', owner, 'PUT', { role: 'ADMIN' })).status === 409, 'Critical promotions require confirmation of the exact role');
+    check((await req('/admin/api/team/' + other.id + '/role', admin, 'PUT', { role: 'MODERATOR', reason: 'Team member' })).status === 200, 'ADMIN can assign MODERATOR to a lower-ranked existing user');
+    const invitation = await req('/admin/api/team/invites', admin, 'POST', { targetType: 'discord', target: '899294059225579999', role: 'MODERATOR' });
+    check(invitation.status === 200 && invitation.data.invite.status === 'pending', 'An absent Discord ID creates a pending invitation without identity trust');
+    const pendingName = await req('/admin/api/team/invites', owner, 'POST', { targetType: 'username', target: 'UnclaimedName', role: 'MODERATOR' });
+    check(pendingName.status === 200 && pendingName.data.invite.requiresBinding, 'An absent username requires verified identity binding');
+    const fake = await createActor('UnclaimedName', 'USER');
+    await access.applyInvitations(fake.id);
+    check((await access.role(fake.id)) === 'USER', 'Claiming an invited username cannot grant staff access');
+    check((await req('/admin/api/team/invites/' + pendingName.data.invite.id + '/bind', co, 'POST', { targetType: 'email', target: 'unclaimedname@example.test' })).status === 200, 'A CO_OWNER can bind a pending name to an already verified identity');
+    await access.applyInvitations(fake.id);
+    check((await access.role(fake.id)) === 'MODERATOR', 'The verified bound invitation applies only on a confirmed identity');
+    const stale = await req('/admin/api/team/invites', admin, 'POST', { targetType: 'email', target: 'later@example.test', role: 'MODERATOR' });
+    await req('/admin/api/team/' + admin.id + '/role', owner, 'PUT', { role: 'USER' });
+    const later = await createActor('Later', 'USER'); await access.applyInvitations(later.id);
+    check((await access.role(later.id)) === 'USER' && (await f.pool.query('SELECT cancelled_at FROM developer_staff_invitations WHERE id=$1', [stale.data.invite.id])).rows[0].cancelled_at, 'Revoking a grantor cancels old pending invitations and prevents later promotion');
+    check((await req('/admin/api/me', admin)).status === 404, 'Revoked staff immediately loses administration even with its old admin cookie');
+    check((await req('/api/moderation/accounts/' + owner.id + '/role', peer, 'PUT', { role: 'user' })).status === 403, 'The legacy role endpoint cannot bypass owner protection or hierarchy');
+    const settings = await req('/admin/api/settings', co, 'PUT', { maintenance: true, registrationsOpen: false, announcement: 'Maintenance window', reason: 'Scheduled work' });
+    check(settings.status === 200 && settings.data.settings.maintenance && !settings.data.settings.registrationsOpen && settings.data.settings.announcement === 'Maintenance window', 'Owner-level settings persist and invalidate the public settings cache');
+    await req('/admin/api/settings', owner, 'PUT', { maintenance: false, registrationsOpen: true, announcement: '' });
+    await activate(peer);
+    check((await req('/admin/api/users/' + user.id + '/ban', peer, 'POST', { confirmation: 'BAN', reason: 'Rule violation' })).status === 200 && !(await require('./src/services/site-controls').projectAvailable(published.id)), 'Banning invalidates all user sessions and blocks owned project delivery');
+    check((await req('/api/platform/me', user)).data.loggedIn === false, 'A banned user’s previous developer session is invalid');
+    await req('/admin/api/users/' + user.id + '/unban', peer, 'POST', {});
+    user.cookie = user.normal = 'ah_session=' + await auth.createSession(user.id);
+    check((await req('/admin/api/users/' + user.id + '/suspend', peer, 'POST', { until: new Date(Date.now() + 3600000).toISOString() })).status === 200 && !(await require('./src/services/site-controls').projectAvailable(published.id)), 'Suspension blocks access and records a bounded expiration');
+    await req('/admin/api/users/' + user.id + '/unban', peer, 'POST', {});
+    user.cookie = user.normal = 'ah_session=' + await auth.createSession(user.id);
+    check((await req('/admin/api/scripts/' + published.id + '/delete', peer, 'POST', { confirmation: 'DELETE', reason: 'Remove hosted payload' })).status === 200, 'ADMIN can delete a lower-ranked hosted script with confirmation');
+    const erased = (await f.pool.query('SELECT content_enc,content_iv,disabled,deleted_at FROM developer_scripts WHERE project_id=$1', [published.id])).rows[0];
+    check(!erased.content_enc && !erased.content_iv && erased.disabled && erased.deleted_at, 'Script deletion clears its encrypted payload and leaves an enforced removal flag');
+    check((await req('/admin/api/scripts/' + published.id + '/unhide', mod, 'POST', {})).status === 403, 'MODERATOR cannot restore an ADMIN-deleted script');
+    const audit = await req('/admin/api/audit', owner);
+    check(audit.status === 200 && audit.data.items.some(r => r.ip === '127.0.0.1') && !/PASSWORD_PRIVATE|API_TOKEN_PRIVATE|DEVICE_PRIVATE|PRIVATE_CODE|token_hash|csrf_hash/.test(JSON.stringify(audit.data)), 'Restricted append-only journal records actor/IP/action/target without secrets or source');
+    check((await req('/admin/api/audit/' + randomUUID(), owner, 'DELETE', {})).status === 404, 'No API route can edit or delete the security audit');
+    const exported = await req('/api/account/export', user);
+    check(exported.status === 200 && exported.data.warnings.length === 1 && exported.data.adminAudit.every(row => !row.ip), 'Account export includes its warnings and redacts IPs belonging to staff actors');
+    const ownerExport = await req('/api/account/export', { cookie: owner.normal });
+    check(ownerExport.data.adminAudit.some(row => row.ip === '127.0.0.1') && !JSON.stringify(ownerExport.data).includes('csrf_hash'), 'A staff export includes its own recorded IP actions without admin credentials');
+    check((await req('/api/account', { cookie: owner.normal }, 'DELETE', { confirmation: 'DELETE' })).data.code === 'OWNER_PROTECTED', 'The verified OWNER cannot bypass protection through self deletion');
+    await req('/admin/api/team/invites', owner, 'POST', { targetType: 'email', target: 'user@example.test', role: 'MODERATOR' });
+    const auditBefore = Number((await f.pool.query('SELECT count(*) AS total FROM developer_admin_audit')).rows[0].total);
+    check((await req('/admin/api/users/' + user.id + '/delete', peer, 'POST', { confirmation: 'DELETE', reason: 'Confirmed removal' })).status === 200, 'ADMIN can transactionally delete a lower-ranked user and dependent data');
+    check(!(await f.pool.query('SELECT discord_id FROM developer_accounts WHERE discord_id=$1', [user.id])).rows.length && !(await f.pool.query("SELECT id FROM developer_staff_invitations WHERE target_value='user@example.test'")).rows.length, 'Deletion removes the account, warnings, projects and personal invitation targets');
+    check(Number((await f.pool.query('SELECT count(*) AS total FROM developer_admin_audit')).rows[0].total) > auditBefore && (await f.pool.query("SELECT target_id FROM developer_admin_audit WHERE action='user.delete' AND target_id=$1", [user.id])).rows.length === 1, 'Dedicated security history remains append-only after target account deletion');
+    await f.pool.query('UPDATE developer_admin_sessions SET last_activity_at=$1 WHERE account_id=$2', [new Date(Date.now() - 3 * 3600000), peer.id]);
+    check((await req('/admin/api/me', peer)).status === 401 && (await req('/api/moderation/overview', peer)).status === 401, 'Two-hour inactivity expires both new and legacy privileged access');
+    console.log('Admin API: ' + checks + ' checks passed using isolated fixtures; native PostgreSQL append-only triggers and locking require staging verification.');
+  } finally {
+    if (originalOwner === undefined) delete process.env.OWNER_DISCORD_ID; else process.env.OWNER_DISCORD_ID = originalOwner;
+    if (originalAdmins === undefined) delete process.env.MODERATION_ADMIN_IDS; else process.env.MODERATION_ADMIN_IDS = originalAdmins;
+    await f.close();
+  }
+}
+run().catch(error => { console.error(error); process.exitCode = 1; });

@@ -5,8 +5,12 @@
   const assetVersion = new URL(document.querySelector('script[src*="app-dashboard.js"]').src).searchParams.get('v') || '';
   const icon = name => `<img class="workspace-icon" src="/icons/${name}.svg?v=${encodeURIComponent(assetVersion)}" width="18" height="18" alt="" aria-hidden="true">`;
   const buttonLabel = (id,label,name) => { $(id).innerHTML = icon(name) + esc(label); };
-  const state = { projects: [], selected: '', detail: null, view: 'overview', revision: 0, checkpointEditing: false, publicHub:null, listings:[] };
-  const names = { overview:'Overview', publichub:'Publish scripts', licenses:'Licenses', script:'Script hosting', checkpoints:'Checkpoints', settings:'Project settings', integration:'Integration' };
+  const state = { projects: [], selected: '', detail: null, view: 'overview', revision: 0, checkpointEditing: false, publicHub:null, listings:[], username:'' };
+  const scripts = window.AuditHubScripts.create({api,catalogApi,message,view,selectedPlaceId,onComplete:async projectId=>{
+    if(projectId!==state.selected) return;
+    await selectProject(projectId); await loadPublicHub();
+  }});
+  const names = { overview:'Overview', publichub:'Publish scripts', licenses:'Licenses', script:'Script hosting', checkpoints:'Checkpoints', settings:'Project settings', integration:'Integration', account:'Account & data' };
   const providerNames = {lootlabs:'LootLabs',workink:'Work.ink',linkvertise:'Linkvertise',linkunlocker:'LinkUnlocker'};
   function checkpointFields() {
     const provider = $('checkpointProvider').value, loot = provider === 'lootlabs', work = provider === 'workink';
@@ -109,12 +113,13 @@
     $('listingMobileSupport').value=listing?.mobileSupport || 'unknown';
     $('listingAccessMode').value = listing?.accessMode || 'licensed'; $('listingFreeConsent').checked=false; listingHint();
     $('listingPrerequisite').hidden = !!state.detail.script;
-    $('publishListingBtn').disabled = !state.detail.script;
+    $('publishListingBtn').disabled = !state.detail.script || state.detail.script.originalAvailable===false;
     buttonLabel('publishListingBtn',listing?.published ? 'Update public release' : 'Publish this script','upload');
     $('unpublishListingBtn').hidden = !listing?.published;
     const visible = !!listing?.published && !!state.publicHub?.published;
     $('openPublicListing').hidden = !visible; $('openPublicListing').href='/scripts/'+project.id;
     $('listingVisibilityHint').textContent = !state.publicHub ? 'Publish your first script directly. A developer profile is created automatically.' : !state.publicHub.published ? 'Your developer profile is private. Make it public in the optional profile settings to show your scripts.' : listing?.published ? 'This script is visible in the public catalogue.' : 'This project is private until you publish this listing.';
+    scripts.syncActions();
   }
   async function loadPublicHub() {
     const data = await catalogApi('/me'); state.publicHub=data.hub; state.listings=data.listings;
@@ -134,10 +139,11 @@
   }
   function view(name) {
     state.view = name; $('breadcrumb').textContent = names[name];
-    const needsProject = !['overview','publichub'].includes(name) && !state.detail;
+    const needsProject = !['overview','publichub','account'].includes(name) && !state.detail;
     document.querySelectorAll('[data-panel]').forEach(el => { el.hidden = el.dataset.panel !== name || needsProject; });
     document.querySelectorAll('[data-view]').forEach(el => { el.classList.toggle('active', el.dataset.view === name); el.setAttribute('aria-current', el.dataset.view === name ? 'page' : 'false'); });
     $('projectRequired').hidden = !needsProject;
+    scripts.setView(name);
   }
   async function projects() {
     const data = await api('/projects'); state.projects = data.projects;
@@ -148,16 +154,18 @@
     $('licenseCount').textContent = state.projects.reduce((n,p) => n + p.licenses, 0).toLocaleString();
     $('validationCount').textContent = state.projects.reduce((n,p) => n + p.validations, 0).toLocaleString();
     $('noProjects').hidden = state.projects.length > 0;
-    $('projectGrid').innerHTML = state.projects.map(p => `<button type="button" class="project-card" data-project="${esc(p.id)}"><div class="project-card-top"><span class="feature-icon">${icon('folder')}</span>${icon('external')}</div><h3>${esc(p.name)}</h3><p>${p.licenses.toLocaleString()} licenses · ${p.validations.toLocaleString()} valid checks</p><div class="project-id">${esc(p.id)}</div></button>`).join('');
+    $('projectGrid').innerHTML = state.projects.map(p => `<button type="button" class="project-card" data-project="${esc(p.id)}"><div class="project-card-top"><span class="feature-icon">${icon('folder')}</span>${icon('external')}</div><h3>${esc(p.name)}</h3><p>${Number(p.views||0).toLocaleString()} views / ${Number(p.executions||0).toLocaleString()} executions / ${p.licenses.toLocaleString()} licenses · ${p.validations.toLocaleString()} valid checks</p><div class="project-id">${esc(p.id)}</div></button>`).join('');
   }
   async function selectProject(id) {
     const revision = ++state.revision;
     if (id !== state.selected) { clearSensitiveFields(); $('scriptForm').reset(); $('checkpointCopyMessage').textContent = ''; $('checkpointShareMessage').textContent = ''; state.checkpointEditing = false; $('checkpointCountField').open = false; }
     state.selected = id; state.detail = null; $('projectSelect').value = id; view(state.view);
-    if (!id) { listingFields(); return; }
+    if (!id) { listingFields(); await scripts.setProject(null,state.username); return; }
     const detail = await api('/projects/' + id);
     if (revision !== state.revision) return;
     state.detail = detail;
+    let metrics=$('projectScriptMetrics');if(!metrics){metrics=document.createElement('p');metrics.id='projectScriptMetrics';metrics.className='notice';$('scriptSafetyState').before(metrics);}
+    metrics.textContent=Number(detail.metrics?.views||0).toLocaleString()+' views · '+Number(detail.metrics?.executions||0).toLocaleString()+' executions (script deliveries). Invalid keys and validation-only checks are excluded.';
     const p = detail.project;
     $('keyUiMode').value=p.keyUiMode || 'custom'; $('keyUiLayout').value=p.keyUiLayout || 'compact'; $('keyUiColor').value=p.keyUiColor || 'violet'; $('keyUiButtonSize').value=p.keyUiButtonSize || 'medium'; keyUiFields();
     $('settingName').value = p.name; $('settingDescription').value = p.description;
@@ -165,9 +173,10 @@
     $('licenseHours').value = p.durationHours; $('checkpointCount').value = p.checkpointCount;
     $('checkpointProvider').value = p.checkpointProvider || 'lootlabs'; $('checkpointLinkUrl').value = p.checkpointLinkUrl || ''; $('checkpointLinkId').value = p.checkpointLinkId || ''; checkpointFields();
     $('scriptVersion').textContent = detail.script ? 'Published · v' + detail.script.version : 'Not published';
-    if(detail.script?.validated && detail.script?.obfuscated) $('scriptVersion').textContent += ' · Checked + obfuscated';
+    if(detail.script?.validated) $('scriptVersion').textContent += ' · Checked';
     const pending=detail.pendingSubmissions?.filter(s=>s.status==='pending').length||0;
-    $('scriptSafetyState').textContent=pending?pending+' release(s) waiting for moderator review. Your active version remains unchanged.':detail.script?.securityStatus==='quarantined'?'This project is quarantined. Its script delivery is blocked.':detail.script?.securityStatus==='approved'?'Active release approved by a moderator. This does not certify every runtime behavior.':detail.script?.securityStatus==='clear'?'Automated checks found no flagged behavior. This is not a guarantee of safety.':'New uploads are scanned before and after obfuscation. Unknown or opaque behavior is held for review.';
+    $('scriptSafetyState').textContent=pending?pending+' release(s) waiting for moderator review. Your active version remains unchanged.':detail.script?.securityStatus==='quarantined'?'This project is quarantined. Its script delivery is blocked.':detail.script?.securityStatus==='approved'?'Active release approved by a moderator. This does not certify every runtime behavior.':detail.script?.securityStatus==='clear'?'Automated checks found no flagged behavior. This is not a guarantee of safety.':'New uploads and their output are checked locally. Unknown or opaque behavior is held for review.';
+    if(detail.securityChecks?.length){const check=detail.securityChecks[0];$('scriptSafetyState').textContent+=' Last automatic recheck: '+date(check.checkedAt)+' / '+check.result+'.';}
     $('scriptTargetMode').value=detail.script?.targetMode || 'universal';
     $('scriptPlaceId').value=detail.script?.placeId || ''; targetFields();
     $('checkpointState').textContent = p.checkpointsConfigured ? providerNames[p.checkpointProvider] + ' connected' : 'Not configured';
@@ -180,7 +189,7 @@
       return `<tr><td class="mono">${esc(l.key_prefix)}…</td><td>${esc(l.note || '—')}</td><td>${esc(date(l.expires_at))}</td><td>${l.bound ? 'Bound' : 'Unbound'}</td><td><span class="status-pill ${l.revoked || expired ? 'status-bad' : 'status-good'}">${l.revoked ? 'Revoked' : expired ? 'Expired' : 'Active'}</span></td><td><div class="row-actions"><button type="button" class="action-button" data-license="${esc(l.id)}" data-action="${l.revoked ? 'restore' : 'revoke'}">${l.revoked ? 'Restore' : 'Revoke'}</button><button type="button" class="action-button" data-license="${esc(l.id)}" data-action="reset-device">Reset device</button></div></td></tr>`;
     }).join('') : '<tr><td colspan="6">No licenses yet. Issue your first keys above.</td></tr>';
     $('eventsBody').innerHTML = detail.events.length ? detail.events.map(e => `<tr><td><span class="status-pill ${e.success ? 'status-good' : 'status-bad'}">${e.success ? 'Accepted' : 'Rejected'}</span></td><td class="mono">${esc(e.reason)}</td><td>${esc(e.executor || 'Unknown')}</td><td>${esc(date(e.created_at))}</td></tr>`).join('') : '<tr><td colspan="4">No validation activity yet.</td></tr>';
-    listingFields(); view(state.view);
+    listingFields(); view(state.view); await scripts.setProject(detail,state.username);
   }
   async function busy(element, fn) {
     if (element.disabled) return;
@@ -194,7 +203,7 @@
         if (!error) { error = document.createElement('p'); error.dataset.formError = ''; error.className = 'message-bar error'; error.setAttribute('role','alert'); dialog.append(error); }
         error.textContent = e.message;
       }
-    } finally { element.disabled = false; }
+    } finally { element.disabled = false; scripts.syncActions(); }
   }
   function secret(title, value, explanation) {
     $('secretTitle').textContent = title; $('secretOutput').value = value;
@@ -204,6 +213,7 @@
   function clearSensitiveFields() {
     if ($('secretDialog').open) $('secretDialog').close();
     ['secretOutput','checkpointToken','checkpointCallbackUrl','scriptContent'].forEach(id => { $(id).value = ''; });
+    scripts.clear();
   }
   window.addEventListener('pagehide', clearSensitiveFields);
   window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
@@ -243,19 +253,13 @@
     await loadPublicHub(); message(state.publicHub.published ? 'Developer profile saved publicly.' : 'Developer profile saved privately.');
   });
   const listingBody = published => ({title:$('listingTitle').value.trim(),description:$('listingDescription').value,game:$('listingGame').value.trim(),accessMode:$('listingAccessMode').value,mobileSupport:$('listingMobileSupport').value,published});
-  bindForm('publicListingForm',async()=>{await catalogApi('/projects/'+state.selected,'PUT',listingBody(true));await loadPublicHub();message('Script listing published. '+(state.publicHub.published?'It is visible in the public catalogue.':'Make your developer profile public to show it.'));});
+  bindForm('publicListingForm',async()=>{await scripts.publish(listingBody(true));});
   $('listingAccessMode').addEventListener('change',()=>{ $('listingFreeConsent').checked=false; listingHint(); });
   $('scriptTargetMode').addEventListener('change',targetFields);
   ['keyUiMode','keyUiLayout','keyUiColor','keyUiButtonSize'].forEach(id=>$(id).addEventListener('change',keyUiFields));
   bindForm('keyUiForm',async()=>{await api('/projects/'+state.selected+'/key-ui','PUT',{keyUiMode:$('keyUiMode').value,keyUiLayout:$('keyUiLayout').value,keyUiColor:$('keyUiColor').value,keyUiButtonSize:$('keyUiButtonSize').value});await selectProject(state.selected);message('Key interface saved. Your loader URL stays the same.');});
   $('unpublishListingBtn').addEventListener('click',event=>busy(event.currentTarget,async()=>{await catalogApi('/projects/'+state.selected,'PUT',listingBody(false));await loadPublicHub();message('Script unpublished. Previously downloaded copies remain with their users.');}));
   $('copyPublicHubLink').addEventListener('click',()=>copy(location.origin+$('openPublicHub').getAttribute('href'),$('hubProfileCopyMessage')));
-  $('scriptFile').addEventListener('change', async () => { const file = $('scriptFile').files[0]; if (!file) return; if (file.size > 1024*1024) return message('Your script must be smaller than 1 MB.',true); $('scriptContent').value = await file.text(); });
-  bindForm('scriptForm', async () => {
-    const d = await api('/projects/' + state.selected + '/script','PUT',{content:$('scriptContent').value,targetMode:$('scriptTargetMode').value,...($('scriptTargetMode').value==='single'?{placeId:selectedPlaceId()}:{})});
-    $('scriptContent').value=''; $('scriptFile').value=''; await selectProject(state.selected);
-    message(d.pendingReview?'Release held for moderator review. Your previous active version remains available.':'Script checked, obfuscated and saved: version ' + d.version + '. Update your public release separately for free listings.');
-  });
   $('checkpointProvider').addEventListener('change', checkpointFields);
   $('editCheckpointBtn').addEventListener('click', () => { state.checkpointEditing = true; checkpointFields(); $('checkpointProvider').focus(); });
   $('cancelCheckpointEditBtn').addEventListener('click', () => { state.checkpointEditing = false; $('checkpointToken').value = ''; $('checkpointProvider').value = state.detail.project.checkpointProvider; $('checkpointLinkUrl').value = state.detail.project.checkpointLinkUrl || ''; $('checkpointLinkId').value = state.detail.project.checkpointLinkId || ''; $('checkpointCount').value = state.detail.project.checkpointCount; checkpointFields(); $('editCheckpointBtn').focus(); });
@@ -284,8 +288,28 @@
   $('copySecretBtn').addEventListener('click', () => copy($('secretOutput').value,$('secretMessage')));
   $('downloadSecretBtn').addEventListener('click', () => { const url = URL.createObjectURL(new Blob([$('secretOutput').value],{type:'text/plain'})); const a = document.createElement('a'); a.href=url; a.download='audit-hub-' + state.selected + '.txt'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); });
   $('logoutBtn').addEventListener('click', event => busy(event.currentTarget, async () => { const r = await fetch('/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); if (!r.ok) throw Error('Sign out failed.'); location.reload(); }));
+  function showWarnings(warnings) {
+    const section = $('accountWarnings');
+    if (!Array.isArray(warnings) || !warnings.length) return;
+    let language = navigator.language || 'en';
+    try { language = localStorage.getItem('audit-hub-language') || language; } catch { /* Storage is optional. */ }
+    const french = language.startsWith('fr');
+    section.setAttribute('aria-label', french ? 'Messages de l’équipe du site' : 'Messages from the site team');
+    const title = document.createElement('h2');
+    title.textContent = french ? 'Message de l’équipe du site' : 'A message from the site team';
+    section.replaceChildren(title);
+    warnings.forEach(warning => {
+      const line = document.createElement('p');
+      line.textContent = warning.reason;
+      const when = document.createElement('small');
+      when.textContent = date(warning.created_at);
+      line.append(document.createElement('br'), when);
+      section.append(line);
+    });
+    section.hidden = false;
+  }
   const login = new URLSearchParams(location.search).get('login');
   if (login && login !== 'ok') { $('loginMessage').textContent = login === 'denied' ? 'Discord sign-in was cancelled.' : 'Sign-in could not be completed. Please try again.'; $('loginMessage').hidden = false; }
-  api('/me').then(async me => { if (!me.loggedIn) return; $('moderationLink').hidden=!me.canModerate; $('discordBotLink').hidden=!me.canManageBot; $('developerName').textContent=me.username || 'Developer'; $('loginView').hidden=true; $('workspaceView').hidden=false; await projects(); await loadPublicHub(); view(new URLSearchParams(location.search).get('view')==='publichub'?'publichub':'overview'); })
+  api('/me').then(async me => { if (!me.loggedIn) return; state.username=me.username || 'Developer'; $('moderationLink').hidden=!me.canModerate; $('discordBotLink').hidden=!me.canManageBot; showWarnings(me.warnings); $('developerName').textContent=state.username; $('loginView').hidden=true; $('workspaceView').hidden=false; await projects(); await loadPublicHub(); const initialView = new URLSearchParams(location.search).get('view'); view(['publichub','account'].includes(initialView) ? initialView : 'overview'); })
     .catch(e => { if (!$('workspaceView').hidden) message(e.message,true); else { $('loginMessage').textContent=e.message; $('loginMessage').hidden=false; } });
 })();

@@ -111,10 +111,12 @@ app.use(helmet({contentSecurityPolicy:{directives:{
 }},crossOriginEmbedderPolicy:false,referrerPolicy:{policy:'strict-origin-when-cross-origin'}}));
 const webSecurity=require('./services/web-security');
 app.use(webSecurity.platformHeaders);
+app.use(webSecurity.parseCookies);
+require('./services/script-upload-http')(app);
 app.use('/api/auth',webSecurity.authJsonParser);
+app.use('/admin/api',webSecurity.authJsonParser);
 app.use(express.json({limit:'2mb',type:['application/json','application/csp-report','application/reports+json']}));
 app.use(webSecurity.bodyError);
-app.use(webSecurity.parseCookies);
 // Frequent monitoring must never wake the database.
 app.get('/api/keepalive', (req, res) => res.json({ok:true,t:Date.now()}));
 app.get('/ping', (req, res) => res.set('Cache-Control','no-store').json({ok:true,t:Date.now()}));
@@ -197,6 +199,9 @@ for (const [route, file, type] of [
 }
 
 // ===== Front statique =====
+// Staff pages are guarded before any public file handling.
+app.use('/admin/api', require('./routes/admin'));
+app.use('/admin', require('./routes/admin-page')({ assetVersion: ASSET_VERSION, siteUrl: SITE_URL }));
 // 1) Pages HTML (versionnees + no-cache)
 app.use(serveHtml);
 
@@ -222,11 +227,13 @@ app.use(
 
 
 app.use('/api/discord',require('./routes/discord').router);
-app.use('/api/platform',require('./routes/platform'));
+app.use('/api/platform',require('./services/site-controls').enforceMaintenance,require('./routes/platform'));
 app.use('/api/auth',require('./routes/auth'));
-app.use('/api/catalog',require('./routes/catalog'));
+app.use('/api/catalog',require('./services/site-controls').enforceMaintenance,require('./routes/catalog'));
 app.use('/api/moderation',require('./routes/moderation'));
 app.use('/api/bot',require('./routes/discord-bot'));
+app.use('/api/site',require('./routes/site'));
+app.use('/api/account',require('./routes/account'));
 app.use((req,res)=>res.status(404).type('text/plain').send('Not found'));
 app.use((err,req,res,next)=>{
   console.error('[server]',errorSummary(err));
@@ -236,12 +243,15 @@ app.use((err,req,res,next)=>{
 });
 const SELF_PING_URL=process.env.PUBLIC_URL?process.env.PUBLIC_URL.replace(/\/$/,'')+'/api/keepalive':null;
 alerts.install();
-function startServer(){return app.listen(PORT,()=>{
+function startServer(){
+  require('./services/publication-queue').start();
+  return app.listen(PORT,()=>{
   console.log('[server] AUDIT HUB on port '+PORT+' assets='+ASSET_VERSION);
   const {warnings}=checkConfig();
   if(warnings.length&&process.env.NODE_ENV==='production')notifyDiscord({title:'Configuration warnings',color:'warn',description:warnings.join('\n')}).catch(()=>{});
   if(process.env.SCHEDULERS==='off')return;
   startPurgeScheduler();
+  require('./services/script-revalidation').startScheduler();
   if(SELF_PING_URL&&!/localhost|127\.0\.0\.1/.test(SELF_PING_URL))setInterval(async()=>{
     try{await fetch(SELF_PING_URL,{signal:AbortSignal.timeout(20000)});}catch(e){console.warn('[self-ping]',errorSummary(e));}
   },5*60*1000).unref();

@@ -2,8 +2,9 @@
 
 // Static triage only. This deliberately never evaluates Lua or follows URLs.
 const crypto = require('crypto');
-const SCANNER_VERSION = 'static-luau-1';
-const MAX_BYTES = 2 * 1024 * 1024;
+const SCANNER_VERSION = 'static-luau-2';
+const MAX_BYTES = 8 * 1024 * 1024;
+const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
 const MAX_TOKENS = 150000;
 const MAX_DECODED = 16384;
 const MAX_FINDINGS = 64;
@@ -109,7 +110,7 @@ const CAPABILITIES = new Map([
   ['HttpGet', 'network'], ['HttpGetAsync', 'network'], ['HttpPost', 'network'],
   ['HttpPostAsync', 'network'], ['GetAsync', 'network'], ['PostAsync', 'network'], ['RequestAsync', 'network'],
   ['readfile', 'sensitive'], ['listfiles', 'sensitive'], ['getclipboard', 'sensitive'],
-  ['gethwid', 'sensitive'], ['get_hwid', 'sensitive'], ['getgenv', 'environment'],
+  ['gethwid', 'sensitive'], ['get_hwid', 'sensitive'], ['getgenv', 'environment'], ['getfenv', 'environment'], ['setfenv', 'environment'],
   ['writefile', 'filesystem'], ['appendfile', 'filesystem'], ['delfile', 'filesystem'], ['delfolder', 'filesystem'],
   ['setclipboard', 'clipboard'], ['toclipboard', 'clipboard'],
   ['loadstring', 'dynamic'], ['load', 'dynamic'], ['require', 'module'],
@@ -131,13 +132,13 @@ function scanScript(source, options = {}) {
       if (replace >= 0) { seen.add(key); findings[replace] = { rule, severity, line }; }
     }
   };
-  if (typeof source !== 'string' || !source.trim() || Buffer.byteLength(source) > MAX_BYTES) {
+  if (typeof source !== 'string' || !source.trim() || Buffer.byteLength(source) > (options.phase === 'output' ? MAX_OUTPUT_BYTES : MAX_BYTES)) {
     return { status: 'blocked', findings: [{ rule: 'scan_input_limit', severity: 'high', line: 1 }], scannerVersion: SCANNER_VERSION, hash: null };
   }
   const hash = crypto.createHash('sha256').update(source).digest('hex');
   const { tokens, incomplete, bounded } = tokenize(source);
   if (incomplete) add('uninspectable_syntax', 'review');
-  if (bounded) add('scan_token_limit', 'high');
+  if (bounded) add('scan_token_limit', 'review');
 
   // Constant propagation intentionally supports a small, bounded grammar only.
   // This catches string escapes, literal concatenation and string.char aliases;
@@ -234,6 +235,7 @@ function scanScript(source, options = {}) {
       case 'clipboard': add('clipboard_write', 'info', line); break;
       case 'dynamic': dynamicLine ||= line; add('dynamic_code', 'review', line); break;
       case 'module': add('external_module', 'review', line); break;
+      case 'environment': add('dynamic_environment', 'review', line); break;
       case 'process': add('process_execution', 'high', line); break;
     }
   }
@@ -257,9 +259,12 @@ function scanScript(source, options = {}) {
     }
     if (token.type !== 'id' || ['.', ':'].includes(tokens[index - 1]?.value)) continue;
     const member = memberAt(index);
+    if (['_G','_ENV','shared'].includes(token.value) && tokens[index+1]?.value==='[' && !constantAt(index+2)) add('computed_environment_member','review',token.line);
     let callAt = member?.end;
     for (let parens = 0; parens < 8 && tokens[callAt]?.value === ')'; parens++) callAt++;
     if (!member || (!['(', '{'].includes(tokens[callAt]?.value) && tokens[callAt]?.type !== 'string')) continue;
+    if (['decode','base64decode','base64_decode','decrypt','decompress','bxor'].includes(member.name)) add('runtime_decoder','review',token.line);
+    if ((member.name==='char'||charAliases.has(member.name)) && !constantAt(index)) add('unresolved_character_decoder','review',token.line);
     recordCapability(aliases.get(member.name), token.line);
   }
   if (webhookLine) add('webhook_endpoint', 'review', webhookLine);
@@ -268,11 +273,21 @@ function scanScript(source, options = {}) {
   if (networkLine && dynamicLine) add('remote_dynamic_code', 'review', dynamicLine);
   if ((numericCount > 512 && (loopCount || decoderCount)) || (numericCount > 64 && loopCount && decoderCount)) add('opaque_virtualized_payload', 'review');
   if (decoderCount > 12 && (dynamicLine || loopCount)) add('opaque_decoder_chain', 'review', dynamicLine || 1);
-  if (inspectionBounded) add('scan_inspection_limit', 'high');
+  if (inspectionBounded) add('scan_inspection_limit', 'review');
   // Opaque code is held for review even if it was uploaded already obfuscated.
   // A clear generated output never downgrades an earlier source finding.
   const status = hasHigh ? 'blocked' : hasReview ? 'review' : 'clear';
   return { status, findings, scannerVersion: SCANNER_VERSION, hash };
 }
 
-module.exports = { scanScript, SCANNER_VERSION, MAX_BYTES };
+// Both phases are mandatory. An obfuscation flag cannot waive a review or a
+// resource-bound finding: a generated VM is still opaque to this scanner.
+function combineScans(before,after){
+  const valid=scan=>scan&&['clear','review','blocked'].includes(scan.status)&&Array.isArray(scan.findings)&&scan.scannerVersion===SCANNER_VERSION&&/^[a-f0-9]{64}$/.test(scan.hash||'');
+  if(!valid(before)||!valid(after))throw Error('Invalid script scan result');
+  const findings=[...before.findings,...after.findings];
+  const blocked=before.status==='blocked'||after.status==='blocked'||findings.some(f=>f.severity==='high');
+  const review=before.status==='review'||after.status==='review'||findings.some(f=>f.severity==='review');
+  return {...after,status:blocked?'blocked':review?'review':'clear',findings};
+}
+module.exports = { scanScript, combineScans, SCANNER_VERSION, MAX_BYTES };

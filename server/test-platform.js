@@ -1,4 +1,5 @@
 'use strict';
+const {settleResponse}=require('./tests/script-jobs');
 const assert = require('node:assert/strict');
 const { startFixture } = require('./tests/platform-fixture');
 async function run() {
@@ -7,11 +8,11 @@ async function run() {
   function check(condition,label) { assert.ok(condition,label); assertions++; console.log('OK '+label); }
   async function req(path,method='GET',body,cookie=f.cookies[0],extra={}) {
     const response=await fetch(f.base+'/api/platform'+path,{method,headers:{...(cookie?{Cookie:cookie}:{}),...(body===undefined?{}:{'Content-Type':'application/json'}),...extra},body:body===undefined?undefined:JSON.stringify(body)});
-    return {status:response.status,data:await response.json(),headers:response.headers};
+    return settleResponse(f,response,cookie);
   }
   try {
     const discord=require('./src/services/discord');
-    const loginResponse=await fetch(f.base+'/api/discord/login?mode=developer',{redirect:'manual'});
+    const loginResponse=await fetch(f.base+'/api/discord/login?mode=developer&acceptedTerms=1',{redirect:'manual'});
     const loginUrl=new URL(loginResponse.headers.get('location'));
     check(loginUrl.searchParams.get('scope')==='identify email','Developer OAuth requests identity and verified email without joining guilds');
     const oauthState=loginUrl.searchParams.get('state');
@@ -21,10 +22,22 @@ async function run() {
     discord.exchangeCode=async()=>({access_token:'test-only'});
     discord.fetchUser=async()=>({id:'900000000000000003',username:'New developer',email:'discord-developer@example.com',verified:true});
     discord.addToGuild=async()=>{joins++;return {joined:true};};
+    const noAgreement=await fetch(f.base+'/api/discord/login?mode=developer',{redirect:'manual'});
+    const noAgreementState=new URL(noAgreement.headers.get('location')).searchParams.get('state');
+    const noAgreementCallback=await fetch(f.base+'/api/discord/callback?code=test&state='+encodeURIComponent(noAgreementState),{redirect:'manual',headers:{Cookie:noAgreement.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ')}});
+    check(noAgreementCallback.headers.get('location')==='/signup?error=terms_required','New Discord account requires legal agreement');
+    const forgedState=noAgreementState.replace(/\.signin$/,'.accepted');
+    const forgedOAuthCallback=await fetch(f.base+'/api/discord/callback?code=test&state='+encodeURIComponent(forgedState),{redirect:'manual',headers:{Cookie:'ah_oauth_state='+forgedState}});
+    check(forgedOAuthCallback.headers.get('location')==='/dashboard?login=invalid','Discord agreement is protected by the state signature');
     const callbackResponse=await fetch(f.base+'/api/discord/callback?code=test&state='+encodeURIComponent(oauthState),{redirect:'manual',headers:{Cookie:loginResponse.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ')}});
     check(callbackResponse.headers.get('location')==='/dashboard?login=ok' && joins===0,'Developer sign-in creates workspace without joining a guild');
     const createdAccount=await f.pool.query('SELECT a.username FROM developer_accounts a JOIN developer_identities i ON i.account_id=a.discord_id WHERE i.provider=$1 AND i.subject=$2',['discord','900000000000000003']);
     check(createdAccount.rows[0]?.username==='New developer','Discord profile persisted in developer account');
+    const agreement=await f.pool.query('SELECT terms_accepted_at,terms_version FROM developer_accounts a JOIN developer_identities i ON i.account_id=a.discord_id WHERE i.provider=$1 AND i.subject=$2',['discord','900000000000000003']);
+    check(agreement.rows[0]?.terms_accepted_at&&agreement.rows[0]?.terms_version==='2026-10-04','Discord agreement date and version are stored');
+    const existingBegin=await fetch(f.base+'/api/discord/login?mode=developer',{redirect:'manual'});const existingState=new URL(existingBegin.headers.get('location')).searchParams.get('state');
+    const existingCallback=await fetch(f.base+'/api/discord/callback?code=test&state='+encodeURIComponent(existingState),{redirect:'manual',headers:{Cookie:existingBegin.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ')}});
+    check(existingCallback.headers.get('location')==='/dashboard?login=ok','Existing Discord account can sign in without re-acceptance');
     check((await req('/projects','GET',undefined,'')).status===401,'Anonymous dashboard denied');
     check((await req('/projects','POST',{name:'blocked'},f.cookies[0],{Origin:'https://evil.example'})).status===403,'Cross-origin writes denied');
     const a=await req('/projects','POST',{name:'Project A'});

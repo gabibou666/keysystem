@@ -8,6 +8,8 @@ local request = request or http_request or (syn and syn.request) or (http and ht
 local HttpService = game:GetService("HttpService")
 local client = {}
 local loading, loaded = false, false
+-- Stable across retries of this loader instance; never contains a key or API secret.
+local executionId = HttpService:GenerateGUID(false)
 local claimUrl = ${target.claimUrl?JSON.stringify(target.claimUrl):'nil'}
 local hwid
 pcall(function() if gethwid then hwid = tostring(gethwid()) end end)
@@ -24,7 +26,7 @@ local function check(key, withScript)
   local ok, response = pcall(function()
     return request({Url=${JSON.stringify(baseUrl+'/api/platform/v1/check')},Method="POST",
       Headers={["Content-Type"]="application/json"},
-      Body=HttpService:JSONEncode({projectId=${JSON.stringify(projectId)},key=key,hwid=hwid,executor=executor,loadScript=withScript})})
+      Body=HttpService:JSONEncode({projectId=${JSON.stringify(projectId)},key=key,hwid=hwid,executor=executor,loadScript=withScript,executionId=executionId})})
   end)
   if not ok or not response then return {success=false,reason="network_error"} end
   local parsed, data = pcall(function()

@@ -6,4 +6,6 @@
   <url><loc>__SITE__/terms</loc></url>
   <url><loc>__SITE__/privacy</loc></url>
   <url><loc>__SITE__/cookies</loc></url>
+  <url><loc>__SITE__/legal</loc></url>
+  <url><loc>__SITE__/changelog</loc></url>
 </urlset>
