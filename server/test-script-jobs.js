@@ -19,6 +19,16 @@ async function run(){
  const publish=(id,body={})=>req('/api/catalog/projects/'+id,'PUT',{title:'Actual queued release',description:'Isolated database test',game:'',accessMode:'free',published:true,...body});
  function gate(){let reached;const entered=new Promise(resolve=>{reached=resolve;});const blocked=new Promise(resolve=>{releaseGate=resolve;});engine.build=async(...args)=>{reached();await blocked;return nativeBuild(...args);};return {entered};}
  async function resetRate(){testIp++;await f.pool.query('UPDATE developer_script_jobs SET created_at=$1',[new Date(Date.now()-3600000)]);}
+ async function retainedHistory(sql,args,ready,label){
+  const deadline=Date.now()+10000;let rows;
+  // pg-mem exposes the terminal UPDATE before the surrounding retention
+  // transaction commits. Wait for its actual invariant, not an arbitrary delay.
+  do{
+   rows=(await f.pool.query(sql,args)).rows;if(ready(rows))return rows;
+   await new Promise(resolve=>setTimeout(resolve,20));
+  }while(Date.now()<deadline);
+  assert.fail(label+' never reached its retention bound');
+ }
  try{
   const created=await req('/api/platform/projects','POST',{name:'Durable script pipeline'}),id=created.data.project.id;
   const source='-- PRIVATE_OWNER_COMMENT\nlocal privateOwnerVariable="queued-original"\nreturn privateOwnerVariable';
@@ -134,7 +144,7 @@ async function run(){
   }
   await resetRate();
   const retained=await finish(id,{content:'return "history boundary"'});
-  const history=(await f.pool.query('SELECT id,original_content_enc,original_size_bytes FROM developer_script_jobs WHERE project_id=$1',[id])).rows;
+  const history=await retainedHistory("SELECT id,original_content_enc,original_size_bytes FROM developer_script_jobs WHERE project_id=$1 AND status IN ('succeeded','failed','cancelled') AND worker_token IS NULL",[id],rows=>rows.length<=100&&rows.filter(x=>x.original_content_enc).length<=20,'Finished project history');
   check(retained.status==='succeeded'&&history.length<=100&&history.filter(x=>x.original_content_enc).length<=20,'Finished job metadata is capped at 100 and historical originals at 20 per project');
   const old=history.find(x=>!x.original_content_enc);
   check((await req('/api/platform/projects/'+id+'/jobs/'+old.id)).data.job.originalAvailable===false&&(await req('/api/platform/projects/'+id+'/jobs/'+old.id+'/source')).data.code==='ORIGINAL_UNAVAILABLE','Purged historical originals are honestly reported unavailable');
@@ -142,7 +152,7 @@ async function run(){
   const newest=(await f.pool.query('SELECT id FROM developer_script_jobs WHERE project_id=$1 AND original_content_enc IS NOT NULL ORDER BY created_at DESC,id DESC LIMIT 6',[id])).rows;
   for(const row of newest)await f.pool.query('UPDATE developer_script_jobs SET original_size_bytes=8388608 WHERE id=$1',[row.id]);
   await resetRate();await finish(id,{content:'return "byte budget"'});
-  const remaining=(await f.pool.query("SELECT original_size_bytes FROM developer_script_jobs WHERE owner_id=$1 AND original_content_enc IS NOT NULL AND status IN ('succeeded','failed','cancelled')",['900000000000000001'])).rows;
+  const remaining=await retainedHistory("SELECT original_size_bytes FROM developer_script_jobs WHERE owner_id=$1 AND original_content_enc IS NOT NULL AND status IN ('succeeded','failed','cancelled') AND worker_token IS NULL",['900000000000000001'],rows=>rows.reduce((sum,row)=>sum+row.original_size_bytes,0)<=32*1024*1024,'Finished account sources');
   check(remaining.reduce((sum,row)=>sum+row.original_size_bytes,0)<=32*1024*1024,'Historical source byte counters enforce the 32 MiB account budget');
   const project2=(await req('/api/platform/projects','POST',{name:'Deletion race'})).data.project.id;
   await finish(project2,{content:'return "before admin deletion"'});

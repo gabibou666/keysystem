@@ -27,7 +27,9 @@ async function run(){
     const statements=[];
     require.cache[require.resolve('./src/db')]={exports:{query:async sql=>{statements.push(sql);return {rowCount:0};}}};
     await require('./src/services/purge').purgeNow();
-    assert.ok(statements.length===6&&statements.every(sql=>/DELETE FROM developer_/.test(sql)));checks++;
+    const purgedTables=statements.map(sql=>sql.match(/DELETE FROM (developer_[a-z_]+)/)?.[1]).sort();
+    assert.deepEqual(purgedTables,['developer_registration_limits','developer_sessions','developer_email_tokens','developer_script_metric_receipts','developer_admin_sessions','developer_events','developer_checkpoints'].sort());
+    assert.ok(statements.find(sql=>sql.includes('developer_script_metric_receipts')).includes('expires_at < now()'));checks++;
     console.log('Legacy removal: '+checks+' checks passed; old routes gone, current pages/CSP/SEO and developer-only purge intact.');
   }finally{
     child.kill();
