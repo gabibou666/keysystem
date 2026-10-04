@@ -222,7 +222,7 @@ async function reviewDecision(db, submission, state) {
    const build = { obfuscated: submission.obfuscated, obfuscationLevel: submission.obfuscation_level, targetMode: submission.target_mode, placeId: submission.place_id, builderVersion: submission.builder_version, buildHash: submission.build_hash, outputSizeBytes: job.output_size_bytes, buildDurationMs: job.build_duration_ms };
    const stored = await saveBuild(db, job, build, { scannerVersion: submission.scanner_version }, { enc: submission.content_enc, iv: submission.content_iv }, 'approved');
    await publishIn(db, job, stored, account);
-   await db.query("UPDATE developer_script_jobs SET status='succeeded',result=$2::jsonb,finished_at=now(),logs=$3::jsonb WHERE id=$1", [job.id, JSON.stringify({ version: stored.version, validated: true, obfuscated: stored.obfuscated, securityStatus: 'approved', published: job.kind === 'publish' }), JSON.stringify([...(json(job.logs) || []), log('info', 'Security review approved; release saved'+(job.kind === 'publish' ? ' and published.' : '.'))])]);
+   await db.query("UPDATE developer_script_jobs SET status='succeeded',result=$2::jsonb,finished_at=now(),logs=$3::jsonb WHERE id=$1", [job.id, JSON.stringify({ version: stored.version, validated: true, obfuscated: stored.obfuscated, obfuscationLevel: stored.obfuscation_level, targetMode: stored.target_mode, placeId: stored.place_id?Number(stored.place_id):null, securityStatus: 'approved', published: job.kind === 'publish' }), JSON.stringify([...(json(job.logs) || []), log('info', 'Security review approved; release saved'+(job.kind === 'publish' ? ' and published.' : '.'))])]);
    await pruneHistory(db,job.owner_id);return state;
   }
  }

@@ -55,6 +55,9 @@ async function run(){
     check(standard.result.securityStatus==='approved','Approved Standard build retains the human decision');
   }
   check(standard.status==='succeeded'&&standard.result.obfuscated&&standard.result.published,'Real Standard build is atomically published after any required review');
+  const standardDetail=await req('/api/platform/projects/'+id);
+  const standardListing=(await req('/api/catalog/me')).data.listings.find(item=>item.projectId===id);
+  check(standardDetail.status===200&&standardDetail.data.script.validated&&standardDetail.data.script.obfuscated&&standardDetail.data.script.obfuscationLevel==='standard'&&standardDetail.data.script.version===standard.result.version&&standardListing?.scriptVersion===standard.result.version,'Current script and published snapshot expose the real promoted Standard metadata');
   const publicSource=await req('/api/catalog/scripts/'+id+'/source','GET',undefined,'');
   check(publicSource.status===200&&!publicSource.data.includes('PRIVATE_OWNER_COMMENT')&&!publicSource.data.includes('privateOwnerVariable'),'Public delivery serves the transformed copy rather than the retained original');
   check((await req('/api/platform/projects/'+id+'/source')).data===source,'Publishing never replaces the retained owner original with its transformed output');
