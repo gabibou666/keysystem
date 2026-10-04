@@ -3,6 +3,15 @@
 (() => {
   const $ = id => document.getElementById(id);
   const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
+  const securityReasons = {
+    sensitive_network_transfer: ['Sensitive data access and network access appear in the same script. This scan does not establish that the data is transmitted.', 'Le script contient un accès à des données sensibles et au réseau. Cette analyse ne prouve pas que ces données sont transmises.'],
+    webhook_network_transfer: ['A webhook address and network access appear in the same script. Legitimate notifications can also trigger this rule.', 'Le script contient une adresse de webhook et un accès au réseau. Des notifications légitimes peuvent aussi déclencher cette règle.'],
+    process_execution: ['A call resembling operating system command execution was detected.', 'Un appel ressemblant à une exécution de commande système a été détecté.'],
+    scan_input_limit: ['The source is empty or exceeds the inspection size limit.', 'La source est vide ou dépasse la limite de taille analysable.'],
+    sensitive_data_access: ['File, clipboard or device identifier access was detected.', 'Un accès aux fichiers, au presse-papiers ou à un identifiant appareil a été détecté.'],
+    network_access: ['Network access was detected.', 'Un accès au réseau a été détecté.'],
+    dynamic_code: ['Code is loaded or compiled at runtime and needs review.', 'Du code est chargé ou compilé pendant l’exécution et nécessite une revue.']
+  };
   const escape = value => String(value ?? '').replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
   const labels = {
     en: {
@@ -69,6 +78,30 @@
         $('scriptJobProgress').value=progress; $('scriptJobProgress').setAttribute('aria-label',t('progress')); $('scriptJobPercent').textContent=progress+'%';
         $('scriptJobError').hidden=!job.error;
         $('scriptJobError').textContent=job.error ? [job.error.code,job.error.message].filter(Boolean).join(' · ') : '';
+        let security = $('scriptJobSecurity');
+        if (!security) {
+          security = document.createElement('div'); security.id = 'scriptJobSecurity';
+          $('scriptJobError').after(security);
+        }
+        security.replaceChildren();
+        const findings = Array.isArray(job.result?.findings) ? job.result.findings.slice(0,100) : [];
+        security.hidden = !findings.length;
+        if (findings.length) {
+          const french = state.language === 'fr';
+          const heading = document.createElement('strong');
+          heading.textContent = french ? 'Motifs détectés par l’analyse statique' : 'Static scan findings';
+          const note = document.createElement('p');
+          note.textContent = french ? 'Ces signaux ne constituent pas une preuve de malveillance. Si vous pensez à un faux positif, conservez les règles et les lignes ci-dessous pour la vérification.' : 'These signals are not proof of malicious intent. If you suspect a false positive, keep the rules and line numbers below for investigation.';
+          const list = document.createElement('ul');
+          for (const finding of findings) {
+            const item = document.createElement('li');
+            const reason = securityReasons[finding.rule]?.[french ? 1 : 0];
+            const line = Number.isSafeInteger(finding.line) && finding.line > 0 ? ' · '+(french ? 'ligne ' : 'line ')+finding.line : '';
+            item.textContent = String(finding.rule || 'unknown')+line+(reason ? ' — '+reason : '');
+            list.append(item);
+          }
+          security.append(heading,note,list);
+        }
         $('scriptJobLogList').innerHTML=job.logs?.length ? job.logs.map(log=>'<li class="log-'+(log.level==='error'?'error':log.level==='warning'?'warning':'info')+'"><time datetime="'+escape(log.date)+'">'+escape(formatDate(log.date))+'</time><span>'+escape(log.message)+'</span></li>').join('') : '<li><span>'+escape(t('none'))+'</span></li>';
       }
       $('scriptJobsEmpty').hidden=state.jobs.length>0;

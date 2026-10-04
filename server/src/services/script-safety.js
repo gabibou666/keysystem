@@ -2,7 +2,7 @@
 
 // Static triage only. This deliberately never evaluates Lua or follows URLs.
 const crypto = require('crypto');
-const SCANNER_VERSION = 'static-luau-2';
+const SCANNER_VERSION = 'static-luau-3';
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
 const MAX_TOKENS = 150000;
@@ -269,7 +269,10 @@ function scanScript(source, options = {}) {
   }
   if (webhookLine) add('webhook_endpoint', 'review', webhookLine);
   if (networkLine && webhookLine) add('webhook_network_transfer', 'high', networkLine);
-  if (networkLine && sensitiveLine) add('sensitive_network_transfer', 'high', sensitiveLine);
+  // Co-occurrence is not data-flow evidence: key caches and local settings
+  // routinely coexist with HTTP. Keep these scripts out of automatic approval,
+  // but allow independent review instead of irreversibly rejecting the job.
+  if (networkLine && sensitiveLine) add('sensitive_network_transfer', 'review', sensitiveLine);
   if (networkLine && dynamicLine) add('remote_dynamic_code', 'review', dynamicLine);
   if ((numericCount > 512 && (loopCount || decoderCount)) || (numericCount > 64 && loopCount && decoderCount)) add('opaque_virtualized_payload', 'review');
   if (decoderCount > 12 && (dynamicLine || loopCount)) add('opaque_decoder_chain', 'review', dynamicLine || 1);

@@ -13,6 +13,10 @@ async function run(){
   const created=await fetch(f.base+'/api/platform/projects',{method:'POST',headers:{Cookie:f.cookies[0],Origin:f.base,'Content-Type':'application/json'},body:JSON.stringify({name:'Safety pipeline'})});id=(await created.json()).project.id;
   const baseline=await submit('return 1');check(baseline.status==='succeeded','Readable source passes real compiler and both automatic scans');
   const previous=(await f.pool.query('SELECT version,build_hash FROM developer_scripts WHERE project_id=$1',[id])).rows[0];
+  const cache=await submit('local read=readfile; assert(read("license-cache.json")); local ui=game:HttpGet("https://example.invalid/ui.lua"); return ui');
+  check(cache.status==='review'&&!cache.error,'Local key cache and HTTP reach independent review instead of an automatic rejection');
+  check(cache.result.findings.some(f=>f.rule==='sensitive_network_transfer'&&f.severity==='review'),'Owner receives the precise heuristic finding without source contents');
+  check((await f.pool.query('SELECT version FROM developer_scripts WHERE project_id=$1',[id])).rows[0].version===previous.version,'Reviewable cache does not bypass approval or replace the active version');
   const template=await nativeBuild('return 2');
   function output(code){builder.build=async()=>{transforms++;return {...template,code,obfuscated:true,obfuscate:true,obfuscationLevel:'standard',buildHash:crypto.sha256(code),outputSizeBytes:Buffer.byteLength(code)};};}
   const opaque='local bytes={'+Array(1100).fill(42).join(',')+'};while true do local op=bytes[1] end';

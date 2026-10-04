@@ -162,8 +162,19 @@ async function run() {
 
     const beforeReview=(await api('/api/platform/projects/'+project.id)).script.version;
     await page.locator('#scriptObfuscate').uncheck();
+    await page.locator('#scriptContent').fill('os.execute("DO_NOT_EXECUTE_PRIVATE_PAYLOAD")');
+    await page.locator('#publishScriptBtn').click();await done('Failed');
+    check((await page.locator('#scriptJobSecurity').textContent()).includes('process_execution · line 1'),'Rejected releases show the exact safe rule and line');
+    check((await page.locator('#scriptJobSecurity').textContent()).includes('not proof of malicious intent'),'Findings explain the limitations of static triage');
+    check(!(await page.locator('#scriptJobSecurity').textContent()).includes('DO_NOT_EXECUTE_PRIVATE_PAYLOAD'),'Finding diagnostics never display source contents');
+    equal((await api('/api/platform/projects/'+project.id)).script.version,beforeReview,'A rejected release with diagnostics preserves the active build');
+    await page.evaluate(()=>document.dispatchEvent(new CustomEvent('audit-hub:language',{detail:{language:'fr'}})));
+    check((await page.locator('#scriptJobSecurity').textContent()).includes('ligne 1'),'Finding diagnostics follow the selected French locale');
+    await page.evaluate(()=>document.dispatchEvent(new CustomEvent('audit-hub:language',{detail:{language:'en'}})));
+    await page.locator('#scriptObfuscate').uncheck();
     await page.locator('#scriptContent').fill('loadstring(game:HttpGet("https://example.com/script.lua"))()');
     await page.locator('#publishScriptBtn').click();await done('Awaiting review');
+    check((await page.locator('#scriptJobSecurity').textContent()).includes('dynamic_code'),'Held releases also show the findings requiring review');
     equal((await api('/api/platform/projects/'+project.id)).script.version,beforeReview,'A held build preserves the active version');
     const review=(await api('/api/platform/projects/'+project.id+'/jobs?limit=10')).jobs.find(job=>job.status==='review');
     await fixture.pool.query("INSERT INTO developer_staff_roles(account_id,role) VALUES($1,'ADMIN')",['900000000000000002']);

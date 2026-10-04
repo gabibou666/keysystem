@@ -50,9 +50,14 @@ test('called environment bracket members cannot hide capabilities', () => assert
 test('encoded environment bracket members cannot hide dynamic execution', () => assert.equal(scan('getfenv()[string.char(108,111,97,100,115,116,114,105,110,103)](data)()').status, 'review'));
 test('simple base64 endpoint strings are inspected', () => assert.equal(scan('request({Url=decode("' + Buffer.from(endpoint).toString('base64') + '")})').status, 'blocked'));
 test('reading files requires review', () => assert.equal(scan('local x=readfile("settings.json")').status, 'review'));
-test('file reading and network capabilities are blocked conservatively', () => assert.equal(scan('local data=readfile("cookies"); request({Body=data})').status, 'blocked'));
-test('sensitive alias plus network transfer is blocked', () => assert.equal(scan('local read=readfile; local send=syn.request; send({Body=read("secret")})').status, 'blocked'));
-test('clipboard reading and network transfer is blocked', () => assert.equal(scan('request({Body=getclipboard()})').status, 'blocked'));
+test('file reading and network capabilities cannot pass without review', () => assert.equal(scan('local data=readfile("cookies"); request({Body=data})').status, 'review'));
+test('sensitive alias plus network transfer cannot pass without review', () => assert.equal(scan('local read=readfile; local send=syn.request; send({Body=read("secret")})').status, 'review'));
+test('clipboard reading and network transfer cannot pass without review', () => assert.equal(scan('request({Body=getclipboard()})').status, 'review'));
+test('local key cache plus unrelated HTTP is reviewable instead of rejected', () => {
+  const result=scan('local read=readfile; local key=read("license-cache.json"); assert(key); local response=game:HttpGet("https://example.invalid/ui.lua")');
+  assert.equal(result.status,'review');
+  assert(result.findings.some(f=>f.rule==='sensitive_network_transfer'&&f.severity==='review'));
+});
 test('clipboard writing alone is informational', () => assert.equal(scan('setclipboard("https://example.org/key")').status, 'clear'));
 test('filesystem mutations require review', () => assert.equal(scan('writefile("config.json", "{}"); delfile("config.json")').status, 'review'));
 test('remote executable loaders require review', () => {
@@ -72,7 +77,7 @@ test('findings contain safe fields only and never raw secrets', () => {
 });
 test('findings report source line numbers', () => assert(scan('print(1)\n\nlocal x=readfile("x")').findings.some(f => f.rule === 'sensitive_data_access' && f.line === 3)));
 test('findings are bounded without downgrading a later high finding', () => {
-  const code = Array.from({ length: 80 }, (_, i) => 'request({Url="https://example.org/' + i + '"})').join('\n') + '\nreadfile("secret")';
+  const code = Array.from({ length: 80 }, (_, i) => 'request({Url="https://example.org/' + i + '"})').join('\n') + '\nos.execute("never run")';
   const result = scan(code); assert(result.findings.length <= 64); assert.equal(result.status, 'blocked'); assert(result.findings.some(f => f.severity === 'high'));
 });
 test('token explosion is bounded and requires independent review', () => {const result=scan(';'.repeat(150001));assert.equal(result.status,'review');assert(result.findings.some(x=>x.rule==='scan_token_limit'));});
