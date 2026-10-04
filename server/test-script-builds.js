@@ -10,26 +10,6 @@ async function run(){
     const r=await fetch(f.base+url,{method,headers:{...(cookie?{Cookie:cookie}:{}),...(body===undefined?{}:{'Content-Type':'application/json',Origin:f.base})},body:body===undefined?undefined:JSON.stringify(body)});
     return settleResponse(f,r,cookie);
   }
-  let reviewer;
-  async function explicitlyApprove(result){
-    if(result.status!==202||!result.data.pendingReview)return result;
-    check(result.data.job.status==='review'&&result.data.submissionId,'Opaque transformed candidate requires an explicit independent review');
-    if(!reviewer){
-      process.env.MODERATION_ADMIN_IDS='900000000000000002';
-      const activation=await req('/admin/api/session','POST',{confirmation:'ACTIVATE'},f.cookies[1]);
-      assert.equal(activation.status,200);
-      reviewer={cookie:f.cookies[1]+'; '+activation.headers.getSetCookie().find(x=>x.startsWith('ah_admin_session=')).split(';')[0],csrf:activation.data.csrfToken};
-    }
-    const approved=await fetch(f.base+'/api/moderation/submissions/'+result.data.submissionId+'/decision',{method:'POST',headers:{Cookie:reviewer.cookie,Origin:f.base,'Content-Type':'application/json','X-CSRF-Token':reviewer.csrf},body:JSON.stringify({decision:'approve',note:'Explicit approval of this controlled synthetic fixture.'})});
-    assert.equal(approved.status,200,await approved.text());
-    const job=await waitJob(f,result.data.job.projectId,result.data.jobId,f.cookies[0]);
-    check(job.status==='succeeded'&&job.result.securityStatus==='approved','Independent approval promotes the exact built candidate');
-    const saved=await req('/api/platform/projects/'+job.projectId);
-    const candidate=(await f.pool.query('SELECT build_hash FROM developer_moderation_submissions WHERE id=$1',[result.data.submissionId])).rows[0];
-    check(saved.status===200&&saved.data.script.version===job.result.version&&saved.data.script.securityHash===candidate.build_hash&&saved.data.script.securityStatus==='approved','Persisted script metadata belongs to the independently approved candidate');
-    check(['validated','obfuscated','obfuscationLevel','targetMode','placeId'].every(key=>job.result[key]===saved.data.script[key]),'Approved job response matches the persisted validation, protection and target metadata');
-    return {...result,status:200,data:{...result.data,...job.result,...saved.data.script,pendingReview:false,job}};
-  }
   try{
     const code='-- ORIGINAL_PRIVATE_COMMENT\nlocal privateVariableName: number = 4\nprivateVariableName += 2\nreturn privateVariableName';
     const built=await builder.build(code,{targetMode:'single',placeId:123,obfuscate:true,obfuscationLevel:'standard'});
@@ -45,21 +25,23 @@ async function run(){
     check(concurrent[0].status==='fulfilled'&&concurrent[1].reason?.code==='SCRIPT_BUSY'&&concurrent[2].reason?.code==='SCRIPT_BUSY','One build runs at a time to preserve memory for the application');
     check((await builder.build('return 4')).validated,'Build capacity recovers after previous work completes');
     const id=(await req('/api/platform/projects','POST',{name:'Build verification'})).data.project.id;
-    const upload=await explicitlyApprove(await req('/api/platform/projects/'+id+'/script','PUT',{content:code,targetMode:'single',placeId:123,obfuscate:true,obfuscationLevel:'standard'}));
-    check(upload.status===200&&upload.data.validated&&upload.data.obfuscated&&upload.data.placeId===123,'Upload persists verified build flags and target');
+    const refused=await req('/api/platform/projects/'+id+'/script','PUT',{content:code,targetMode:'single',placeId:123,obfuscate:true,obfuscationLevel:'standard'});
+    check(refused.status===422&&refused.data.code==='SECURITY_UNVERIFIED','Opaque Standard output is refused without human approval');
+    const upload=await req('/api/platform/projects/'+id+'/script','PUT',{content:code,targetMode:'single',placeId:123,obfuscate:false});
+    check(upload.status===200&&upload.data.validated&&!upload.data.obfuscated&&upload.data.placeId===123,'Upload persists verified build flags and target');
     const stored=(await f.pool.query('SELECT * FROM developer_scripts WHERE project_id=$1',[id])).rows[0];
     const decrypted=crypto.decryptAES(stored.content_enc,stored.content_iv);
-    check(!decrypted.includes('ORIGINAL_PRIVATE_COMMENT')&&!decrypted.includes('privateVariableName')&&stored.build_hash===crypto.sha256(decrypted),'Database encrypts the transformed delivery separately');
+    check(decrypted.includes('privateVariableName')&&stored.build_hash===crypto.sha256(decrypted)&&stored.scanner_version===require('./src/services/script-safety').SCANNER_VERSION,'Database encrypts automatically verified delivery with a current hash and scanner version');
     check(crypto.decryptAES(stored.original_content_enc,stored.original_content_iv)===code,'Original source is separately encrypted and preserved for its owner');
     const invalid=await req('/api/platform/projects/'+id+'/script','PUT',{content:'local x = ( PRIVATE_INVALID',targetMode:'universal'});
     check(invalid.status===400&&!JSON.stringify(invalid.data).includes('PRIVATE_INVALID')&&(await f.pool.query('SELECT version FROM developer_scripts WHERE project_id=$1',[id])).rows[0].version===1,'Rejected upload has generic error and preserves the previous version');
-    const listing={title:'Built release',description:'',game:'A game',accessMode:'free',published:true,obfuscate:true,obfuscationLevel:'standard'};
-    check((await explicitlyApprove(await req('/api/catalog/projects/'+id,'PUT',listing))).status===200,'Publication validates and rebuilds the owner original, with independent review when required');
+    const listing={title:'Built release',description:'',game:'A game',accessMode:'free',published:true,obfuscate:false,obfuscationLevel:'standard'};
+    check((await req('/api/catalog/projects/'+id,'PUT',listing)).status===200,'Publication validates and rebuilds the owner original entirely automatically');
     const metadata=(await req('/api/catalog/scripts/'+id,'GET',undefined,'')).data.listing;
-    check(metadata.validated&&metadata.obfuscated&&metadata.targetMode==='single'&&metadata.placeId===123,'Public release metadata includes the verified target');
+    check(metadata.validated&&!metadata.obfuscated&&metadata.targetMode==='single'&&metadata.placeId===123,'Public release metadata includes the verified target');
     const publicBuild=(await req('/api/catalog/scripts/'+id+'/source','GET',undefined,'')).data;
     const publishedStored=(await f.pool.query('SELECT content_enc,content_iv FROM developer_scripts WHERE project_id=$1',[id])).rows[0];
-    check(publicBuild===crypto.decryptAES(publishedStored.content_enc,publishedStored.content_iv)&&!publicBuild.includes('ORIGINAL_PRIVATE_COMMENT'),'Free release serves the newly rebuilt encrypted snapshot');
+    check(publicBuild===crypto.decryptAES(publishedStored.content_enc,publishedStored.content_iv)&&publicBuild.includes('privateVariableName'),'Free release serves the newly rebuilt encrypted snapshot');
     await req('/api/platform/projects/'+id+'/script','PUT',{content:'return 7',targetMode:'universal'});
     check((await req('/api/catalog/scripts/'+id,'GET',undefined,'')).data.listing.placeId===123,'Free snapshot target stays unchanged after a private upload');
     await req('/api/catalog/projects/'+id,'PUT',{...listing,accessMode:'licensed',obfuscate:false});

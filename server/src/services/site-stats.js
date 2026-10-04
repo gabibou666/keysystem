@@ -1,4 +1,5 @@
 'use strict';
+const {proofJoins,listingVerified}=require('./script-publication-policy');
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const QUERY_TIMEOUT_MS = 3000;
@@ -16,10 +17,9 @@ const COUNTS_SQL = `SELECT
     JOIN developer_projects p ON p.id=l.project_id
     JOIN developer_scripts s ON s.project_id=p.id
     JOIN developer_accounts a ON a.discord_id=p.owner_id
+    ${proofJoins}
     WHERE l.published_at IS NOT NULL AND h.published_at IS NOT NULL
-      AND l.snapshot_validated=true
-      AND l.safety_status IN ('clear','approved')
-      AND s.safety_status IN ('clear','approved')
+      AND ${listingVerified}
       AND p.disabled=false AND p.hidden=false AND p.deleted_at IS NULL
       AND s.disabled=false AND s.deleted_at IS NULL
       AND a.banned_at IS NULL AND (a.suspended_until IS NULL OR a.suspended_until<=now())) AS scripts`;

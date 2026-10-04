@@ -16,13 +16,16 @@ async function run(){
  try{
   const plain=await seed('return 1'),danger=await seed('os.execute("NEVER_EXECUTE")'),approved=await seed(opaque,opaque,'approved'),held=await seed(opaque),missing=await seed('return 2',null),changed=await seed('return 3','return 3','approved','a'.repeat(64)),quarantined=await seed('return 4','return 4','quarantined');
   const sourceDanger=await seed('return 5','os.execute("NEVER_EXECUTE")','approved');
+  const oldClearApproval=await seed('return 42','return 42','approved');
   const first=await service.runOnce();
-  check(first.errors===0&&first.examined===8,'Sweep covers existing versions without production or code execution');
+  check(first.errors===0&&first.examined===9,'Sweep covers existing versions without production or code execution');
+  check(await status(oldClearApproval)==='clear','A readable legacy approval becomes clear only after fresh automatic source and output scans');
+  check(await require('./src/services/moderation').deliveryAllowed(oldClearApproval,1,crypto.sha256('return 42')),'Fresh verification persists the exact proof required for delivery');
   check(await status(plain)==='clear','Readable original and delivery remain clear');
   check(await status(danger)==='quarantined','High finding quarantines an already active version');
-  check(await status(approved)==='approved','Exact hash approval is preserved for opaque code without a high finding');
-  check(await status(held)==='review','Unapproved opaque active release is suspended for review');
-  check(await status(missing)==='review','Missing legacy original cannot be reconstructed or auto-approved');
+  check(await status(approved)==='quarantined','Previous human approval cannot exempt an opaque release');
+  check(await status(held)==='quarantined','Opaque active releases are refused automatically');
+  check(await status(missing)==='quarantined','Missing legacy original cannot be reconstructed or auto-approved');
   check(await status(changed)==='quarantined','Delivery integrity mismatch overrides existing approval');
   check(await status(quarantined)==='quarantined','Static clear result cannot release a manually quarantined version');
   check(await status(sourceDanger)==='quarantined','High finding in the original overrides an approval on clear output');
@@ -37,11 +40,11 @@ async function run(){
   const oldSnapshot=await seed('return 8'),oldEnc=crypto.encryptAES(opaque);
   await f.pool.query("INSERT INTO developer_listings(project_id,hub_id,title,access_mode,published_at,snapshot_content_enc,snapshot_content_iv,snapshot_validated,script_version,safety_hash,safety_status) VALUES($1,$2,$3,'free',now(),$4,$5,true,7,$6,'approved')",[oldSnapshot,hub,'Approved snapshot',oldEnc.enc,oldEnc.iv,crypto.sha256(opaque)]);
   await service.runOnce();
-  check((await f.pool.query('SELECT safety_status FROM developer_listings WHERE project_id=$1',[oldSnapshot])).rows[0].safety_status==='approved','An exact approved old snapshot is preserved without borrowing a newer original');
+  check((await f.pool.query('SELECT safety_status FROM developer_listings WHERE project_id=$1',[oldSnapshot])).rows[0].safety_status==='quarantined','Previous human approval cannot exempt an old snapshot without its original');
   await f.pool.query("UPDATE developer_listings SET safety_status='clear' WHERE project_id=$1",[oldSnapshot]);
   await f.pool.query('UPDATE developer_script_revalidation SET checked_at=$2 WHERE project_id=$1',[oldSnapshot,new Date(Date.now()-2*86400000)]);
   await service.runOnce();
-  check((await f.pool.query('SELECT safety_status FROM developer_listings WHERE project_id=$1',[oldSnapshot])).rows[0].safety_status==='review','An unapproved old opaque snapshot requires review');
+  check((await f.pool.query('SELECT safety_status FROM developer_listings WHERE project_id=$1',[oldSnapshot])).rows[0].safety_status==='quarantined','An unapproved old opaque snapshot is refused automatically');
   // Change the release exactly when the scanner returns, before the lock/recheck.
   const race=await seed('return 6'),nativeScan=safety.scanScript;let replace;
   safety.scanScript=(code,options)=>{

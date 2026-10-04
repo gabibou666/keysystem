@@ -27,7 +27,7 @@ async function settleQueued(f, result, cookie) {
   }
  } else if(job.status==='review') {status=202;data={success:true,...job.result,jobId:job.id,job};}
  else {
-  status={SCRIPT_INVALID:400,SCRIPT_UNSUPPORTED_STRONG:400,SCRIPT_TIMEOUT:422,SCRIPT_RESOURCE_LIMIT:422,SECURITY_BLOCKED:422,RELEASE_CHANGED:409,PROJECT_UNAVAILABLE:403,SCRIPT_CANCELLED:409}[job.error?.code]||503;
+  status={SCRIPT_INVALID:400,SCRIPT_UNSUPPORTED_STRONG:400,SCRIPT_TIMEOUT:422,SCRIPT_RESOURCE_LIMIT:422,SECURITY_BLOCKED:422,SECURITY_UNVERIFIED:422,RELEASE_CHANGED:409,PROJECT_UNAVAILABLE:403,SCRIPT_CANCELLED:409}[job.error?.code]||503;
   data={success:false,error:job.error?.message||'Job cancelled.',code:job.error?.code,...job.result,jobId:job.id,job};
  }
  return {...result,status,data,text:JSON.stringify(data),queuedStatus:202};

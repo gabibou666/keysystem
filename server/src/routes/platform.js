@@ -137,15 +137,16 @@ router.get('/projects/:projectId', requireDeveloper, ownProject, wrap(async (req
   const [licenses, events, script, stats,submissions,metrics,securityChecks] = await Promise.all([
     pool.query('SELECT id,key_prefix,note,expires_at,revoked,(hwid_hash IS NOT NULL) AS bound,created_at FROM developer_licenses WHERE project_id=$1 ORDER BY created_at DESC LIMIT 100', [id]),
     pool.query('SELECT success,reason,executor,created_at FROM developer_events WHERE project_id=$1 ORDER BY created_at DESC LIMIT 30', [id]),
-    pool.query('SELECT version,updated_at,validated,obfuscated,target_mode,place_id,safety_status,safety_hash,filename,original_size_bytes,output_size_bytes,obfuscation_level,(original_content_enc IS NOT NULL) AS original_available FROM developer_scripts WHERE project_id=$1', [id]),
+    pool.query('SELECT version,build_hash,updated_at,validated,obfuscated,target_mode,place_id,safety_status,safety_hash,scanner_version,filename,original_size_bytes,output_size_bytes,obfuscation_level,(original_content_enc IS NOT NULL) AS original_available FROM developer_scripts WHERE project_id=$1', [id]),
     pool.query(`SELECT COUNT(*)::int AS total,COUNT(*) FILTER (WHERE NOT revoked AND expires_at>now())::int AS active FROM developer_licenses WHERE project_id=$1`, [id]),
     pool.query("SELECT id,status,findings,created_at FROM developer_moderation_submissions WHERE project_id=$1 AND owner_id=$2 AND status='pending' ORDER BY created_at DESC LIMIT 10",[id,req.developerId]),
     pool.query('SELECT views,executions FROM developer_script_metrics WHERE project_id=$1',[id]),
     pool.query('SELECT target_kind,checked_at,result,findings FROM developer_script_revalidation WHERE project_id=$1 ORDER BY checked_at DESC',[id]),
   ]);
+  const automaticVerified=!!script.rows[0]&&await moderation.deliveryAllowed(id,script.rows[0].version,script.rows[0].build_hash);
   res.json({ success: true, project: { ...projectView(req.project), checkpointCallbackUrl: callbackUrl(req, req.project), checkpointSetup: providers.setup(req.project, site(req), callbackUrl(req, req.project)) }, licenses: licenses.rows, events: events.rows,
     metrics:scriptMetrics.view(metrics.rows[0]),securityChecks:securityChecks.rows.map(c=>({target:c.target_kind,checkedAt:c.checked_at,result:c.result,findings:moderation.findings(c.findings)})),pendingSubmissions:submissions.rows.map(s=>({id:s.id,status:s.status,findings:moderation.findings(s.findings),createdAt:s.created_at})),
-    script: script.rows[0] ? {version:script.rows[0].version,updated_at:script.rows[0].updated_at,updatedAt:script.rows[0].updated_at,filename:script.rows[0].filename,originalAvailable:script.rows[0].original_available,originalSizeBytes:script.rows[0].original_size_bytes,outputSizeBytes:script.rows[0].output_size_bytes,obfuscationLevel:script.rows[0].obfuscation_level,validated:script.rows[0].validated,obfuscated:script.rows[0].obfuscated,securityStatus:script.rows[0].safety_status,securityHash:script.rows[0].safety_hash,targetMode:script.rows[0].target_mode,placeId:script.rows[0].place_id?Number(script.rows[0].place_id):null} : null, stats: stats.rows[0] });
+    script: script.rows[0] ? {version:script.rows[0].version,updated_at:script.rows[0].updated_at,updatedAt:script.rows[0].updated_at,filename:script.rows[0].filename,originalAvailable:script.rows[0].original_available,originalSizeBytes:script.rows[0].original_size_bytes,outputSizeBytes:script.rows[0].output_size_bytes,obfuscationLevel:script.rows[0].obfuscation_level,validated:script.rows[0].validated,obfuscated:script.rows[0].obfuscated,securityStatus:script.rows[0].safety_status,securityHash:script.rows[0].safety_hash,scannerVersion:script.rows[0].scanner_version,automaticVerified,targetMode:script.rows[0].target_mode,placeId:script.rows[0].place_id?Number(script.rows[0].place_id):null} : null, stats: stats.rows[0] });
 }));
 router.patch('/projects/:projectId', sameOrigin, requireDeveloper, ownProject, wrap(async (req, res) => {
   const { name, description, durationHours, hwidBinding } = req.body;
@@ -266,15 +267,19 @@ router.post('/v1/check', wrap(async (req, res) => {
       if (typeof hwid !== 'string' || hwid.trim().length < 8 || hwid.length > 256) reason = 'hwid_required';
       else { hwidHash = crypto.hashToken(projectId + ':' + hwid.trim()); if (license.hwid_hash && license.hwid_hash !== hwidHash) reason = 'bound_to_other_device'; }
     }
-    const script = !reason ? await client.query('SELECT content_enc,content_iv,version,validated,obfuscated,safety_status FROM developer_scripts WHERE project_id=$1 AND disabled=false AND deleted_at IS NULL', [projectId]) : { rows: [] };
+    const script = !reason ? await client.query('SELECT content_enc,content_iv,version,validated,obfuscated,safety_status,build_hash FROM developer_scripts WHERE project_id=$1 AND disabled=false AND deleted_at IS NULL', [projectId]) : { rows: [] };
     if (!reason && req.body.loadScript === true && !script.rows[0]) reason = 'no_script';
     if (!reason && req.body.loadScript === true && (!script.rows[0].validated)) reason = 'build_required';
-    if(!reason&&script.rows[0]&&!moderation.approved(script.rows[0].safety_status))reason='security_review_required';
+    if(!reason&&script.rows[0]&&!await moderation.deliveryAllowed(projectId,script.rows[0].version,script.rows[0].build_hash,client))reason='security_review_required';
+    let content;
+    if(!reason&&req.body.loadScript===true){
+      content=crypto.decryptAES(script.rows[0].content_enc,script.rows[0].content_iv);
+      if(crypto.sha256(content)!==script.rows[0].build_hash){reason='security_review_required';content=undefined;}
+    }
     if (!license) { await client.query('ROLLBACK'); return res.status(401).json({ success: false, reason }); }
     if (!reason && hwidHash && !license.hwid_hash) await client.query('UPDATE developer_licenses SET hwid_hash=$1 WHERE id=$2', [hwidHash, license.id]);
     await client.query('INSERT INTO developer_events(project_id,license_id,success,reason,executor) VALUES($1,$2,$3,$4,$5)',
       [projectId, license.id, !reason, reason || 'valid', typeof executor === 'string' ? executor.slice(0, 40) : '']);
-    const content = !reason && req.body.loadScript === true ? crypto.decryptAES(script.rows[0].content_enc, script.rows[0].content_iv) : undefined;
     if(content!==undefined)await scriptMetrics.record(client,projectId,'executions',scriptMetrics.executionReceipt(license.id,req.body.executionId||nodeCrypto.randomUUID()));
     await client.query('COMMIT');
     if (reason) return res.status(403).json({ success: false, reason });

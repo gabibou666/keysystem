@@ -18,7 +18,7 @@
   function title(text) { document.title = text + ' — AUDIT HUB'; document.querySelector('link[rel="canonical"]').href = location.origin + location.pathname; }
   const date = value => new Date(value).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
   const mobileLabel=l=>l.mobileSupport==='yes'?'Mobile: Yes':l.mobileSupport==='no'?'Mobile: No':'Mobile: Not declared';
-  const safetyLabel=l=>l.securityStatus==='approved'?'Moderator approved':l.securityStatus==='clear'?'Analysis: no alert detected':'Security check pending';
+  const safetyLabel=l=>l.securityStatus==='clear'?'Analysis: no alert detected':'Security check pending';
   const metricLabel=l=>Number(l.views||0).toLocaleString()+' views · '+Number(l.executions||0).toLocaleString()+' executions (script deliveries)';
   function publicLink(id,value,discord=false){
     const element=$(id);element.hidden=true;element.removeAttribute('href');
@@ -78,7 +78,7 @@
     $('publicScriptCoverImage').src=cover(l.projectId);
     $('publicScriptAccess').textContent = l.accessMode === 'free' ? 'Free access' : 'License required';
     $('publicScriptMobile').textContent=mobileLabel(l);$('publicScriptKeys').textContent=l.hasKeySystem?'Key system: Yes':'Key system: No';$('publicScriptSafety').textContent=safetyLabel(l);
-    $('publicScriptSafetyHint').textContent='Mobile support is declared by the developer. Security checks and moderator approval do not guarantee that a script is harmless. Obfuscated code can hide behavior; report anything suspicious.';
+    $('publicScriptSafetyHint').textContent='Mobile support is declared by the developer. Automatic server checks do not guarantee that a script is harmless. Obfuscated code can hide behavior; report anything suspicious.';
     publicLink('publicScriptDiscord',l.discordUrl,true);state.projectId=l.projectId; $('reportCurrentScript').dataset.report=l.projectId; $('reportCurrentScript').dataset.reportTitle=l.title;
     $('publicScriptUpdated').textContent = 'Updated ' + date(l.updatedAt); $('scriptHubLink').href = '/developers/' + encodeURIComponent(l.hubSlug);
     const metrics=document.createElement('p');metrics.className='muted-copy script-metrics';metrics.textContent=metricLabel(l);$('publicScriptUpdated').after(metrics);

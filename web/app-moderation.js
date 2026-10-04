@@ -12,7 +12,7 @@
   const date=value=>new Date(value).toLocaleString();
   async function overview(){const data=await api('/overview');$('moderationPending').textContent=data.pending;$('moderationReports').textContent=data.reports;$('moderationQuarantined').textContent=data.quarantined;}
   function render(item){
-    if(state.tab==='queue')return `<article class="moderation-item"><h3>Held release / v${esc(item.version)}</h3><p class="mono">Project ${esc(item.projectId)}</p><p class="muted-copy">${esc(item.hash)} / ${esc(date(item.createdAt))}</p><span class="status-pill">${esc(item.status)}</span><ul>${(item.findings||[]).map(f=>`<li>${esc(f.severity)} / ${esc(f.rule)} / line ${esc(f.line)}</li>`).join('')}</ul><label class="field"><span>Decision note (no secrets or code)</span><input class="p-input" data-note="${esc(item.id)}" maxlength="500"></label><div class="checkpoint-actions"><button class="action-button" data-decision="approve" data-id="${esc(item.id)}" type="button">Approve this release</button><button class="action-button" data-decision="reject" data-id="${esc(item.id)}" type="button">Reject release</button></div></article>`;
+    if(state.tab==='queue')return `<article class="moderation-item"><h3>Held release / v${esc(item.version)}</h3><p class="mono">Project ${esc(item.projectId)}</p><p class="muted-copy">${esc(item.hash)} / ${esc(date(item.createdAt))}</p><span class="status-pill">${esc(item.status)}</span><ul>${(item.findings||[]).map(f=>`<li>${esc(f.severity)} / ${esc(f.rule)} / line ${esc(f.line)}</li>`).join('')}</ul><p class="notice">Script validation is automatic on the server. This record cannot be approved by a moderator. Upload readable source that passes all checks.</p></article>`;
     if(state.tab==='reports')return `<article class="moderation-item"><h3>${esc(item.category)}</h3><p class="mono">Project ${esc(item.projectId)}</p><p>${esc(item.description||'No additional detail.')}</p><p class="muted-copy">${esc(item.status)} / ${esc(date(item.createdAt))}</p><button class="action-button" data-resolve="${esc(item.id)}" type="button">Resolve report</button></article>`;
     return `<article class="moderation-item"><h3>${esc(item.action)}</h3><p class="muted-copy">${esc(date(item.createdAt))}</p><p class="mono">Actor: ${esc(item.actorId||'System')}<br>Project: ${esc(item.projectId||'-')}<br>Version: ${esc(item.version||'-')}<br>Hash: ${esc(item.hash||'-')}</p><pre>${esc(JSON.stringify(item.details||{},null,2))}</pre></article>`;
   }
@@ -38,8 +38,7 @@
   $('moderationItems').addEventListener('click',event=>{
     const button=event.target.closest('button');if(!button)return;
     busy(button,async()=>{
-      if(button.dataset.decision){const note=button.closest('article').querySelector('[data-note]').value.trim();if(!note)throw Error('Add a decision note first.');await api('/submissions/'+button.dataset.id+'/decision','POST',{decision:button.dataset.decision,note});}
-      else if(button.dataset.resolve)await api('/reports/'+button.dataset.resolve+'/resolve','POST',{note:'Reviewed by moderator.'});
+      if(button.dataset.resolve)await api('/reports/'+button.dataset.resolve+'/resolve','POST',{note:'Reviewed by moderator.'});
       await Promise.all([overview(),list(state.page)]);message('Decision recorded.');
     });
   });

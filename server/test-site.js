@@ -92,11 +92,17 @@ async function run() {
       await f.pool.query('INSERT INTO developer_projects(id,owner_id,name,api_token_hash) VALUES($1,$2,$3,$4)', [id, '900000000000000001', 'PRIVATE_PROJECT_' + i, 'PRIVATE_TOKEN_' + i]);
       if (i === 9) continue;
       await f.pool.query("INSERT INTO developer_scripts(project_id,content_enc,content_iv,validated,obfuscated,safety_status) VALUES($1,'PRIVATE_CIPHER','PRIVATE_IV',true,true,$2)", [id, i === 5 ? 'quarantined' : i === 1 ? 'approved' : 'clear']);
+      const hash=require('./src/services/crypto').sha256('fixture-'+i),moderation=require('./src/services/moderation');
+      await f.pool.query('UPDATE developer_scripts SET validated=$2,build_hash=$3,safety_hash=$3,scanner_version=$4 WHERE project_id=$1',[id,i!==6,hash,require('./src/services/script-safety').SCANNER_VERSION]);
+      await moderation.recordAutomaticClear(f.pool,id,'current',1,hash);
       await f.pool.query("INSERT INTO developer_listings(project_id,hub_id,title,published_at,snapshot_validated,snapshot_obfuscated,safety_status) VALUES($1,$2,$3,$4,$5,$6,$7)", [id, i === 8 ? hiddenHub : hub, 'Visible script ' + i, i === 3 ? null : new Date(), i !== 6, i !== 7, i === 4 ? 'quarantined' : 'clear']);
     }
     for (let i = 0; i < 100; i++) await f.pool.query('INSERT INTO developer_licenses(id,project_id,key_hash,key_prefix,note,expires_at) VALUES($1,$2,$3,$4,$5,$6)', [randomUUID(), projects[i % projects.length], 'PRIVATE_KEY_' + i, 'ah_test', 'PRIVATE_LICENSE_NOTE', new Date(Date.now() + 86400000)]);
     const publicStats = await request('/api/site/stats');
-    check(publicStats.status === 200 && JSON.stringify(publicStats.data) === JSON.stringify({ visible: true, projects: 10, licenses: 100, scripts: 4 }), 'Database-backed stats count real projects, issued licences and only publicly eligible scripts');
+    check(publicStats.status === 200 && JSON.stringify(publicStats.data) === JSON.stringify({ visible: true, projects: 10, licenses: 100, scripts: 3 }), 'Database-backed stats count only automatically verified eligible scripts and exclude historical approvals');
+    await f.pool.query("UPDATE developer_script_revalidation SET scanner_version='static-luau-3' WHERE project_id=$1 AND target_kind='current'",[projects[2]]);
+    check(!(await createSiteStats({pool:f.pool}).get()).visible,'Old scanner proofs cannot inflate public script statistics');
+    await f.pool.query('UPDATE developer_script_revalidation SET scanner_version=$2 WHERE project_id=$1',[projects[2],require('./src/services/script-safety').SCANNER_VERSION]);
     check(publicStats.headers.get('cache-control') === 'no-store' && !JSON.stringify(publicStats.data).includes('PRIVATE'), 'Public statistics expose only aggregate numbers and avoid a second cache lifetime');
     await f.pool.query('UPDATE developer_hubs SET published_at=NULL WHERE id=$1', [hub]);
     check((await request('/api/site/stats')).data.visible, 'Repeated HTTP stats are served from the ten-minute cache');

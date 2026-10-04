@@ -5,6 +5,7 @@ const {randomUUID}=require('crypto');
 const scriptJobs=require('../services/publication-queue');
 const profileFields=require('../services/public-profile').fields;
 const moderation=require('../services/moderation');
+const {proofJoins:snapshotProofJoin,listingVerified}=require('../services/script-publication-policy');
 const metrics=require('../services/script-metrics');
 const router=express.Router();
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -27,10 +28,10 @@ const listingColumns=`l.project_id,l.title,l.description,l.game,l.access_mode,l.
   CASE WHEN l.access_mode='licensed' THEN COALESCE(s.obfuscated,false) ELSE l.snapshot_obfuscated END AS snapshot_obfuscated,
   CASE WHEN l.access_mode='licensed' THEN s.safety_status ELSE l.safety_status END AS security_status,
   p.key_ui_mode,h.slug AS hub_slug,h.name AS hub_name,a.username AS author,${checkpointConfiguredSql} AS checkpoints_configured`;
-const joinListings='FROM developer_listings l JOIN developer_hubs h ON h.id=l.hub_id JOIN developer_accounts a ON a.discord_id=h.owner_id JOIN developer_projects p ON p.id=l.project_id LEFT JOIN developer_scripts s ON s.project_id=p.id LEFT JOIN developer_script_metrics m ON m.project_id=p.id';
+const joinListings='FROM developer_listings l JOIN developer_hubs h ON h.id=l.hub_id JOIN developer_accounts a ON a.discord_id=h.owner_id JOIN developer_projects p ON p.id=l.project_id LEFT JOIN developer_scripts s ON s.project_id=p.id LEFT JOIN developer_script_metrics m ON m.project_id=p.id '+snapshotProofJoin;
 const publisherActive="a.banned_at IS NULL AND (a.suspended_until IS NULL OR a.suspended_until<=now())";
 const projectActive="p.disabled=false AND p.hidden=false AND p.deleted_at IS NULL AND s.disabled=false AND s.deleted_at IS NULL";
-const publicListing=`l.published_at IS NOT NULL AND h.published_at IS NOT NULL AND l.snapshot_validated=true AND l.safety_status IN ('clear','approved') AND s.safety_status IN ('clear','approved') AND ${publisherActive} AND ${projectActive}`;
+const publicListing=`l.published_at IS NOT NULL AND h.published_at IS NOT NULL AND ${listingVerified} AND ${publisherActive} AND ${projectActive}`;
 router.use((req,res,next)=>{res.set('Cache-Control','no-store');next();});
 router.use(rateLimit({windowMs:60000,max:120,standardHeaders:true,legacyHeaders:false,message:{success:false,error:'Too many requests. Try again in a minute.'}}));
 const owner=wrap(async(req,res,next)=>{
@@ -94,9 +95,9 @@ router.put('/projects/:projectId',sameOrigin,owner,wrap(async(req,res)=>{
     const project=(await client.query('SELECT id,disabled,hidden,deleted_at FROM developer_projects WHERE id=$1 AND owner_id=$2 FOR UPDATE',[req.params.projectId,req.account.discord_id])).rows[0];
     if(!project){await client.query('ROLLBACK');return fail(res,404,'Project not found.');}
     if(project.disabled || project.hidden || project.deleted_at){await client.query('ROLLBACK');return fail(res,403,'This publication was restricted by the site team. Contact support.');}
-    const script=(await client.query('SELECT content_enc,content_iv,version,validated,obfuscated,target_mode,place_id,safety_status,safety_hash FROM developer_scripts WHERE project_id=$1',[project.id])).rows[0];
+    const script=(await client.query('SELECT content_enc,content_iv,version,validated,obfuscated,target_mode,place_id,safety_status,safety_hash,build_hash FROM developer_scripts WHERE project_id=$1',[project.id])).rows[0];
     if(published&&!script){await client.query('ROLLBACK');return fail(res,400,'Upload a script before publishing this listing.');}
-    if(published&&!moderation.approved(script.safety_status)){await client.query('ROLLBACK');return fail(res,409,'This release is held for moderation.');}
+    if(published&&!await moderation.deliveryAllowed(project.id,script.version,script.build_hash,client)){await client.query('ROLLBACK');return fail(res,409,'This release has not passed automatic verification.');}
     if(!hub){
       const id=randomUUID();
       hub=(await client.query(`INSERT INTO developer_hubs(id,owner_id,slug,name,description,published_at,auto_profile) VALUES($1,$2,$3,$4,'',$5,true)
@@ -119,8 +120,8 @@ router.get('/hubs',wrap(async(req,res)=>{
   if(!Number.isSafeInteger(page)||page<1||page>10000||typeof q!=='string'||q.length>100||!['recent','name'].includes(sort))return fail(res,400,'Invalid catalogue search or page.');
   // Escape LIKE wildcards so a user search is treated as literal text.
   const query='%'+q.replace(/[\\%_]/g,'\\$&')+'%';
-  const eligible=`l.published_at IS NOT NULL AND l.snapshot_validated=true AND l.safety_status IN ('clear','approved') AND s.safety_status IN ('clear','approved') AND ${projectActive}`;
-  const eligibleFrom='FROM developer_listings l JOIN developer_scripts s ON s.project_id=l.project_id JOIN developer_projects p ON p.id=l.project_id';
+  const eligible=`l.published_at IS NOT NULL AND ${listingVerified} AND ${projectActive}`;
+  const eligibleFrom='FROM developer_listings l JOIN developer_scripts s ON s.project_id=l.project_id JOIN developer_projects p ON p.id=l.project_id '+snapshotProofJoin;
   const where=`h.published_at IS NOT NULL AND ${publisherActive} AND (h.name ILIKE $1 OR h.description ILIKE $1 OR a.username ILIKE $1 OR h.id IN (SELECT l.hub_id ${eligibleFrom} WHERE ${eligible} AND l.game ILIKE $1))`;
   const total=(await pool.query(`SELECT count(*)::int AS total FROM developer_hubs h JOIN developer_accounts a ON a.discord_id=h.owner_id WHERE ${where}`,[query])).rows[0].total;
   const order=sort==='name'?'h.name ASC,h.id':'h.published_at DESC,h.id';
@@ -171,9 +172,10 @@ router.get('/scripts/:projectId/source',wrap(async(req,res)=>{
   try{
     await client.query('BEGIN');
     await client.query('SELECT id FROM developer_projects WHERE id=$1 FOR KEY SHARE',[req.params.projectId]);
-    const listing=(await client.query(`SELECT l.snapshot_content_enc,l.snapshot_content_iv ${joinListings} WHERE l.project_id=$1 AND ${publicListing} AND l.access_mode='free'`,[req.params.projectId])).rows[0];
+    const listing=(await client.query(`SELECT l.snapshot_content_enc,l.snapshot_content_iv,l.safety_hash ${joinListings} WHERE l.project_id=$1 AND ${publicListing} AND l.access_mode='free'`,[req.params.projectId])).rows[0];
     if(!listing?.snapshot_content_enc){await client.query('ROLLBACK');return fail(res,404,'Script not found.');}
     const content=crypto.decryptAES(listing.snapshot_content_enc,listing.snapshot_content_iv);
+    if(crypto.sha256(content)!==listing.safety_hash){await client.query('ROLLBACK');return fail(res,404,'Script not found.');}
     if(req.method!=='HEAD')await metrics.record(client,req.params.projectId,'executions',metrics.visitorReceipt(req,req.params.projectId,'executions'));
     await client.query('COMMIT');
     res.set('X-Content-Type-Options','nosniff').type('text/plain').send(content);

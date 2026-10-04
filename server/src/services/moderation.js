@@ -20,25 +20,35 @@ async function audit(db,event){
     SELECT $1,actor.actor_ref,$3,project.project_ref,CASE WHEN ${erased} THEN NULL ELSE $5::integer END,CASE WHEN ${erased} THEN NULL ELSE $6::text END,$7::jsonb,$8::integer,CASE WHEN ${erased} THEN '' ELSE $9::text END,subject.subject_ref,CASE WHEN ${erased} THEN NULL ELSE $11::text END
     FROM (SELECT 1 AS anchor) base LEFT JOIN (SELECT discord_id AS actor_ref FROM developer_accounts) actor ON actor.actor_ref=$2 LEFT JOIN (SELECT id AS project_ref FROM developer_projects) project ON project.project_ref=$4 LEFT JOIN (SELECT discord_id AS subject_ref FROM developer_accounts) subject ON subject.subject_ref=$10`,[randomUUID(),event.actorId||null,event.action,event.projectId||null,Number.isSafeInteger(event.version)?event.version:null,hash,JSON.stringify(findings(event.findings).map(x=>x.rule)),Number.isInteger(event.statusCode)&&event.statusCode>=100&&event.statusCode<=599?event.statusCode:null,privateText(event.note),typeof event.subjectId==='string'&&event.subjectId.length<=255?event.subjectId:null,['user','moderator','admin'].includes(event.role)?event.role:null]);
 }
-async function stage(db,project,build,scan,actorId){
-  if(scan.status!=='review')throw new Error('Only review candidates can enter the queue');
-  const id=randomUUID();
-  await db.query(`INSERT INTO developer_moderation_submissions(id,project_id,owner_id,base_version,base_hash,version,content_enc,content_iv,build_hash,target_mode,place_id,builder_version,scanner_version,findings,status,job_id,obfuscated,obfuscation_level)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,'pending',$15,$16,$17)`,[id,project.id,actorId,project.version||0,project.build_hash||null,(project.version||0)+1,build.content_enc,build.content_iv,build.build_hash,build.target_mode,build.place_id||null,build.builder_version,scan.scannerVersion,JSON.stringify(findings(scan.findings)),build.job_id||null,build.obfuscated===undefined?true:!!build.obfuscated,build.obfuscation_level||null]);
-  await audit(db,{actorId,action:'upload.review',projectId:project.id,version:(project.version||0)+1,hash:build.build_hash,findings:scan.findings});
-  return id;
+async function stage(){
+  throw Object.assign(new Error('Human review submissions are disabled. Submit readable source for automatic verification.'),{status:409,code:'AUTOMATIC_VERIFICATION_ONLY'});
 }
-function approved(status){return status==='clear'||status==='approved';}
+function approved(status){return status==='clear';}
+async function recordAutomaticClear(db,projectId,kind,version,hash,items=[]){
+  if(!['current','free_snapshot'].includes(kind)||!Number.isSafeInteger(version)||version<1||!/^[a-f0-9]{64}$/.test(hash||''))throw new Error('Invalid automatic scan proof');
+  await db.query(`INSERT INTO developer_script_revalidation(project_id,target_kind,content_version,content_hash,scanner_version,checked_at,result,findings)
+   VALUES($1,$2,$3,$4,$5,now(),'clear',$6::jsonb) ON CONFLICT(project_id,target_kind) DO UPDATE SET content_version=$3,content_hash=$4,scanner_version=$5,checked_at=now(),result='clear',findings=$6::jsonb`,
+   [projectId,kind,version,hash,require('./script-safety').SCANNER_VERSION,JSON.stringify(findings(items))]);
+}
 async function deliveryAllowed(projectId,version,hash,db=pool){
-  const row=(await db.query('SELECT safety_status,safety_hash,version FROM developer_scripts WHERE project_id=$1',[projectId])).rows[0];
-  return !!row&&approved(row.safety_status)&&row.version===version&&row.safety_hash===hash;
+  const row=(await db.query(`SELECT s.safety_status,s.safety_hash,s.build_hash,s.version,s.validated,s.scanner_version,
+    r.result AS proof_result,r.content_version AS proof_version,r.content_hash AS proof_hash,r.scanner_version AS proof_scanner
+    FROM developer_scripts s LEFT JOIN developer_script_revalidation r ON r.project_id=s.project_id AND r.target_kind='current' WHERE s.project_id=$1`,[projectId])).rows[0];
+  const scanner=require('./script-safety').SCANNER_VERSION;
+  return !!row&&approved(row.safety_status)&&row.validated===true&&row.version===version&&row.safety_hash===hash&&row.build_hash===hash&&row.scanner_version===scanner
+    &&row.proof_result==='clear'&&row.proof_version===version&&row.proof_hash===hash&&row.proof_scanner===scanner;
 }
 async function snapshotAllowed(projectId,status,hash,db=pool){
-  const row=(await db.query('SELECT safety_status FROM developer_scripts WHERE project_id=$1',[projectId])).rows[0];
-  return !!row&&row.safety_status!=='quarantined'&&approved(status)&&/^[a-f0-9]{64}$/.test(hash||'');
+  if(!approved(status)||!/^[a-f0-9]{64}$/.test(hash||''))return false;
+  const row=(await db.query(`SELECT s.safety_status AS current_status,l.safety_status,l.safety_hash,l.script_version,l.snapshot_validated,
+    r.result,r.content_version,r.content_hash,r.scanner_version FROM developer_listings l JOIN developer_scripts s ON s.project_id=l.project_id
+    LEFT JOIN developer_script_revalidation r ON r.project_id=l.project_id AND r.target_kind='free_snapshot' WHERE l.project_id=$1 AND l.access_mode='free' AND l.published_at IS NOT NULL`,[projectId])).rows[0];
+  return !!row&&row.current_status!=='quarantined'&&approved(row.safety_status)&&row.snapshot_validated===true&&row.safety_hash===hash
+    &&row.result==='clear'&&row.content_version===row.script_version&&row.content_hash===hash&&row.scanner_version===require('./script-safety').SCANNER_VERSION;
 }
 async function decide(id,decision,actorId,note,request){
   if(!['approve','reject'].includes(decision))return {error:'Invalid decision',status:400};
+  if(decision==='approve')return {error:'Human approval is unavailable. Submit readable source for automatic verification.',code:'AUTOMATIC_VERIFICATION_ONLY',status:409};
   const db=await pool.connect();
   try{
     await db.query('BEGIN');
@@ -57,19 +67,12 @@ async function decide(id,decision,actorId,note,request){
     const s=(await db.query('SELECT * FROM developer_moderation_submissions WHERE id=$1 FOR UPDATE',[id])).rows[0];
     if(!s){await db.query('ROLLBACK');return {error:'Submission not found',status:404};}
     if(s.status!=='pending'){await db.query('ROLLBACK');return {error:'Submission already decided',status:409};}
-    const current=(await db.query('SELECT version,build_hash FROM developer_scripts WHERE project_id=$1',[s.project_id])).rows[0];
-    let state=decision==='reject'?'rejected':'approved';
-    if(decision==='approve'&&((current?.version||0)!==s.base_version||(current?.build_hash||null)!==s.base_hash))state='stale';
+    let state='rejected';
     if(s.job_id)state=await require('./publication-queue').reviewDecision(db,s,state);
-    if(state==='approved'&&!s.job_id){
-      await db.query(`INSERT INTO developer_scripts(project_id,content_enc,content_iv,version,validated,obfuscated,target_mode,place_id,builder_version,build_hash,safety_status,safety_hash,scanner_version)
-       VALUES($1,$2,$3,$4,true,$10,$5,$6,$7,$8,'approved',$8,$9)
-       ON CONFLICT(project_id) DO UPDATE SET content_enc=$2,content_iv=$3,version=$4,validated=true,obfuscated=$10,target_mode=$5,place_id=$6,builder_version=$7,build_hash=$8,safety_status='approved',safety_hash=$8,scanner_version=$9,updated_at=now()`,[s.project_id,s.content_enc,s.content_iv,s.version,s.target_mode,s.place_id,s.builder_version,s.build_hash,s.scanner_version,s.obfuscated]);
-    }
     await db.query('UPDATE developer_moderation_submissions SET status=$2,content_enc=NULL,content_iv=NULL,decision_note=$3,decided_at=now() WHERE id=$1',[id,state,privateText(note)]);
     await audit(db,{actorId,action:'submission.'+state,projectId:s.project_id,version:s.version,hash:s.build_hash,findings:s.findings,note});
     await access.audit(db,{actorId,actorRole,action:'submission.'+state,targetType:'project',targetId:s.project_id,reason:privateText(note),before:{version:s.base_version},after:{version:s.version,status:state},ip:request?.ip||''});
     await db.query('COMMIT');return state==='stale'?{error:'Active release changed. Upload again.',status:409}:{success:true,status:state};
   }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
 }
-module.exports={role,audit,stage,decide,deliveryAllowed,snapshotAllowed,approved,findings,privateText,ACTIONS,lockAdminChanges,isBootstrapAdmin:id=>new Set(String(process.env.MODERATION_ADMIN_IDS||'').split(',').map(x=>x.trim())).has(id),hasBootstrapAdmin:()=>!!String(process.env.MODERATION_ADMIN_IDS||'').trim()};
+module.exports={role,audit,stage,decide,recordAutomaticClear,deliveryAllowed,snapshotAllowed,approved,findings,privateText,ACTIONS,lockAdminChanges,isBootstrapAdmin:id=>new Set(String(process.env.MODERATION_ADMIN_IDS||'').split(',').map(x=>x.trim())).has(id),hasBootstrapAdmin:()=>!!String(process.env.MODERATION_ADMIN_IDS||'').trim()};

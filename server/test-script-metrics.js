@@ -12,9 +12,12 @@ async function run(){
     const id=(await req('/api/platform/projects','POST',{name:'Metrics'})).data.project.id;
     const other=(await req('/api/platform/projects','POST',{name:'Independent'},f.cookies[1])).data.project.id;
     const hub=randomUUID(),code=crypto.encryptAES('return 42'),hash=crypto.sha256('return 42');
-    await f.pool.query("INSERT INTO developer_scripts(project_id,content_enc,content_iv,validated,obfuscated,safety_status,build_hash,safety_hash) VALUES($1,$2,$3,true,false,'clear',$4,$4)",[id,code.enc,code.iv,hash]);
+    await f.pool.query("INSERT INTO developer_scripts(project_id,content_enc,content_iv,validated,obfuscated,safety_status,build_hash,safety_hash,scanner_version) VALUES($1,$2,$3,true,false,'clear',$4,$4,$5)",[id,code.enc,code.iv,hash,require('./src/services/script-safety').SCANNER_VERSION]);
     await f.pool.query("INSERT INTO developer_hubs(id,owner_id,slug,name,published_at) VALUES($1,$2,'metrics-creator','Creator',now())",[hub,'900000000000000001']);
-    await f.pool.query("INSERT INTO developer_listings(project_id,hub_id,title,access_mode,published_at,snapshot_content_enc,snapshot_content_iv,snapshot_validated,safety_status,safety_hash) VALUES($1,$2,'Metrics script','licensed',now(),$3,$4,true,'clear',$5)",[id,hub,code.enc,code.iv,hash]);
+    await f.pool.query("INSERT INTO developer_listings(project_id,hub_id,title,access_mode,published_at,snapshot_content_enc,snapshot_content_iv,snapshot_validated,safety_status,safety_hash,script_version) VALUES($1,$2,'Metrics script','licensed',now(),$3,$4,true,'clear',$5,1)",[id,hub,code.enc,code.iv,hash]);
+    const moderation=require('./src/services/moderation');
+    await moderation.recordAutomaticClear(f.pool,id,'current',1,hash);
+    await moderation.recordAutomaticClear(f.pool,id,'free_snapshot',1,hash);
     const path='/api/catalog/scripts/'+id;
     check((await req(path)).data.listing.views===0,'Reading metadata does not manufacture a view');
     check((await req(path+'/view','POST',{},'', 'https://foreign.example')).status===403,'Foreign-origin view refused');
@@ -41,7 +44,52 @@ async function run(){
     check((await req(path+'/view','POST',{})).status===404,'Quarantined public view refused');
     check((await req('/api/platform/projects/'+id)).data.metrics.executions===2,'Quarantine never increments execution');
     await f.pool.query("UPDATE developer_scripts SET safety_status='clear' WHERE project_id=$1",[id]);
+    const fresh=(await req('/api/platform/projects/'+id+'/licenses','POST',{count:1})).data.licenses[0];
+    const refusedBody={...body,key:fresh.key,executionId:randomUUID()};
+    const scanner=require('./src/services/script-safety').SCANNER_VERSION;
+    const currentCases=[
+      ["UPDATE developer_scripts SET safety_status='approved' WHERE project_id=$1",'Historical human approval'],
+      ["UPDATE developer_scripts SET scanner_version='static-luau-3' WHERE project_id=$1",'Old scanner version'],
+      ["UPDATE developer_scripts SET safety_hash=NULL WHERE project_id=$1",'Missing release hash'],
+      ["UPDATE developer_script_revalidation SET content_version=2 WHERE project_id=$1 AND target_kind='current'",'Proof for another version'],
+      ["UPDATE developer_script_revalidation SET content_hash=NULL WHERE project_id=$1 AND target_kind='current'",'Proof without matching hash'],
+      ["UPDATE developer_script_revalidation SET scanner_version='static-luau-3' WHERE project_id=$1 AND target_kind='current'",'Proof from old scanner'],
+      ["UPDATE developer_script_revalidation SET result='approved' WHERE project_id=$1 AND target_kind='current'",'Historical approved proof'],
+      ["DELETE FROM developer_script_revalidation WHERE project_id=$1 AND target_kind='current'",'Missing automatic proof'],
+    ];
+    for(const [sql,label] of currentCases){
+      await f.pool.query(sql,[id]);
+      check((await req('/api/platform/v1/check','POST',refusedBody)).data.reason==='security_review_required',label+' cannot deliver');
+      check((await req(path)).status===404&&(await req(path+'/view','POST',{})).status===404,label+' cannot appear or count a public view');
+      check((await req('/api/platform/projects/'+id)).data.script.automaticVerified===false,label+' is shown as unverified to owner');
+      await f.pool.query("UPDATE developer_scripts SET safety_status='clear',safety_hash=$2,scanner_version=$3 WHERE project_id=$1",[id,hash,scanner]);
+      await moderation.recordAutomaticClear(f.pool,id,'current',1,hash);
+    }
+    const tampered=crypto.encryptAES('return 99');
+    await f.pool.query('UPDATE developer_scripts SET content_enc=$2,content_iv=$3 WHERE project_id=$1',[id,tampered.enc,tampered.iv]);
+    check((await req('/api/platform/v1/check','POST',refusedBody)).data.reason==='security_review_required','Changed encrypted payload cannot use a matching metadata proof');
+    await f.pool.query('UPDATE developer_scripts SET content_enc=$2,content_iv=$3 WHERE project_id=$1',[id,code.enc,code.iv]);
+    check((await f.pool.query('SELECT hwid_hash FROM developer_licenses WHERE id=$1',[fresh.id])).rows[0].hwid_hash===null,'All refused deliveries leave new device binding untouched');
+    check((await req('/api/platform/projects/'+id)).data.metrics.executions===2,'All unverified deliveries leave execution counters untouched');
     await f.pool.query("UPDATE developer_listings SET access_mode='free' WHERE project_id=$1",[id]);
+    for(const [sql,label] of [
+      ["UPDATE developer_listings SET safety_status='approved' WHERE project_id=$1",'Historical snapshot approval'],
+      ["UPDATE developer_listings SET script_version=2 WHERE project_id=$1",'Snapshot version changed'],
+      ["UPDATE developer_listings SET safety_hash=NULL WHERE project_id=$1",'Snapshot hash missing'],
+      ["UPDATE developer_script_revalidation SET content_version=2 WHERE project_id=$1 AND target_kind='free_snapshot'",'Snapshot proof version changed'],
+      ["UPDATE developer_script_revalidation SET content_hash=NULL WHERE project_id=$1 AND target_kind='free_snapshot'",'Snapshot proof hash missing'],
+      ["UPDATE developer_script_revalidation SET scanner_version='static-luau-3' WHERE project_id=$1 AND target_kind='free_snapshot'",'Old snapshot proof scanner'],
+      ["DELETE FROM developer_script_revalidation WHERE project_id=$1 AND target_kind='free_snapshot'",'Snapshot proof missing'],
+    ]){
+      await f.pool.query(sql,[id]);
+      check((await fetch(f.base+path+'/source')).status===404,label+' cannot deliver public source');
+      await f.pool.query("UPDATE developer_listings SET safety_status='clear',script_version=1,safety_hash=$2 WHERE project_id=$1",[id,hash]);
+      await moderation.recordAutomaticClear(f.pool,id,'free_snapshot',1,hash);
+    }
+    await f.pool.query('UPDATE developer_listings SET snapshot_content_enc=$2,snapshot_content_iv=$3 WHERE project_id=$1',[id,tampered.enc,tampered.iv]);
+    check((await fetch(f.base+path+'/source')).status===404,'Snapshot payload cannot differ from its verified hash');
+    await f.pool.query('UPDATE developer_listings SET snapshot_content_enc=$2,snapshot_content_iv=$3 WHERE project_id=$1',[id,code.enc,code.iv]);
+    check((await req('/api/platform/projects/'+id)).data.metrics.executions===2,'All refused snapshot deliveries leave execution counters untouched');
     await fetch(f.base+path+'/source',{method:'HEAD'});check((await req(path)).data.listing.executions===2,'HEAD probes never count as a free execution');
     const free=await fetch(f.base+path+'/source');check(free.status===200&&await free.text()==='return 42','Free delivery also counted');
     await fetch(f.base+path+'/source');check((await req(path)).data.listing.executions===3,'Free deliveries deduplicate daily network requests');

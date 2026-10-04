@@ -4,7 +4,7 @@ const { randomUUID } = require('crypto');
 const crypto = require('./crypto');
 const builder = require('./script-builder');
 const moderation = require('./moderation');
-const { scanScript, combineScans } = require('./script-safety');
+const { scanScript, combineScans, SCANNER_VERSION } = require('./script-safety');
 const MAX_SOURCE = 8 * 1024 * 1024;
 const MAX_OUTPUT = 32 * 1024 * 1024;
 // One worker leaves room for Node and the scanner on the 512 MiB hosting plan.
@@ -23,6 +23,7 @@ const safeMessages = {
  SCRIPT_BUSY: 'The build service is busy. Please try again later.',
  SCRIPT_UNAVAILABLE: 'The build tools are temporarily unavailable.',
  SECURITY_BLOCKED: 'This release was blocked by security checks.',
+ SECURITY_UNVERIFIED: 'Automatic verification could not establish an acceptable release. Simplify the readable source and its dependencies, then submit again. Human approval is unavailable.',
  RELEASE_CHANGED: 'The active release or publication changed. Submit the script again.',
  PROJECT_UNAVAILABLE: 'The account or project was restricted while this job was running.'
 };
@@ -93,7 +94,7 @@ async function enqueue({ projectId, ownerId, content, filename: name, body = {},
   let input = content;
   if (publication) {
    if(!script)throw fault(400,'SCRIPT_REQUIRED','Upload a source script before publishing.');
-   if(script&&!moderation.approved(script.safety_status))throw fault(409,'SECURITY_REVIEW_REQUIRED','This release is held for moderation. Upload a replacement and wait for review.');
+   if(script&&(!moderation.approved(script.safety_status)||script.scanner_version!==SCANNER_VERSION||script.safety_hash!==script.build_hash))throw fault(409,'SECURITY_REVIEW_REQUIRED','This release has not passed current automatic verification. Upload a readable replacement.');
    if (!script?.original_content_enc || !script.original_content_iv) throw fault(409, 'ORIGINAL_UNAVAILABLE', 'Upload the original source before publishing this older release.');
    input = crypto.decryptAES(script.original_content_enc, script.original_content_iv);
    name = script.filename || 'script.lua';
@@ -162,13 +163,16 @@ async function publishIn(db, job, script, account) {
   VALUES($1,$2,$3,$4,$5,$6,$7,now(),$8,$9,$10,true,$11,$12,$13,$14,$15)
   ON CONFLICT(project_id) DO UPDATE SET hub_id=$2,title=$3,description=$4,game=$5,access_mode=$6,mobile_support=$7,published_at=COALESCE(developer_listings.published_at,now()),snapshot_content_enc=$8,snapshot_content_iv=$9,script_version=$10,snapshot_validated=true,snapshot_obfuscated=$11,target_mode=$12,place_id=$13,safety_status=$14,safety_hash=$15,updated_at=now()`,
   [job.project_id, hub.id, intent.title, intent.description, script.target_mode === 'single' ? intent.game : 'Universal', intent.accessMode, intent.mobileSupport, script.content_enc, script.content_iv, script.version, script.obfuscated, script.target_mode, script.place_id, script.safety_status, script.safety_hash]);
+ if (intent.accessMode === 'free') await moderation.recordAutomaticClear(db,job.project_id,'free_snapshot',script.version,script.build_hash);
  await moderation.audit(db, { action: 'listing.published', actorId: job.owner_id, projectId: job.project_id, version: script.version, hash: script.safety_hash });
 }
-async function saveBuild(db, job, build, scan, encrypted, safety = 'clear') {
+async function saveBuild(db, job, build, scan, encrypted) {
+ if (scan.status !== 'clear' || scan.scannerVersion !== SCANNER_VERSION || scan.hash !== build.buildHash) throw fault(422,'SECURITY_UNVERIFIED',safeMessages.SECURITY_UNVERIFIED);
  const row = (await db.query(`INSERT INTO developer_scripts(project_id,content_enc,content_iv,validated,obfuscated,target_mode,place_id,builder_version,build_hash,safety_status,safety_hash,scanner_version,original_content_enc,original_content_iv,filename,original_size_bytes,output_size_bytes,obfuscation_level,build_duration_ms,version)
   VALUES($1,$2,$3,true,$4,$5,$6,$7,$8,$9,$8,$10,$11,$12,$13,$14,$15,$16,$17,$18)
   ON CONFLICT(project_id) DO UPDATE SET content_enc=$2,content_iv=$3,validated=true,obfuscated=$4,target_mode=$5,place_id=$6,builder_version=$7,build_hash=$8,safety_status=$9,safety_hash=$8,scanner_version=$10,original_content_enc=$11,original_content_iv=$12,filename=$13,original_size_bytes=$14,output_size_bytes=$15,obfuscation_level=$16,build_duration_ms=$17,version=$18,updated_at=now() RETURNING *`,
-  [job.project_id, encrypted.enc, encrypted.iv, !!build.obfuscated, build.targetMode, build.placeId, build.builderVersion, build.buildHash, safety, scan.scannerVersion, job.original_content_enc, job.original_content_iv, job.filename, job.original_size_bytes, build.outputSizeBytes, build.obfuscationLevel, build.buildDurationMs,build.buildHash===job.expected_hash?job.expected_version:job.expected_version+1])).rows[0];
+  [job.project_id, encrypted.enc, encrypted.iv, !!build.obfuscated, build.targetMode, build.placeId, build.builderVersion, build.buildHash, 'clear', scan.scannerVersion, job.original_content_enc, job.original_content_iv, job.filename, job.original_size_bytes, build.outputSizeBytes, build.obfuscationLevel, build.buildDurationMs,build.buildHash===job.expected_hash?job.expected_version:job.expected_version+1])).rows[0];
+ await moderation.recordAutomaticClear(db,job.project_id,'current',row.version,row.build_hash,scan.findings);
  return row;
 }
 async function pruneHistory(db, ownerId) {
@@ -191,41 +195,21 @@ async function finish(job, build, scan, signal) {
   if (changed(job, script)) throw fault(409, 'RELEASE_CHANGED', safeMessages.RELEASE_CHANGED);
   if(job.publication){const listing=(await db.query('SELECT updated_at FROM developer_listings WHERE project_id=$1',[job.project_id])).rows[0];if((listing?.updated_at?new Date(listing.updated_at).getTime():null)!==(job.expected_listing_updated_at?new Date(job.expected_listing_updated_at).getTime():null))throw fault(409,'RELEASE_CHANGED',safeMessages.RELEASE_CHANGED);}
   const encrypted = crypto.encryptAES(build.code);
-  let result, status;
-  const priorApproved=script?.safety_status==='approved'&&script.build_hash===build.buildHash&&script.safety_hash===build.buildHash;
-  if (scan.status === 'review'&&!priorApproved || script?.safety_status === 'quarantined') {
-   scan.status = 'review';
-   if (script?.safety_status === 'quarantined') scan.findings.push({ rule: 'quarantine.replacement', severity: 'review', line: null });
-   const submissionId = await moderation.stage(db, { id: job.project_id, version: script?.version || 0, build_hash: script?.build_hash || null }, { content_enc: encrypted.enc, content_iv: encrypted.iv, build_hash: build.buildHash, target_mode: build.targetMode, place_id: build.placeId, builder_version: build.builderVersion, obfuscated: !!build.obfuscated, obfuscation_level: build.obfuscationLevel, job_id: job.id }, scan, job.owner_id);
-   result = { version: script?.version || 0, pendingReview: true, submissionId, securityStatus: 'review', findings: moderation.findings(scan.findings), published: false }; status = 'review';
-  } else {
-   const stored = await saveBuild(db, job, build, scan, encrypted,priorApproved?'approved':'clear');
+  if (scan.status !== 'clear' || scan.scannerVersion !== SCANNER_VERSION || scan.hash !== build.buildHash) throw Object.assign(fault(422,'SECURITY_UNVERIFIED',safeMessages.SECURITY_UNVERIFIED),{findings:moderation.findings(scan.findings),hash:build.buildHash});
+  if (script?.safety_status === 'quarantined' && script.build_hash === build.buildHash) throw Object.assign(fault(422,'SECURITY_UNVERIFIED',safeMessages.SECURITY_UNVERIFIED),{findings:[{rule:'quarantine.unchanged_release',severity:'review',line:1}],hash:build.buildHash});
+   const stored = await saveBuild(db, job, build, scan, encrypted);
    await publishIn(db, job, stored, account);
    await moderation.audit(db, { action: 'upload.clear', actorId: job.owner_id, projectId: job.project_id, version: stored.version, hash: build.buildHash, findings: scan.findings });
-   result = { version: stored.version, validated: true, obfuscated: !!build.obfuscated, obfuscationLevel: build.obfuscationLevel, securityStatus: stored.safety_status, targetMode: build.targetMode, placeId: build.placeId, published: job.kind === 'publish' }; status = 'succeeded';
-  }
-  await db.query('UPDATE developer_script_jobs SET status=$3,progress=100,result=$4::jsonb,output_size_bytes=$5,build_duration_ms=$6,logs=$7::jsonb,finished_at=now(),worker_token=NULL,lease_expires_at=NULL WHERE id=$1 AND worker_token=$2', [job.id, job.worker_token, status, JSON.stringify(result), build.outputSizeBytes, build.buildDurationMs, JSON.stringify([...job.logs, log(status === 'review' ? 'warning' : 'info', status === 'review' ? 'Waiting for an independent security review; current release preserved.' : 'Validated release saved'+(job.kind === 'publish' ? ' and published.' : '.'))])]);
+   const result = { version: stored.version, validated: true, obfuscated: !!build.obfuscated, obfuscationLevel: build.obfuscationLevel, securityStatus: stored.safety_status, targetMode: build.targetMode, placeId: build.placeId, published: job.kind === 'publish' }, status = 'succeeded';
+  await db.query('UPDATE developer_script_jobs SET status=$3,progress=100,result=$4::jsonb,output_size_bytes=$5,build_duration_ms=$6,logs=$7::jsonb,finished_at=now(),worker_token=NULL,lease_expires_at=NULL WHERE id=$1 AND worker_token=$2', [job.id, job.worker_token, status, JSON.stringify(result), build.outputSizeBytes, build.buildDurationMs, JSON.stringify([...job.logs, log('info','Automatically verified release saved'+(job.kind === 'publish' ? ' and published.' : '.'))])]);
   await pruneHistory(db,job.owner_id);signal?.throwIfAborted();
  });
 }
 async function reviewDecision(db, submission, state) {
+ if (state === 'approved') throw fault(409,'AUTOMATIC_VERIFICATION_ONLY','Human approval is unavailable. Submit readable source for automatic verification.');
  if (!submission.job_id) return state;
  const job = (await db.query('SELECT * FROM developer_script_jobs WHERE id=$1 FOR UPDATE', [submission.job_id])).rows[0];
  if (!job || job.status !== 'review') return 'stale';
- if (state === 'approved') {
-  let eligible;try{eligible=await available(db, job.project_id, job.owner_id, job.kind === 'publish');}catch(error){if(error.code!=='PROJECT_UNAVAILABLE')throw error;state='stale';}
-  const {account,script}=eligible||{};
-  const listing=(await db.query('SELECT updated_at FROM developer_listings WHERE project_id=$1',[job.project_id])).rows[0];
-  const listingChanged=!!job.publication&&(listing?.updated_at?new Date(listing.updated_at).getTime():null)!==(job.expected_listing_updated_at?new Date(job.expected_listing_updated_at).getTime():null);
-  if (state==='stale'||changed(job, script)||listingChanged) state = 'stale';
-  else {
-   const build = { obfuscated: submission.obfuscated, obfuscationLevel: submission.obfuscation_level, targetMode: submission.target_mode, placeId: submission.place_id, builderVersion: submission.builder_version, buildHash: submission.build_hash, outputSizeBytes: job.output_size_bytes, buildDurationMs: job.build_duration_ms };
-   const stored = await saveBuild(db, job, build, { scannerVersion: submission.scanner_version }, { enc: submission.content_enc, iv: submission.content_iv }, 'approved');
-   await publishIn(db, job, stored, account);
-   await db.query("UPDATE developer_script_jobs SET status='succeeded',result=$2::jsonb,finished_at=now(),logs=$3::jsonb WHERE id=$1", [job.id, JSON.stringify({ version: stored.version, validated: true, obfuscated: stored.obfuscated, obfuscationLevel: stored.obfuscation_level, targetMode: stored.target_mode, placeId: stored.place_id?Number(stored.place_id):null, securityStatus: 'approved', published: job.kind === 'publish' }), JSON.stringify([...(json(job.logs) || []), log('info', 'Security review approved; release saved'+(job.kind === 'publish' ? ' and published.' : '.'))])]);
-   await pruneHistory(db,job.owner_id);return state;
-  }
- }
  await db.query("UPDATE developer_script_jobs SET status='failed',error_code=$2,error_message=$3,finished_at=now(),logs=$4::jsonb WHERE id=$1", [job.id, state === 'stale' ? 'RELEASE_CHANGED' : 'SECURITY_REJECTED', state === 'stale' ? safeMessages.RELEASE_CHANGED : 'The release was rejected by security review.', JSON.stringify([...(json(job.logs) || []), log('warning', state === 'stale' ? safeMessages.RELEASE_CHANGED : 'Security review rejected the release; current release preserved.')])]);
  await pruneHistory(db,job.owner_id);return state;
 }
@@ -236,14 +220,15 @@ async function processJob(job) {
   await update(job, 10, 'info', 'Checking original source safety.');
   const content = crypto.decryptAES(job.original_content_enc, job.original_content_iv);
   const before = scanScript(content, { phase: 'source' });
-  if (before.status === 'blocked') throw Object.assign(fault(422, 'SECURITY_BLOCKED', safeMessages.SECURITY_BLOCKED),{findings:moderation.findings(before.findings),hash:before.hash});
+  if (before.status !== 'clear') { const code=before.status==='blocked'?'SECURITY_BLOCKED':'SECURITY_UNVERIFIED'; throw Object.assign(fault(422,code,safeMessages[code]),{findings:moderation.findings(before.findings),hash:before.hash}); }
   await update(job, 25, 'info', job.obfuscate ? 'Validating and applying '+job.obfuscation_level+' obfuscation.' : 'Validating source without obfuscation.');
   const build = await builder.build(content, { obfuscate: job.obfuscate, obfuscationLevel: job.obfuscation_level, targetMode: job.target_mode, placeId: job.place_id ? Number(job.place_id) : null, signal: controller.signal });
   if (controller.signal.aborted) throw controller.signal.reason || fault(409, 'SCRIPT_CANCELLED', safeMessages.SCRIPT_CANCELLED);
   if (!build.validated || Buffer.byteLength(build.code) > MAX_OUTPUT) throw fault(422, 'SCRIPT_RESOURCE_LIMIT', safeMessages.SCRIPT_RESOURCE_LIMIT);
   await update(job, 75, 'info', 'Output syntax validated; checking delivery safety.');
   const after = scanScript(build.code, { phase: 'output' });
-  if (after.status === 'blocked') throw Object.assign(fault(422, 'SECURITY_BLOCKED', safeMessages.SECURITY_BLOCKED),{findings:moderation.findings([...before.findings,...after.findings]),hash:build.buildHash});
+  if (after.status !== 'clear') { const code=after.status==='blocked'?'SECURITY_BLOCKED':'SECURITY_UNVERIFIED'; throw Object.assign(fault(422,code,safeMessages[code]),{findings:moderation.findings([...before.findings,...after.findings]),hash:build.buildHash}); }
+  if (after.hash !== build.buildHash) throw Object.assign(fault(422,'SECURITY_BLOCKED',safeMessages.SECURITY_BLOCKED),{findings:[{rule:'release_integrity_mismatch',severity:'high',line:1}],hash:after.hash});
   const scan = combineScans(before,after);
   await update(job, 90, 'info', 'Rechecking account, project and release before saving.');
   await finish(job, build, scan, controller.signal);
@@ -251,7 +236,7 @@ async function processJob(job) {
   const code = controller.signal.aborted && controller.signal.reason?.code === 'SCRIPT_TIMEOUT' ? 'SCRIPT_TIMEOUT' : error.code || 'SCRIPT_UNAVAILABLE';
   const message = safeMessages[code] || 'The build could not finish. The current release remains active.';
   await query("UPDATE developer_script_jobs SET status='failed',error_code=$3,error_message=$4,finished_at=now(),worker_token=NULL,lease_expires_at=NULL,logs=$5::jsonb,result=$6::jsonb WHERE id=$1 AND status='processing' AND worker_token=$2", [job.id, job.worker_token, code, message, JSON.stringify([...(job.logs || []), log('error', message)]),error.findings?JSON.stringify({findings:error.findings}):null]).catch(() => {});
-  await transaction(async db=>{const account=(await db.query('SELECT discord_id FROM developer_accounts WHERE discord_id=$1 FOR UPDATE',[job.owner_id])).rows[0];const project=(await db.query('SELECT id FROM developer_projects WHERE id=$1 FOR UPDATE',[job.project_id])).rows[0];if(account&&project&&code==='SECURITY_BLOCKED')await moderation.audit(db,{actorId:job.owner_id,action:'upload.blocked',projectId:job.project_id,hash:error.hash,findings:error.findings});await pruneHistory(db,job.owner_id);}).catch(()=>{});
+  await transaction(async db=>{const account=(await db.query('SELECT discord_id FROM developer_accounts WHERE discord_id=$1 FOR UPDATE',[job.owner_id])).rows[0];const project=(await db.query('SELECT id FROM developer_projects WHERE id=$1 FOR UPDATE',[job.project_id])).rows[0];if(account&&project&&['SECURITY_BLOCKED','SECURITY_UNVERIFIED'].includes(code))await moderation.audit(db,{actorId:job.owner_id,action:'upload.blocked',projectId:job.project_id,hash:error.hash,findings:error.findings});await pruneHistory(db,job.owner_id);}).catch(()=>{});
  } finally {
   clearTimeout(deadline); controllers.delete(job.id);
   // Release only after the local subprocess has actually exited. A deleted

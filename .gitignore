@@ -14,3 +14,4 @@ artifacts/
 /server/tools/darklua/
 /server/tools/prometheus/
 /server/tools/luau/
+/server/debug.log

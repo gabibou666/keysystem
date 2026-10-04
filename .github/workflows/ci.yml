@@ -34,6 +34,19 @@ jobs:
         working-directory: server
         run: npm test
 
+      - name: Navigateur pour la validation Linux
+        if: startsWith(github.ref, 'refs/heads/validation/')
+        working-directory: server
+        run: npx playwright install --with-deps chromium
+
+      - name: Interfaces de publication et verification automatique
+        if: startsWith(github.ref, 'refs/heads/validation/')
+        working-directory: server
+        run: |
+          node test-script-workspace-ui.js
+          node test-script-findings-ui.js
+          node test-moderation-ui.js
+
       - name: Audit des dependances (informatif)
         working-directory: server
         run: npm audit --omit=dev --audit-level=high

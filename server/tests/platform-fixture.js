@@ -96,6 +96,9 @@ app.use('/api/site', require('../src/routes/site'));
     const exampleBuild = cipher.encryptAES(example), exampleOriginal = cipher.encryptAES(example);
     await pool.query('INSERT INTO developer_projects(id,owner_id,name,api_token_hash) VALUES($1,$2,$3,$4)', [exampleId, identities[0], 'AUDIT HUB demo', auth.hash(auth.random())]);
     await pool.query("INSERT INTO developer_scripts(project_id,content_enc,content_iv,original_content_enc,original_content_iv,filename,original_size_bytes,output_size_bytes,validated,obfuscated,target_mode,safety_status,build_hash,safety_hash) VALUES($1,$2,$3,$4,$5,'preview.luau',$6,$6,true,false,'universal','clear',$7,$7)", [exampleId, exampleBuild.enc, exampleBuild.iv, exampleOriginal.enc, exampleOriginal.iv, Buffer.byteLength(example), auth.hash(example)]);
+    const scannerVersion=require('../src/services/script-safety').SCANNER_VERSION, moderation=require('../src/services/moderation');
+    await pool.query('UPDATE developer_scripts SET scanner_version=$2 WHERE project_id=$1',[exampleId,scannerVersion]);
+    await moderation.recordAutomaticClear(pool,exampleId,'current',1,auth.hash(example));
     const hubId = nodeCrypto.randomUUID();
     await pool.query("INSERT INTO developer_hubs(id,owner_id,slug,name,published_at) VALUES($1,$2,'local-creator','Local Creator',now())", [hubId, identities[1]]);
     for (let i = 0; i < 3; i++) {
@@ -104,6 +107,8 @@ app.use('/api/site', require('../src/routes/site'));
       const code = 'return "Local demonstration build"', encrypted = cipher.encryptAES(code);
       await pool.query("INSERT INTO developer_scripts(project_id,content_enc,content_iv,validated,obfuscated,target_mode,safety_status,build_hash,safety_hash) VALUES($1,$2,$3,true,false,'universal','clear',$4,$4)", [projectId, encrypted.enc, encrypted.iv, auth.hash(code)]);
       await pool.query('UPDATE developer_scripts SET original_content_enc=$2,original_content_iv=$3,filename=$4,original_size_bytes=$5,output_size_bytes=$5 WHERE project_id=$1', [projectId, encrypted.enc, encrypted.iv, 'script.lua', Buffer.byteLength(code)]);
+      await pool.query('UPDATE developer_scripts SET scanner_version=$2 WHERE project_id=$1',[projectId,scannerVersion]);
+      await moderation.recordAutomaticClear(pool,projectId,'current',1,auth.hash(code));
       if (i === 0) await pool.query("INSERT INTO developer_listings(project_id,hub_id,title,access_mode,published_at,snapshot_validated,snapshot_obfuscated,safety_status,safety_hash) VALUES($1,$2,'Orion universal','licensed',now(),true,false,'clear',$3)", [projectId, hubId, auth.hash(code)]);
       if (i === 0) await pool.query("INSERT INTO developer_moderation_reports(id,project_id,reporter_id,reason,description) VALUES($1,$2,$3,'other','Local demonstration report for interface review.')", [nodeCrypto.randomUUID(), projectId, identities[0]]);
       for (let j = 0; j < 4 + i; j++) await pool.query('INSERT INTO developer_licenses(id,project_id,key_hash,key_prefix,note,expires_at,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)', [nodeCrypto.randomUUID(), projectId, auth.hash(auth.random()), 'ah_preview_', 'Local preview', new Date(Date.now() + 7 * 86400000), new Date(Date.now() - (i * 4 + j) * 86400000)]);

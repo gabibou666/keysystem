@@ -43,13 +43,14 @@ async function run(){
     check((await cat('/scripts?page=0','GET',undefined,'')).status===400&&(await cat('/scripts?page=10001','GET',undefined,'')).status===400,'Script directory page is bounded');
     check((await cat('/scripts?page=2','GET',undefined,'')).data.listings.length===0,'Script directory supports empty later pages');
     const hubId=(await f.pool.query('SELECT id FROM developer_hubs WHERE owner_id=$1',['900000000000000001'])).rows[0].id;
-    const savedScript=(await f.pool.query('SELECT content_enc,content_iv FROM developer_scripts WHERE project_id=$1',[project])).rows[0];
+    const savedScript=(await f.pool.query('SELECT content_enc,content_iv,build_hash,scanner_version FROM developer_scripts WHERE project_id=$1',[project])).rows[0];
     const initialBuild=require('./src/services/crypto').decryptAES(savedScript.content_enc,savedScript.content_iv);
     const extraIds=[];
     for(let i=1;i<=24;i++){
       const id='20000000-0000-4000-8000-'+String(i).padStart(12,'0');extraIds.push(id);
       await f.pool.query('INSERT INTO developer_projects(id,owner_id,name,api_token_hash) VALUES($1,$2,$3,$4)',[id,'900000000000000001','Pagination '+i,'test-hash']);
-      await f.pool.query("INSERT INTO developer_scripts(project_id,content_enc,content_iv,safety_status) VALUES($1,$2,$3,'clear')",[id,savedScript.content_enc,savedScript.content_iv]);
+      await f.pool.query("INSERT INTO developer_scripts(project_id,content_enc,content_iv,safety_status,validated,build_hash,safety_hash,scanner_version) VALUES($1,$2,$3,'clear',true,$4,$4,$5)",[id,savedScript.content_enc,savedScript.content_iv,savedScript.build_hash,savedScript.scanner_version]);
+      await require('./src/services/moderation').recordAutomaticClear(f.pool,id,'current',1,savedScript.build_hash);
       await f.pool.query("INSERT INTO developer_listings(project_id,hub_id,title,published_at,snapshot_validated,snapshot_obfuscated,safety_status) VALUES($1,$2,$3,$4,true,true,'clear')",[id,hubId,'Pagination '+String(i).padStart(2,'0'),new Date()]);
     }
     const firstPage=(await cat('/scripts?sort=name','GET',undefined,'')).data;

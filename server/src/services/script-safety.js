@@ -2,7 +2,7 @@
 
 // Static triage only. This deliberately never evaluates Lua or follows URLs.
 const crypto = require('crypto');
-const SCANNER_VERSION = 'static-luau-3';
+const SCANNER_VERSION = 'static-luau-4';
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
 const MAX_TOKENS = 150000;

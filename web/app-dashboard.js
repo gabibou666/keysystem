@@ -174,8 +174,7 @@
     $('checkpointProvider').value = p.checkpointProvider || 'lootlabs'; $('checkpointLinkUrl').value = p.checkpointLinkUrl || ''; $('checkpointLinkId').value = p.checkpointLinkId || ''; checkpointFields();
     $('scriptVersion').textContent = detail.script ? 'Published · v' + detail.script.version : 'Not published';
     if(detail.script?.validated) $('scriptVersion').textContent += ' · Checked';
-    const pending=detail.pendingSubmissions?.filter(s=>s.status==='pending').length||0;
-    $('scriptSafetyState').textContent=pending?pending+' release(s) waiting for moderator review. Your active version remains unchanged.':detail.script?.securityStatus==='quarantined'?'This project is quarantined. Its script delivery is blocked.':detail.script?.securityStatus==='approved'?'Active release approved by a moderator. This does not certify every runtime behavior.':detail.script?.securityStatus==='clear'?'Automated checks found no flagged behavior. This is not a guarantee of safety.':'New uploads and their output are checked locally. Unknown or opaque behavior is held for review.';
+    $('scriptSafetyState').textContent=detail.script?.securityStatus==='quarantined'?'This project is quarantined. Its script delivery is blocked.':detail.script?.automaticVerified===true?'Automatic server checks found no flagged behavior. This is not a guarantee of safety.':'Validation runs automatically on the server. Suspicious or opaque code is refused without human approval. Older releases must pass the current checks before delivery.';
     if(detail.securityChecks?.length){const check=detail.securityChecks[0];$('scriptSafetyState').textContent+=' Last automatic recheck: '+date(check.checkedAt)+' / '+check.result+'.';}
     $('scriptTargetMode').value=detail.script?.targetMode || 'universal';
     $('scriptPlaceId').value=detail.script?.placeId || ''; targetFields();

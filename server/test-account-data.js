@@ -21,10 +21,13 @@ async function run() {
     for (let i = 0; i < 2; i++) {
       const project = randomUUID(), hub = randomUUID(); projects.push(project); hubs.push(hub);
       await f.pool.query('INSERT INTO developer_projects(id,owner_id,name,description,api_token_hash,lootlabs_token_enc,lootlabs_token_iv,checkpoint_secret_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [project, ids[i], i ? 'FOREIGN_PRIVATE_PROJECT' : 'Own project', i ? 'FOREIGN_PRIVATE_DESCRIPTION' : 'Own description', 'API_TOKEN_SECRET', 'PROVIDER_SECRET_CIPHER', 'PROVIDER_SECRET_IV', 'CALLBACK_SECRET_HASH']);
-      const build = crypto.encryptAES(i ? 'return "FOREIGN_PRIVATE_SOURCE"' : 'return "OWN_STORED_BUILD"');
-      await f.pool.query("INSERT INTO developer_scripts(project_id,content_enc,content_iv,validated,obfuscated,safety_status,build_hash) VALUES($1,$2,$3,true,true,'clear',$4)", [project, build.enc, build.iv, 'a'.repeat(64)]);
+      const source = i ? 'return "FOREIGN_PRIVATE_SOURCE"' : 'return "OWN_STORED_BUILD"', build = crypto.encryptAES(source), hash=crypto.sha256(source);
+      await f.pool.query("INSERT INTO developer_scripts(project_id,content_enc,content_iv,validated,obfuscated,safety_status,build_hash,safety_hash,scanner_version) VALUES($1,$2,$3,true,true,'clear',$4,$4,$5)", [project, build.enc, build.iv, hash, require('./src/services/script-safety').SCANNER_VERSION]);
+      await moderation.recordAutomaticClear(f.pool,project,'current',1,hash);
       await f.pool.query('INSERT INTO developer_hubs(id,owner_id,slug,name,published_at) VALUES($1,$2,$3,$4,now())', [hub, ids[i], 'account-test-' + i, i ? 'FOREIGN_PROFILE_NAME' : 'Own profile']);
       await f.pool.query("INSERT INTO developer_listings(project_id,hub_id,title,published_at,snapshot_content_enc,snapshot_content_iv,snapshot_validated,snapshot_obfuscated,safety_status,access_mode) VALUES($1,$2,$3,now(),$4,$5,true,true,'clear','free')", [project, hub, i ? 'Foreign public release' : 'Own release', build.enc, build.iv]);
+      await f.pool.query('UPDATE developer_listings SET script_version=1,safety_hash=$2 WHERE project_id=$1',[project,hash]);
+      await moderation.recordAutomaticClear(f.pool,project,'free_snapshot',1,hash);
     }
     const licenses = [];
     for (let i = 0; i < 123; i++) {
@@ -40,7 +43,8 @@ async function run() {
     await f.pool.query('INSERT INTO developer_checkpoint_proof_uses(proof_hash) VALUES($1)', ['d'.repeat(64)]);
     await f.pool.query("INSERT INTO developer_registration_limits(quota_key,window_start,account_count) VALUES('network:unlinked-test-hmac',now(),1)");
     const pending = crypto.encryptAES('return "OWN_PENDING_BUILD"');
-    await moderation.stage(f.pool, { id: projects[0], version: 1, build_hash: 'a'.repeat(64) }, { content_enc: pending.enc, content_iv: pending.iv, build_hash: 'b'.repeat(64), target_mode: 'universal', builder_version: 'fixture' }, { status: 'review', scannerVersion: 'fixture', findings: [{ rule: 'dynamic.loader', severity: 'review', line: 1 }] }, ids[0]);
+    // Historical human-review payload remains exportable after the queue closes.
+    await f.pool.query("INSERT INTO developer_moderation_submissions(id,project_id,owner_id,base_version,base_hash,version,content_enc,content_iv,build_hash,target_mode,builder_version,scanner_version,findings,status) VALUES($1,$2,$3,1,$4,2,$5,$6,$7,'universal','fixture','fixture',$8::jsonb,'pending')",[randomUUID(),projects[0],ids[0],'a'.repeat(64),pending.enc,pending.iv,'b'.repeat(64),JSON.stringify([{rule:'dynamic.loader',severity:'review',line:1}])]);
     const ownReport = randomUUID(), otherReport = randomUUID(), foreignReport = randomUUID();
     await f.pool.query("INSERT INTO developer_moderation_reports(id,project_id,reporter_id,reason,description) VALUES($1,$2,$3,'misleading','Own submitted report'),($4,$5,$6,'privacy','OTHER_REPORT_PRIVATE'),($7,$2,$6,'other','FOREIGN_OWNER_REPORT')", [ownReport, projects[1], ids[0], otherReport, projects[0], ids[1], foreignReport]);
     await moderation.audit(f.pool, { actorId: ids[0], projectId: projects[0], action: 'upload.clear', note: 'OWN_AUDIT_PRIVATE_NAME', hash: 'a'.repeat(64), version: 1 });

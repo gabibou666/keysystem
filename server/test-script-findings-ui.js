@@ -33,14 +33,18 @@ async function run() {
   await page.evaluate(()=>document.dispatchEvent(new CustomEvent('audit-hub:language',{detail:{language:'en'}})));
   await page.locator('#scriptContent').fill('local key=readfile("local-cache.json"); assert(key); return game:HttpGet("https://example.invalid/ui.lua")');
   await page.locator('#publishScriptBtn').click();
-  await page.locator('#scriptJobStatus').getByText('Awaiting review',{exact:true}).waitFor();
+  await page.waitForFunction(()=>document.getElementById('scriptJobError')?.textContent?.includes('SECURITY_UNVERIFIED'));
+  await page.locator('#scriptJobStatus').getByText('Failed',{exact:true}).waitFor();
   assert.match(await panel.textContent(),/sensitive_network_transfer · line 1/);
   assert.match(await panel.textContent(),/does not establish that the data is transmitted/);
-  assert.equal(await page.locator('#scriptJobError').isVisible(),false);
+  assert.equal(await page.locator('#scriptJobError').isVisible(),true);
+  assert.match(await page.locator('#scriptJobError').textContent(),/SECURITY_UNVERIFIED/);
   const detail=await fetch(fixture.base+'/api/platform/projects/'+project.id,{headers:{Cookie:fixture.cookies[0]}});
-  assert.equal((await detail.json()).script,null,'A review cannot create an active release');
+  const projectDetail=await detail.json();
+  assert.equal(projectDetail.script,null,'A failed opaque release cannot create an active release');
+  assert.equal(projectDetail.pendingSubmissions?.length||0,0,'Opaque releases must not enter a human approval queue');
   assert.deepEqual(errors,[]);
-  console.log('Script finding UI: blocked/review diagnostics, private payload exclusion, EN/FR and mobile passed.');
+  console.log('Script finding UI: blocked/automatic-failure diagnostics, private payload exclusion, EN/FR and mobile passed.');
  } finally { await browser.close(); await fixture.close(); }
 }
 run().catch(error=>{console.error(error.stack);process.exitCode=1;});

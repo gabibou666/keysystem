@@ -29,10 +29,15 @@ async function run() {
     const id = randomUUID(), hub = randomUUID(), key = 'ah_' + crypto.randomToken(24), license = randomUUID(), source = crypto.encryptAES('return "PRIVATE_CODE_' + name + '"');
     await f.pool.query('INSERT INTO developer_projects(id,owner_id,name,api_token_hash) VALUES($1,$2,$3,$4)', [id, ownerId, name, 'API_TOKEN_PRIVATE']);
     await f.pool.query("INSERT INTO developer_scripts(project_id,content_enc,content_iv,validated,obfuscated,safety_status,build_hash,safety_hash) VALUES($1,$2,$3,true,true,'clear',$4,$4)", [id, source.enc, source.iv, 'a'.repeat(64)]);
+    const hash=crypto.sha256(crypto.decryptAES(source.enc,source.iv)),moderation=require('./src/services/moderation');
+    await f.pool.query('UPDATE developer_scripts SET build_hash=$2,safety_hash=$2,scanner_version=$3 WHERE project_id=$1',[id,hash,require('./src/services/script-safety').SCANNER_VERSION]);
+    await moderation.recordAutomaticClear(f.pool,id,'current',1,hash);
     const existing = (await f.pool.query('SELECT id FROM developer_hubs WHERE owner_id=$1', [ownerId])).rows[0];
     let hubId = existing?.id;
     if (!hubId) { hubId = hub; await f.pool.query('INSERT INTO developer_hubs(id,owner_id,slug,name,published_at) VALUES($1,$2,$3,$4,now())', [hub, ownerId, 'admin-fixture-' + hub, name]); }
     await f.pool.query("INSERT INTO developer_listings(project_id,hub_id,title,published_at,snapshot_content_enc,snapshot_content_iv,snapshot_validated,snapshot_obfuscated,safety_status,safety_hash,access_mode) VALUES($1,$2,$3,now(),$4,$5,true,true,'clear',$6,'free')", [id, hubId, name, source.enc, source.iv, 'a'.repeat(64)]);
+    await f.pool.query('UPDATE developer_listings SET script_version=1,safety_hash=$2 WHERE project_id=$1',[id,hash]);
+    await moderation.recordAutomaticClear(f.pool,id,'free_snapshot',1,hash);
     await f.pool.query('INSERT INTO developer_licenses(id,project_id,key_hash,key_prefix,expires_at,hwid_hash) VALUES($1,$2,$3,$4,now()+interval \'1 day\',$5)', [license, id, crypto.hashToken(key), key.slice(0, 11), 'DEVICE_PRIVATE']);
     return { id, license, key };
   }

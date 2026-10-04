@@ -37,9 +37,8 @@ async function load(db,kind,id,locked=false){
 }
 function same(a,b){return !!b&&['version','build_hash','content_enc','content_iv','original_content_enc','original_content_iv'].every(key=>(a[key]??null)===(b[key]??null));}
 function decision(row,scan){
- if(row.safety_status==='quarantined'||scan.status==='blocked')return 'quarantined';
- if(row.safety_status==='approved'&&row.safety_hash===row.build_hash&&row.build_hash===scan.hash)return 'approved';
- if(row.safety_status==='review'||!['clear','approved','unreviewed'].includes(row.safety_status)||scan.status==='review')return 'review';
+ if(row.safety_status==='quarantined'||scan.status!=='clear'||scan.scannerVersion!==safety.SCANNER_VERSION||scan.hash!==row.build_hash)return 'quarantined';
+ if(!['clear','approved','unreviewed','review'].includes(row.safety_status))return 'quarantined';
  return 'clear';
 }
 async function save(kind,before,scan){

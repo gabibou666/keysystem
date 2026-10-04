@@ -100,10 +100,11 @@ technique ne contient ni compte, ni source, ni identifiant personnel.
 
 L’upload et la publication passent par une file persistante. Le propriétaire
 voit progression, résultat, date, niveau et tailles dans l’historique de son
-projet, et peut annuler un traitement. L’ancienne version reste livrée pendant
-le travail. Un échec de compilation, une annulation, un conflit de version ou
+projet, et peut annuler un traitement. L’ancienne version est conservée pendant
+le travail ; sa livraison exige les vérifications serveur actuelles. Un échec
+de compilation, une annulation, un conflit de version ou
 une restriction administrative empêche le remplacement. Les scripts douteux
-restent chiffrés en attente de modération. Republier permet de changer de niveau
+sont refusés automatiquement, sans approbation humaine. Republier permet de changer de niveau
 ou de revenir à l’original conservé. Les anciens builds dont le source original
 n’était pas conservé demandent un nouvel upload pour ces opérations.
 
@@ -262,7 +263,7 @@ Public script pages expose developer-declared mobile support, platform key requi
 
 Configure `MODERATION_ADMIN_IDS` with trusted **internal developer account IDs**, comma-separated, to bootstrap administrators. Find the signed-in account ID at authenticated `/api/moderation/me`; do not assume an email account ID is a Discord snowflake. Restart after changing environment configuration. Administrators open `/moderation` and assign existing accounts the moderator or administrator role. Signup cannot grant roles. Bootstrap administrators are managed by server configuration.
 
-The local bounded static scanner examines original and built code without execution. High-risk uploads are blocked; opaque or suspicious uploads remain encrypted pending review, without replacing the active release. There is no safety guarantee for obfuscated or externally loaded behavior. Moderators can decide a held release, resolve reports and quarantine an exact version/hash. Quarantine blocks both free snapshots and licensed delivery. A replacement needs review, and a free listing needs explicit republication.
+The local bounded static scanner examines original and built code without execution. High-risk, opaque or suspicious uploads are refused automatically, without replacing the active release. There is no safety guarantee for obfuscated or externally loaded behavior. Moderators cannot approve scripts. They can resolve reports and quarantine an exact version/hash. Quarantine blocks both free snapshots and licensed delivery. A replacement must pass automatic server checks, and a free listing needs explicit republication.
 
 Application audit records are paginated and restricted to staff, with action, actor/project IDs, version/hash, rules, sanitized decision notes, role changes, time and response status when available. They exclude raw source, bodies, credentials and IP addresses. Core moderation decisions are transactionally audited; general HTTP event recording is best effort with a bounded queue. Records start with this feature, do not reconstruct historical actions or replace infrastructure logs, and currently have no automatic expiry. Keep backups under restricted access. Tests: `npm run test:moderation`, `node test-public-profiles.js`, `node test-moderation-ui.js` (Chromium required).
 
@@ -429,8 +430,8 @@ Script counters
 
 `npm run test:metrics` and `npm run test:metrics:ui` verify public and tenant-scoped counters. The loader sends a per-instance executionId with the existing `/api/platform/v1/check` request. Only successful loadScript deliveries count, after key, device and security validation. Validation-only calls are excluded. Identical licence/load IDs deduplicate for 48 hours. Legacy clients without an ID retain compatibility and each successful delivery counts. Views and free deliveries deduplicate per project/network/UTC day using keyed, daily IP hashes; no raw address, key, device or user agent is stored in metric receipts. Receipts expire at 48 hours and daily purge removes them; cumulative counts persist until project deletion. Counters measure deliveries, not proof of runtime execution or fraud-proof unique users. No unauthenticated arbitrary execution increment endpoint exists.
 
-Automatic scanning always considers original and output, including opaque output from our own obfuscator. Static findings can block or require review; no static scan certifies arbitrary obfuscated code as harmless.
+Automatic scanning always considers original and output, including opaque output from our own obfuscator. Static findings block or automatically refuse publication; no static scan certifies arbitrary obfuscated code as harmless.
 
-Published releases also run through bounded automatic revalidation after startup and every day (disabled when SCHEDULERS=off). Active bodies, saved originals and distinct free snapshots are checked without execution; missing originals require review. Exact matching prior human approvals may remain approved for opaque findings, but never override high findings or ciphertext/hash changes. New versions cannot be replaced by stale analysis. Owners see the last check timestamp and findings; moderation audit contains metadata only. Tests: npm run test:revalidation.
+Published releases also run through bounded automatic revalidation after startup and every day (disabled when SCHEDULERS=off). Active bodies, saved originals and distinct free snapshots are checked without execution; missing originals prevent delivery. Prior human approvals grant no exemption; every delivered release must pass the current automatic policy. New versions cannot be replaced by stale analysis. Owners see the last check timestamp and findings; moderation audit contains metadata only. Tests: npm run test:revalidation.
 
 New usage totals start at deployment; historical key-validation events do not distinguish downloads from validation-only calls and are not backfilled as executions.
