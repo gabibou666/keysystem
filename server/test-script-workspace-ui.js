@@ -22,11 +22,11 @@ async function run() {
     const response=await fetch(fixture.base+endpoint,{method,headers:{Cookie:fixture.cookies[0],Origin:fixture.base,...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})});
     const data=await response.json(); assert.ok(response.ok,JSON.stringify(data)); return data;
   }
-  async function done(status='Completed') {
+  async function done(status='Completed',button='#publishScriptBtn') {
     await page.locator('#scriptJobStatus').getByText(status,{exact:true}).waitFor();
-    if(status==='Completed') await page.locator('#viewScriptOriginal').waitFor({state:'visible'});
-    await page.locator('#publishScriptBtn').waitFor({state:'visible'});
-    await page.waitForFunction(()=>!document.getElementById('publishScriptBtn').disabled);
+    if(status==='Completed' && button==='#publishScriptBtn') await page.locator('#viewScriptOriginal').waitFor({state:'visible'});
+    await page.locator(button).waitFor({state:'visible'});
+    await page.waitForFunction(selector=>!document.querySelector(selector).disabled,button);
   }
   async function submitBuild(status='Completed',button='#publishScriptBtn') {
     const responsePromise=page.waitForResponse(response=>response.request().method()==='PUT' && /\/api\/(?:platform|catalog)\/projects\//.test(response.url()));
@@ -36,7 +36,7 @@ async function run() {
     assert.ok(data.jobId,'The server returned the new durable job');
     // Consecutive refusals must wait for this job, not the previous Failed label.
     await page.waitForFunction(({id,status})=>document.getElementById('cancelScriptJob').dataset.job===id && document.getElementById('scriptJobStatus').textContent===status,{id:data.jobId,status});
-    await done(status);
+    await done(status,button);
   }
   const work=path.resolve(__dirname,'../work'); await fs.mkdir(work,{recursive:true});
   try {

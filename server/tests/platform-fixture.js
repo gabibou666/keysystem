@@ -36,6 +36,7 @@ async function startFixture(port = 0, preview = false, seedDemo = false) {
   db.public.none(fs.readFileSync(path.join(__dirname,'../db/migration-script-jobs.sql'),'utf8'));
   db.public.none(fs.readFileSync(path.join(__dirname,'../db/migration-script-metrics.sql'),'utf8'));
   db.public.none(fs.readFileSync(path.join(__dirname,'../db/migration-script-revalidation.sql'),'utf8'));
+  db.public.none(fs.readFileSync(path.join(__dirname,'../db/migration-script-snapshot-original.sql'),'utf8'));
   const { Pool } = db.adapters.createPg();
   const pool = new Pool();
   require.cache[require.resolve('../src/db')] = { id:require.resolve('../src/db'), filename:require.resolve('../src/db'), loaded:true, exports:pool };

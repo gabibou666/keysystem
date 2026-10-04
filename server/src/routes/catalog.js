@@ -95,7 +95,7 @@ router.put('/projects/:projectId',sameOrigin,owner,wrap(async(req,res)=>{
     const project=(await client.query('SELECT id,disabled,hidden,deleted_at FROM developer_projects WHERE id=$1 AND owner_id=$2 FOR UPDATE',[req.params.projectId,req.account.discord_id])).rows[0];
     if(!project){await client.query('ROLLBACK');return fail(res,404,'Project not found.');}
     if(project.disabled || project.hidden || project.deleted_at){await client.query('ROLLBACK');return fail(res,403,'This publication was restricted by the site team. Contact support.');}
-    const script=(await client.query('SELECT content_enc,content_iv,version,validated,obfuscated,target_mode,place_id,safety_status,safety_hash,build_hash FROM developer_scripts WHERE project_id=$1',[project.id])).rows[0];
+    const script=(await client.query('SELECT content_enc,content_iv,original_content_enc,original_content_iv,version,validated,obfuscated,target_mode,place_id,safety_status,safety_hash,build_hash FROM developer_scripts WHERE project_id=$1',[project.id])).rows[0];
     if(published&&!script){await client.query('ROLLBACK');return fail(res,400,'Upload a script before publishing this listing.');}
     if(published&&!await moderation.deliveryAllowed(project.id,script.version,script.build_hash,client)){await client.query('ROLLBACK');return fail(res,409,'This release has not passed automatic verification.');}
     if(!hub){
@@ -109,7 +109,7 @@ router.put('/projects/:projectId',sameOrigin,owner,wrap(async(req,res)=>{
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT(project_id) DO UPDATE SET hub_id=$2,title=$3,description=$4,game=$5,access_mode=$6,
       published_at=CASE WHEN $7::timestamptz IS NULL THEN NULL ELSE COALESCE(developer_listings.published_at,$7) END,snapshot_content_enc=$8,snapshot_content_iv=$9,script_version=$10,snapshot_validated=$11,snapshot_obfuscated=$12,target_mode=$13,place_id=$14,updated_at=now()`,
       [project.id,hub.id,title.trim(),description,script?.target_mode==='single'?game.trim():'Universal',accessMode,published?new Date():null,script?.content_enc||null,script?.content_iv||null,script?.version||null,!!script?.validated,!!script?.obfuscated,script?.target_mode||'universal',script?.place_id||null]);
-    await client.query('UPDATE developer_listings SET mobile_support=$1,safety_status=$2,safety_hash=$3 WHERE project_id=$4',[mobileSupport,script?.safety_status||'unreviewed',script?.safety_hash||null,project.id]);
+    await client.query('UPDATE developer_listings SET mobile_support=$1,safety_status=$2,safety_hash=$3,snapshot_original_content_enc=$5,snapshot_original_content_iv=$6 WHERE project_id=$4',[mobileSupport,script?.safety_status||'unreviewed',script?.safety_hash||null,project.id,script?.original_content_enc||null,script?.original_content_iv||null]);
     await moderation.audit(client,{action:published?'listing.published':'listing.unpublished',actorId:req.account.discord_id,projectId:project.id,version:script?.version,hash:script?.safety_hash});
     const listing=(await client.query(`SELECT ${listingColumns} ${joinListings} WHERE l.project_id=$1`,[project.id])).rows[0];
     await client.query('COMMIT');res.json({success:true,listing:listingView(listing,req)});

@@ -30,10 +30,13 @@ async function load(db,kind,id,locked=false){
  const row=(await db.query(`SELECT l.*,p.owner_id FROM ${table} l JOIN developer_projects p ON p.id=l.project_id WHERE l.project_id=$1 AND l.access_mode='free' AND l.published_at IS NOT NULL${locked?' FOR UPDATE':''}`,[id])).rows[0];
  if(!row)return null;
  const current=(await db.query('SELECT version,build_hash,original_content_enc,original_content_iv FROM developer_scripts WHERE project_id=$1',[id])).rows[0];
- // The current readable original only belongs to the exact snapshot version.
+ // New publications retain their own encrypted source. Legacy fallback is
+ // allowed only for the exact release, never for a newer private original.
+ const retained=row.snapshot_original_content_enc!=null||row.snapshot_original_content_iv!=null;
+ const exact=current?.version===row.script_version&&current.build_hash===row.safety_hash;
  return {...row,validated:row.snapshot_validated,content_enc:row.snapshot_content_enc,content_iv:row.snapshot_content_iv,version:row.script_version,build_hash:row.safety_hash,
-  original_content_enc:current?.version===row.script_version&&current.build_hash===row.safety_hash?current.original_content_enc:null,
-  original_content_iv:current?.version===row.script_version&&current.build_hash===row.safety_hash?current.original_content_iv:null};
+  original_content_enc:retained?row.snapshot_original_content_enc:exact?current.original_content_enc:null,
+  original_content_iv:retained?row.snapshot_original_content_iv:exact?current.original_content_iv:null};
 }
 function same(a,b){return !!b&&['version','build_hash','content_enc','content_iv','original_content_enc','original_content_iv'].every(key=>(a[key]??null)===(b[key]??null));}
 function decision(row,scan){

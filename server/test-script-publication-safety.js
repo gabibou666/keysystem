@@ -18,6 +18,12 @@ async function run(){
   const replacement=await submit('return 2');
   check(replacement.status==='succeeded'&&replacement.result.securityStatus==='clear','A different readable replacement passes fresh automatic verification without human approval');
   check(await require('./src/services/moderation').deliveryAllowed(id,replacement.result.version,crypto.sha256('return 2')),'Activation persists a matching current automatic proof atomically');
+  const released=await request('/api/catalog/projects/'+id,{title:'Retained original',description:'',game:'',accessMode:'free',published:true,obfuscate:false});
+  assert.equal(released.status,202,JSON.stringify(released.data));
+  const releasedJob=await waitJob(f,id,released.data.jobId,f.cookies[0]);
+  check(releasedJob.status==='succeeded','A clear free publication succeeds with its own original');
+  const publicationSource=(await f.pool.query('SELECT snapshot_content_enc,snapshot_original_content_enc,snapshot_original_content_iv FROM developer_listings WHERE project_id=$1',[id])).rows[0];
+  check(crypto.decryptAES(publicationSource.snapshot_original_content_enc,publicationSource.snapshot_original_content_iv)==='return 2'&&publicationSource.snapshot_original_content_enc!==publicationSource.snapshot_content_enc,'Public release retains the exact original encrypted separately from the delivered output');
   const previous=(await f.pool.query('SELECT version,build_hash FROM developer_scripts WHERE project_id=$1',[id])).rows[0];
   const cache=await submit('local read=readfile; assert(read("license-cache.json")); local ui=game:HttpGet("https://example.invalid/ui.lua"); return ui');
   check(cache.status==='failed'&&cache.error.code==='SECURITY_UNVERIFIED','Local key cache and HTTP are refused when automatic verification is inconclusive');
@@ -47,8 +53,9 @@ async function run(){
   output(opaque);const publication=await request('/api/catalog/projects/'+id,{title:'Never auto-safe',description:'',game:'',accessMode:'free',published:true,obfuscate:true,obfuscationLevel:'standard'});
   assert.equal(publication.status,202,JSON.stringify(publication.data));const job=await waitJob(f,id,publication.data.jobId,f.cookies[0]);
   check(job.status==='failed'&&job.error.code==='SECURITY_UNVERIFIED','Explicit public publication refuses opaque transformed output automatically');
-  check((await f.pool.query('SELECT project_id FROM developer_listings WHERE project_id=$1 AND published_at IS NOT NULL',[id])).rows.length===0,'Held publication is not visible in the public catalogue');
+  check((await f.pool.query('SELECT snapshot_content_enc FROM developer_listings WHERE project_id=$1 AND published_at IS NOT NULL',[id])).rows[0].snapshot_content_enc===publicationSource.snapshot_content_enc,'Refused public build cannot replace the previously clear snapshot');
   const encoded=crypto.encryptAES(opaque);
+  await f.pool.query('UPDATE developer_script_jobs SET created_at=$1 WHERE project_id=$2',[new Date(Date.now()-3600000),id]);
   await f.pool.query("UPDATE developer_scripts SET content_enc=$2,content_iv=$3,build_hash=$4,safety_status='approved',safety_hash=$5 WHERE project_id=$1",[id,encoded.enc,encoded.iv,crypto.sha256(opaque),'0'.repeat(64)]);
   output(opaque);const inconsistent=await submit('return 1',true);
   check(inconsistent.status==='failed'&&inconsistent.error.code==='SECURITY_UNVERIFIED','Previous approval metadata cannot waive automatic verification for an opaque build');

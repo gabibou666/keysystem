@@ -25,6 +25,8 @@ async function run(){
     check((await cat('/projects/'+project,'PUT',{...listing,published:true})).status===400,'Cannot publish without a saved script');
     await req('/api/platform/projects/'+project+'/script','PUT',{content:'return "original-public-source"',targetMode:'single',placeId:123});
     check((await cat('/projects/'+project,'PUT',listing)).status===200,'Owner creates a draft listing');
+    const draftOriginal=(await f.pool.query('SELECT snapshot_original_content_enc,snapshot_original_content_iv FROM developer_listings WHERE project_id=$1',[project])).rows[0];
+    check(require('./src/services/crypto').decryptAES(draftOriginal.snapshot_original_content_enc,draftOriginal.snapshot_original_content_iv)==='return "original-public-source"','Draft snapshot retains its matching encrypted private original');
     check((await cat('/scripts/'+project,'GET',undefined,'')).status===404,'Draft listing unavailable at public detail URL');
     check((await cat('/scripts','GET',undefined,'')).data.total===0,'Draft script excluded from direct script directory');
     check((await cat('/hubs?q=Game','GET',undefined,'')).data.total===0,'Draft game metadata excluded from public search');

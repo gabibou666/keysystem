@@ -37,6 +37,7 @@ async function run() {
     if (!hubId) { hubId = hub; await f.pool.query('INSERT INTO developer_hubs(id,owner_id,slug,name,published_at) VALUES($1,$2,$3,$4,now())', [hub, ownerId, 'admin-fixture-' + hub, name]); }
     await f.pool.query("INSERT INTO developer_listings(project_id,hub_id,title,published_at,snapshot_content_enc,snapshot_content_iv,snapshot_validated,snapshot_obfuscated,safety_status,safety_hash,access_mode) VALUES($1,$2,$3,now(),$4,$5,true,true,'clear',$6,'free')", [id, hubId, name, source.enc, source.iv, 'a'.repeat(64)]);
     await f.pool.query('UPDATE developer_listings SET script_version=1,safety_hash=$2 WHERE project_id=$1',[id,hash]);
+    await f.pool.query('UPDATE developer_listings SET snapshot_original_content_enc=$2,snapshot_original_content_iv=$3 WHERE project_id=$1',[id,source.enc,source.iv]);
     await moderation.recordAutomaticClear(f.pool,id,'free_snapshot',1,hash);
     await f.pool.query('INSERT INTO developer_licenses(id,project_id,key_hash,key_prefix,expires_at,hwid_hash) VALUES($1,$2,$3,$4,now()+interval \'1 day\',$5)', [license, id, crypto.hashToken(key), key.slice(0, 11), 'DEVICE_PRIVATE']);
     return { id, license, key };
@@ -134,6 +135,8 @@ async function run() {
     check((await req('/admin/api/scripts/' + published.id + '/delete', peer, 'POST', { confirmation: 'DELETE', reason: 'Remove hosted payload' })).status === 200, 'ADMIN can delete a lower-ranked hosted script with confirmation');
     const erased = (await f.pool.query('SELECT content_enc,content_iv,disabled,deleted_at FROM developer_scripts WHERE project_id=$1', [published.id])).rows[0];
     check(!erased.content_enc && !erased.content_iv && erased.disabled && erased.deleted_at, 'Script deletion clears its encrypted payload and leaves an enforced removal flag');
+    const erasedSnapshot=(await f.pool.query('SELECT snapshot_content_enc,snapshot_content_iv,snapshot_original_content_enc,snapshot_original_content_iv FROM developer_listings WHERE project_id=$1',[published.id])).rows[0];
+    check(Object.values(erasedSnapshot).every(value=>value===null),'Administrative deletion also erases the published snapshot and its private original');
     check((await req('/admin/api/scripts/' + published.id + '/unhide', mod, 'POST', {})).status === 403, 'MODERATOR cannot restore an ADMIN-deleted script');
     const audit = await req('/admin/api/audit', owner);
     check(audit.status === 200 && audit.data.items.some(r => r.ip === '127.0.0.1') && !/PASSWORD_PRIVATE|API_TOKEN_PRIVATE|DEVICE_PRIVATE|PRIVATE_CODE|token_hash|csrf_hash/.test(JSON.stringify(audit.data)), 'Restricted append-only journal records actor/IP/action/target without secrets or source');

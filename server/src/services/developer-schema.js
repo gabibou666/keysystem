@@ -22,6 +22,7 @@ const files = [
   'migration-script-jobs.sql',
   'migration-script-metrics.sql',
   'migration-script-revalidation.sql',
+  'migration-script-snapshot-original.sql',
 ];
 
 async function ensureDeveloperSchema(pool) {

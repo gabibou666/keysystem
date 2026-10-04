@@ -45,6 +45,15 @@ async function run(){
   await f.pool.query('UPDATE developer_script_revalidation SET checked_at=$2 WHERE project_id=$1',[oldSnapshot,new Date(Date.now()-2*86400000)]);
   await service.runOnce();
   check((await f.pool.query('SELECT safety_status FROM developer_listings WHERE project_id=$1',[oldSnapshot])).rows[0].safety_status==='quarantined','An unapproved old opaque snapshot is refused automatically');
+  const retainedSnapshot=await seed('return 100'),snapshotCode='return 99',snapshotEnc=crypto.encryptAES(snapshotCode),snapshotOriginal=crypto.encryptAES(snapshotCode);
+  await f.pool.query("INSERT INTO developer_listings(project_id,hub_id,title,access_mode,published_at,snapshot_content_enc,snapshot_content_iv,snapshot_original_content_enc,snapshot_original_content_iv,snapshot_validated,script_version,safety_hash,safety_status) VALUES($1,$2,'Retained source','free',now(),$3,$4,$5,$6,true,7,$7,'clear')",[retainedSnapshot,hub,snapshotEnc.enc,snapshotEnc.iv,snapshotOriginal.enc,snapshotOriginal.iv,crypto.sha256(snapshotCode)]);
+  await service.runOnce();
+  check((await f.pool.query('SELECT safety_status FROM developer_listings WHERE project_id=$1',[retainedSnapshot])).rows[0].safety_status==='clear','An old free snapshot is rescanned with its own retained original after a different private upload');
+  check(await require('./src/services/moderation').snapshotAllowed(retainedSnapshot,'clear',crypto.sha256(snapshotCode)),'The old snapshot retains an exact automatic proof and remains deliverable');
+  await f.pool.query('UPDATE developer_listings SET snapshot_original_content_iv=NULL WHERE project_id=$1',[retainedSnapshot]);
+  await f.pool.query('UPDATE developer_script_revalidation SET checked_at=$2 WHERE project_id=$1',[retainedSnapshot,new Date(Date.now()-2*86400000)]);
+  await service.runOnce();
+  check((await f.pool.query('SELECT safety_status FROM developer_listings WHERE project_id=$1',[retainedSnapshot])).rows[0].safety_status==='quarantined','An incomplete retained source cannot fall back to a different private original');
   // Change the release exactly when the scanner returns, before the lock/recheck.
   const race=await seed('return 6'),nativeScan=safety.scanScript;let replace;
   safety.scanScript=(code,options)=>{

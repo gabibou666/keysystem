@@ -207,7 +207,7 @@ async function changeScript(db, req, actor, projectId, action, note) {
   if (action === 'delete') {
     await db.query('DELETE FROM developer_script_jobs WHERE project_id=$1',[p.id]);
     await db.query("UPDATE developer_scripts SET content_enc='',content_iv='',original_content_enc=NULL,original_content_iv=NULL,original_size_bytes=NULL,output_size_bytes=NULL,obfuscation_level=NULL,disabled=true,deleted_at=now(),validated=false,obfuscated=false,safety_status='unreviewed',build_hash=NULL,safety_hash=NULL WHERE project_id=$1", [p.id]);
-    await db.query("UPDATE developer_listings SET snapshot_content_enc=NULL,snapshot_content_iv=NULL,snapshot_validated=false,snapshot_obfuscated=false,safety_status='unreviewed',safety_hash=NULL WHERE project_id=$1", [p.id]);
+    await db.query("UPDATE developer_listings SET snapshot_content_enc=NULL,snapshot_content_iv=NULL,snapshot_original_content_enc=NULL,snapshot_original_content_iv=NULL,snapshot_validated=false,snapshot_obfuscated=false,safety_status='unreviewed',safety_hash=NULL WHERE project_id=$1", [p.id]);
     await db.query("UPDATE developer_moderation_submissions SET content_enc=NULL,content_iv=NULL,status=CASE WHEN status='pending' THEN 'rejected' ELSE status END,decided_at=COALESCE(decided_at,now()) WHERE project_id=$1", [p.id]);
   }
   await audit(db, req, actor, 'script.' + action, 'project', p.id, note, { hidden: p.hidden, removed: !!script.deleted_at, version: script.version }, { action });

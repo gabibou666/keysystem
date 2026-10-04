@@ -25,7 +25,7 @@ async function run() {
       await f.pool.query("INSERT INTO developer_scripts(project_id,content_enc,content_iv,validated,obfuscated,safety_status,build_hash,safety_hash,scanner_version) VALUES($1,$2,$3,true,true,'clear',$4,$4,$5)", [project, build.enc, build.iv, hash, require('./src/services/script-safety').SCANNER_VERSION]);
       await moderation.recordAutomaticClear(f.pool,project,'current',1,hash);
       await f.pool.query('INSERT INTO developer_hubs(id,owner_id,slug,name,published_at) VALUES($1,$2,$3,$4,now())', [hub, ids[i], 'account-test-' + i, i ? 'FOREIGN_PROFILE_NAME' : 'Own profile']);
-      await f.pool.query("INSERT INTO developer_listings(project_id,hub_id,title,published_at,snapshot_content_enc,snapshot_content_iv,snapshot_validated,snapshot_obfuscated,safety_status,access_mode) VALUES($1,$2,$3,now(),$4,$5,true,true,'clear','free')", [project, hub, i ? 'Foreign public release' : 'Own release', build.enc, build.iv]);
+      await f.pool.query("INSERT INTO developer_listings(project_id,hub_id,title,published_at,snapshot_content_enc,snapshot_content_iv,snapshot_original_content_enc,snapshot_original_content_iv,snapshot_validated,snapshot_obfuscated,safety_status,access_mode) VALUES($1,$2,$3,now(),$4,$5,$6,$7,true,true,'clear','free')", [project, hub, i ? 'Foreign public release' : 'Own release', build.enc, build.iv, build.enc, build.iv]);
       await f.pool.query('UPDATE developer_listings SET script_version=1,safety_hash=$2 WHERE project_id=$1',[project,hash]);
       await moderation.recordAutomaticClear(f.pool,project,'free_snapshot',1,hash);
     }
@@ -62,6 +62,7 @@ async function run() {
     check(exported.data.projects.length === 1 && exported.data.projects[0].id === projects[0] && exported.data.profile.length === 1, 'Export is scoped to the account’s own projects and profile');
     check(exported.data.licenses.length === 123 && exported.data.validations.length === 1, 'Paged export includes all licences and validation history without truncation');
     check(exported.data.scripts[0].source === 'return "OWN_STORED_BUILD"' && exported.data.publications[0].source === 'return "OWN_STORED_BUILD"' && exported.data.moderationSubmissions[0].source === 'return "OWN_PENDING_BUILD"', 'Stored builds, published snapshots and owned pending builds are exported decrypted');
+    check(exported.data.publicationOriginalSources.length === 1 && exported.data.publicationOriginalSources[0].project_id === projects[0] && exported.data.publicationOriginalSources[0].script_version === 1 && exported.data.publicationOriginalSources[0].source === 'return "OWN_STORED_BUILD"', 'A publication retains its private original only in its owner’s export');
     check(exported.data.sessions[0].current && exported.data.emailTokens[0].purpose === 'reset', 'Session and email-token metadata is provided without tokens');
     check(exported.data.reportsSubmitted.length === 1 && exported.data.reportsSubmitted[0].description === 'Own submitted report', 'Export includes only reports submitted by this account');
     check(!/PASSWORD_SECRET|API_TOKEN_SECRET|PROVIDER_SECRET|CALLBACK_SECRET|LICENSE_HASH_SECRET|HWID_SECRET|BROWSER_SECRET|IP_SECRET|CHECKPOINT_KEY_SECRET|REFERENCE_SECRET|RETURN_PROOF_SECRET|EMAIL_TOKEN_SECRET/.test(jsonText), 'Credential, checkpoint, browser, IP and device secrets are excluded');
@@ -69,7 +70,7 @@ async function run() {
     const targeted = await request('/api/account/export?accountId=' + ids[1]);
     check(targeted.data.account.id === ids[0], 'A query parameter cannot target another account’s export');
     const other = await request('/api/account/export', 'GET', undefined, f.cookies[1]);
-    check(other.data.account.id === ids[1] && other.data.projects[0].id === projects[1] && !JSON.stringify(other.data).includes('OWN_STORED_BUILD'), 'The second tenant receives only its own export');
+    check(other.data.account.id === ids[1] && other.data.projects[0].id === projects[1] && other.data.publicationOriginalSources[0].project_id === projects[1] && !JSON.stringify(other.data).includes('OWN_STORED_BUILD'), 'The second tenant receives only its own export and publication original');
     check((await request('/api/account', 'DELETE', { confirmation: 'DELETE' }, f.cookies[0], 'https://foreign.example')).status === 403, 'Deletion rejects a foreign origin');
     check((await request('/api/account', 'DELETE', { confirmation: 'DELETE' }, f.cookies[0], '')).status === 403, 'Deletion requires an explicit same-origin browser request');
     check((await request('/api/account', 'DELETE', { confirmation: 'DELETE' }, f.cookies[0], f.base, false)).status === 415, 'Deletion requires JSON');
@@ -94,6 +95,7 @@ async function run() {
       const rows = (await f.pool.query('SELECT * FROM ' + table)).rows;
       check(!JSON.stringify(rows).includes(ids[0]) && !JSON.stringify(rows).includes(projects[0]), 'No deleted account/project data remains in ' + table);
     }
+    check((await f.pool.query('SELECT snapshot_original_content_enc,snapshot_original_content_iv FROM developer_listings WHERE project_id=$1', [projects[0]])).rows.length === 0, 'Deleted projects remove their retained publication originals');
     check((await f.pool.query('SELECT id FROM developer_projects WHERE id=$1', [projects[1]])).rows.length === 1 && (await f.pool.query('SELECT id FROM developer_licenses WHERE id=$1', [foreignLicense])).rows.length === 1 && (await f.pool.query('SELECT id FROM developer_moderation_reports WHERE id=$1', [foreignReport])).rows.length === 1, 'Other owners’ projects, licences and unrelated reports are preserved');
     check((await f.pool.query('SELECT proof_hash FROM developer_checkpoint_proof_uses')).rows.length === 1 && (await f.pool.query('SELECT quota_key FROM developer_registration_limits')).rows.length === 1, 'Unlinked anti-replay proofs and shared short-lived abuse counters are preserved');
     const journal = (await f.pool.query('SELECT * FROM developer_moderation_audit')).rows;
