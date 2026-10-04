@@ -27,6 +27,7 @@ async function run(){
     const saved=await req('/api/platform/projects/'+job.projectId);
     const candidate=(await f.pool.query('SELECT build_hash FROM developer_moderation_submissions WHERE id=$1',[result.data.submissionId])).rows[0];
     check(saved.status===200&&saved.data.script.version===job.result.version&&saved.data.script.securityHash===candidate.build_hash&&saved.data.script.securityStatus==='approved','Persisted script metadata belongs to the independently approved candidate');
+    check(['validated','obfuscated','obfuscationLevel','targetMode','placeId'].every(key=>job.result[key]===saved.data.script[key]),'Approved job response matches the persisted validation, protection and target metadata');
     return {...result,status:200,data:{...result.data,...job.result,...saved.data.script,pendingReview:false,job}};
   }
   try{
